@@ -152,34 +152,15 @@
 
                 <hr style="width:100%; border:0; border-top:1px solid #e2e8f0; margin: 4px 0;">
 
-                <!-- Distinct Presets Menu Selection -->
+                <!-- Distinct Presets Menu Selection (rows generated dynamically from defalt_presets/ manifest) -->
                 <div class="modal-field" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px;">
                     <label style="font-size: 13px; font-weight: bold; margin-bottom: 6px; display: block;">🎛️ Distinct Operation Presets Menu</label>
-                    <span style="font-size: 11px; color: #64748b; display: block; margin-bottom: 8px;">Load unique JSON config presets for each specific translation operation tier.</span>
-                    
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
-                        <div>
-                            <label style="font-weight: bold;">Main Translation:</label>
-                            <input type="file" id="presetMain" accept=".json" onchange="loadSpecificPreset('main', event)" style="font-size: 11px; width: 100%;">
-                        </div>
-                        <div>
-                            <label style="font-weight: bold;">Benchmark Prompt:</label>
-                            <input type="file" id="presetBenchmark" accept=".json" onchange="loadSpecificPreset('benchmark', event)" style="font-size: 11px; width: 100%;">
-                        </div>
-                        <div>
-                            <label style="font-weight: bold;">Japanese to English:</label>
-                            <input type="file" id="presetJpEn" accept=".json" onchange="loadSpecificPreset('jpEn', event)" style="font-size: 11px; width: 100%;">
-                        </div>
-                        <div>
-                            <label style="font-weight: bold;">Retry Translation:</label>
-                            <input type="file" id="presetRetry" accept=".json" onchange="loadSpecificPreset('retry', event)" style="font-size: 11px; width: 100%;">
-                        </div>
-                        <div style="grid-column: span 2;">
-                            <label style="font-weight: bold;">Name Plate Unique Prompt:</label>
-                            <input type="file" id="presetNamePlate" accept=".json" onchange="loadSpecificPreset('namePlate', event)" style="font-size: 11px; width: 100%;">
-                        </div>
+                    <span style="font-size: 11px; color: #64748b; display: block; margin-bottom: 8px;">Default presets are loaded into memory automatically on startup. Upload your own JSON here to override any operation tier in memory.</span>
+                    <div id="distinctPresetsContainer" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                        <em style="color: #64748b; font-size: 11px; grid-column: span 2;">Loading operation presets...</em>
                     </div>
                 </div>
+
 
                 <hr style="width:100%; border:0; border-top:1px solid #e2e8f0; margin: 4px 0;">
 

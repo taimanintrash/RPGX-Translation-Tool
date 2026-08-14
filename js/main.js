@@ -31,11 +31,13 @@ import { loadFilesFromCache, loadUIStateFromCache } from './database.js';
 import { initDraggableModal } from './ui.js';
 import { refreshApplicationState, renderComparisonViews } from './parser.js';
 import { loadFiles, removeFile, onSelectID, onCompareSelectionChange, saveEditsToMemory, injectTranslationToRight, downloadFile, updateBenchmarkSceneDropdown } from './parser.js';
-import { fetchAiModels, translateViaAiServer, stopTranslation, generateStylizationMapWithAI } from './translator.js';
+import { fetchAiModels, translateViaAiServer, stopTranslation, generateStylizationMapWithAI, loadSpecificPreset, loadDefaultPreset, loadAllDefaultPresets } from './translator.js';
 import { openDebugMenu, switchDebugPage, closeDebugMenu, closeDebugMenuWithoutSaving, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, copyStylizationMapToClipboard, toggleDiscoveredSelection, setAllDiscoveredSelection, updateDiscoveredKey, updateDiscoveredVal, resolveNameModal, closeNameModal, resolveManualStepContinue, triggerStepRetranslation } from './ui.js';
 import { runParameterSweepBenchmark } from './benchmark.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Load shipped default presets into memory first so the translation prompts always have a default config.
+    await loadAllDefaultPresets();
     const cachedFiles = await loadFilesFromCache();
     if (cachedFiles && cachedFiles.length > 0) {
         state.loadedFilesRegistry = cachedFiles;
@@ -111,5 +113,8 @@ window.triggerStepRetranslation = triggerStepRetranslation;
 window.runParameterSweepBenchmark = runParameterSweepBenchmark;
 window.translateViaAiServer = translateViaAiServer;
 window.generateStylizationMapWithAI = generateStylizationMapWithAI;
+window.loadSpecificPreset = loadSpecificPreset;
+window.loadDefaultPreset = loadDefaultPreset;
+window.loadAllDefaultPresets = loadAllDefaultPresets;
 window.removeFile = removeFile;
 

@@ -6,3 +6,13 @@ agent_rate.txt
 # OS-specific metadata
 .DS_Store
 Thumbs.db
+
+# Local-only VS Code agent / dev tooling (not for the shared repo)
+start-agent.sh
+package.json
+package-lock.json
+agentContextManager.js
+agent_handoff_prompt.md
+node_modules/
+.vscode/
+.github/

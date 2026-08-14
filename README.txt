@@ -43,10 +43,34 @@ No build tools, Node.js packages, or web servers are required to host the tool i
 1. Open your AI Server (e.g., LM Studio, AI Server) and load your preferred translation model.
 2. Start the **Local Inference Server** (default port: 1234).
 
-### Step 2: Open the Web Application
-1. Double-click `index.html` (or drag and drop it into your web browser).
-2. In the top toolbar, verify the server URL (http://127.0.0.1:1234) and click the **Refresh** button to populate your model list.
-3. Select your loaded model from the dropdown.
+### Step 2: Launch the Web Application (Local HTTP Server)
+
+The tool must be served over HTTP (not opened directly as a `file://` URL) so the browser can fetch the shipped default presets in `defalt_presets/` and avoid browser file-access restrictions. Run any static file server from the repository root.
+
+**Option A - From a cloned repository:**
+1. Clone the repo: `git clone https://github.com/antAmaine/RPGX-Translation-Tool.git`
+2. Move into the project folder: `cd RPGX-Translation-Tool`
+3. Start a local server with Python 3 (no extra installs needed):
+   ```
+   python3 -m http.server 8000
+   ```
+4. Open `http://localhost:8000/index.html` in your browser.
+
+**Option B - From a downloaded GitHub copy (no git):**
+1. On the GitHub repo page, click **Code -> Download ZIP**, then extract it.
+2. Open a terminal in the extracted folder.
+3. Start a local server:
+   ```
+   python3 -m http.server 8000
+   ```
+   *(If Python is unavailable, any static server works, e.g. `npx http-server` or VS Code's Live Server extension.)*
+4. Open `http://localhost:8000/index.html` in your browser.
+
+> **Note:** For local-only development convenience a `start-agent.sh` helper script exists on the author's machine (not tracked in the repo) that launches this Python server automatically. Clone users should use the commands above.
+
+Once the page is open:
+1. In the top toolbar, verify the server URL (http://127.0.0.1:1234) and click the **Refresh** button to populate your model list.
+2. Select your loaded model from the dropdown.
 
 ### Step 3: Load Script Files
 1. Click **Choose Files** in the top panel and upload your script files (.json or .js).

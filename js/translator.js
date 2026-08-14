@@ -12,6 +12,55 @@ export const operationPresets = {
 };
 
 /**
+ * Manifest of default preset JSON files shipped in the `defalt_presets/` directory.
+ * Each entry maps a preset file to the operation key it overrides (matching `operationPresets`).
+ * Add a new file to `defalt_presets/` and append an entry here to make it appear as a loadable default.
+ */
+export const defaultPresetManifest = [
+    { file: 'defalt_presets/defalt_presets.json', operationKey: 'main', label: 'Main Translation' },
+    { file: 'defalt_presets/benchmark_prompt.json', operationKey: 'benchmark', label: 'Benchmark Prompt' },
+    { file: 'defalt_presets/japanese_to_english.json', operationKey: 'jpEn', label: 'Japanese to English' },
+    { file: 'defalt_presets/retry_translation.json', operationKey: 'retry', label: 'Retry Translation' },
+    { file: 'defalt_presets/name_plate_unique.json', operationKey: 'namePlate', label: 'Name Plate Unique' }
+];
+
+/**
+ * Maps a parsed preset JSON object onto an operation-specific configuration object.
+ * Shared by both the manual file upload and the default preset loader paths.
+ */
+function mapPresetJsonQuiet(operationKey, presetJson, sourceName) {
+    let mappedConfig = {
+        temperature: presetJson.temperature ?? operationPresets[operationKey].temperature,
+        systemPrompt: presetJson.systemPrompt || presetJson.name || operationPresets[operationKey].systemPrompt
+    };
+    if (presetJson.operation && presetJson.operation.fields) {
+        presetJson.operation.fields.forEach(field => {
+            if (field.key === "llm.prediction.temperature") mappedConfig.temperature = field.value;
+            if (field.key === "llm.prediction.systemPrompt" && field.value) mappedConfig.systemPrompt = field.value;
+        });
+    }
+    operationPresets[operationKey] = mappedConfig;
+    console.log(`[Default Presets] ${operationKey.toUpperCase()} <- "${presetJson.name || sourceName}"`);
+}
+
+function mapPresetJson(operationKey, presetJson, sourceName) {
+    let mappedConfig = {
+        temperature: presetJson.temperature ?? operationPresets[operationKey].temperature,
+        systemPrompt: presetJson.systemPrompt || presetJson.name || operationPresets[operationKey].systemPrompt
+    };
+
+    if (presetJson.operation && presetJson.operation.fields) {
+        presetJson.operation.fields.forEach(field => {
+            if (field.key === "llm.prediction.temperature") mappedConfig.temperature = field.value;
+            if (field.key === "llm.prediction.systemPrompt" && field.value) mappedConfig.systemPrompt = field.value;
+        });
+    }
+
+    operationPresets[operationKey] = mappedConfig;
+    showError(`Preset for [${operationKey.toUpperCase()}] successfully loaded from "${presetJson.name || sourceName}"!`);
+}
+
+/**
  * Loads and maps preset configurations from an uploaded JSON file for a specified operation type[cite: 7].
  * Called by: HTML event handler / main.js[cite: 7]
  */
@@ -22,22 +71,7 @@ export function loadSpecificPreset(operationKey, event) {
     const reader = new FileReader();
     reader.onload = function(e) {
         try {
-            const presetJson = JSON.parse(e.target.result);
-            
-            let mappedConfig = {
-                temperature: presetJson.temperature ?? operationPresets[operationKey].temperature,
-                systemPrompt: presetJson.systemPrompt || presetJson.name || operationPresets[operationKey].systemPrompt
-            };
-
-            if (presetJson.operation && presetJson.operation.fields) {
-                presetJson.operation.fields.forEach(field => {
-                    if (field.key === "llm.prediction.temperature") mappedConfig.temperature = field.value;
-                    if (field.key === "llm.prediction.systemPrompt" && field.value) mappedConfig.systemPrompt = field.value;
-                });
-            }
-
-            operationPresets[operationKey] = mappedConfig;
-            showError(`Preset for [${operationKey.toUpperCase()}] successfully loaded from "${presetJson.name || file.name}"!`);
+            mapPresetJson(operationKey, JSON.parse(e.target.result), file.name);
         } catch (err) {
             showError("Failed to parse preset JSON file.");
             console.error(err);
@@ -45,6 +79,51 @@ export function loadSpecificPreset(operationKey, event) {
     };
     reader.readAsText(file);
     event.target.value = "";
+}
+
+/**
+ * Fetches a shipped default preset JSON from the `defalt_presets/` directory and applies it to the matching operation.
+ * Called by: HTML event handler / main.js (dynamic default preset buttons)[cite: 7]
+ */
+export async function loadDefaultPreset(operationKey) {
+    const entry = defaultPresetManifest.find(p => p.operationKey === operationKey);
+    if (!entry) {
+        showError(`No default preset is registered for operation "${operationKey}".`);
+        return;
+    }
+    try {
+        const response = await fetch(entry.file);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const presetJson = await response.json();
+        mapPresetJson(operationKey, presetJson, entry.file);
+    } catch (err) {
+        showError(`Failed to load default preset "${entry.file}". The app must be served over HTTP (e.g. via start-agent.sh) for default presets to be fetchable.`);
+        console.error(err);
+    }
+}
+
+/**
+ * Loads every shipped default preset from `defalt_presets/` into `operationPresets` so the translation
+ * prompts have their default configuration available in memory without any user action.
+ * Called by: main.js (DOMContentLoaded)[cite: 7]
+ */
+export async function loadAllDefaultPresets() {
+    const results = await Promise.allSettled(
+        defaultPresetManifest.map(async (entry) => {
+            const response = await fetch(entry.file);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const presetJson = await response.json();
+            mapPresetJsonQuiet(entry.operationKey, presetJson, entry.file);
+        })
+    );
+    const failed = results.filter(r => r.status === 'rejected');
+    if (failed.length === defaultPresetManifest.length) {
+        console.warn('[Default Presets] Could not load any default presets from defalt_presets/. The app must be served over HTTP (e.g. via start-agent.sh).');
+    } else if (failed.length > 0) {
+        console.warn(`[Default Presets] ${failed.length}/${defaultPresetManifest.length} default preset(s) failed to load.`);
+    } else {
+        console.log(`[Default Presets] Loaded ${defaultPresetManifest.length} default preset(s) into memory.`);
+    }
 }
 
 /**

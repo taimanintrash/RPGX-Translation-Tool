@@ -1,5 +1,6 @@
 import { state } from './main.js';
 import { saveUIStateToCache } from './database.js';
+import { defaultPresetManifest } from './translator.js';
 
 /**
  * Initializes mouse drag-and-drop mechanics for the floating debug modal window[cite: 7].
@@ -71,12 +72,51 @@ export function clearError() {
 }
 
 /**
+ * Dynamically renders one custom-upload row per available default preset file in `defalt_presets/`.
+ * The defaults themselves are already loaded into memory on startup; these controls let a user
+ * upload a custom JSON to override any operation tier in memory. The number of rows scales with
+ * the entries in `defaultPresetManifest`.
+ * Called by: ui.js (openDebugMenu)[cite: 7]
+ */
+export function renderDistinctPresetControls() {
+    const container = document.getElementById("distinctPresetsContainer");
+    if (!container) return;
+    container.innerHTML = "";
+
+    if (!defaultPresetManifest || defaultPresetManifest.length === 0) {
+        container.innerHTML = '<em style="color: #64748b; font-size: 11px; grid-column: span 2;">No default preset files found in defalt_presets/.</em>';
+        return;
+    }
+
+    defaultPresetManifest.forEach(preset => {
+        const cell = document.createElement("div");
+
+        const lbl = document.createElement("label");
+        lbl.style.fontWeight = "bold";
+        lbl.textContent = preset.label + ":";
+        cell.appendChild(lbl);
+
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".json";
+        input.style.fontSize = "11px";
+        input.style.width = "100%";
+        input.title = "Override the " + preset.label + " default with a custom JSON (default already loaded from " + preset.file + ")";
+        input.onchange = (event) => loadSpecificPreset(preset.operationKey, event);
+        cell.appendChild(input);
+
+        container.appendChild(cell);
+    });
+}
+
+/**
  * Opens the debug modal overlay and initializes input values and UI page elements[cite: 7].
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function openDebugMenu() {
     state.currentDebugPage = 1;
     updateDebugPageDisplay();
+    renderDistinctPresetControls();
     document.getElementById("debugModalOverlay").style.display = "block";
     document.getElementById("maxLinesLimitInput").value = state.debugMaxLinesLimit;
     document.getElementById("autoSkipNameModalCheckbox").checked = state.autoSkipNameModal;
