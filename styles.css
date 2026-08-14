@@ -213,6 +213,12 @@ body {
     align-items: center;
     gap: 6px;
     margin-left: auto;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 1000px) {
+    .sidebar { display: none !important; }
+    .mobile-script-select { display: block !important; }
 }
 
 .translate-config input, .translate-config select {
@@ -224,12 +230,25 @@ body {
     color: var(--text-primary);
 }
 
-/* @component panes-wrapper-grid: Side-by-side text container wrapper for source and target comparisons */
 .panes-wrapper {
     display: flex;
     flex: 1;
-    gap: 12px;
+    gap: 0;
     overflow: hidden;
+}
+
+/* Draggable vertical resize handle between source panes */
+.pane-resize-handle {
+    width: 6px;
+    cursor: col-resize;
+    background: var(--border-soft);
+    border-radius: 3px;
+    transition: background 0.15s;
+    flex-shrink: 0;
+}
+.pane-resize-handle:hover,
+.pane-resize-handle.active {
+    background: #3b82f6;
 }
 
 /* @component editor-pane-single: Individual column configuration for script output panes */
@@ -239,6 +258,9 @@ body {
     flex-direction: column;
     height: 100%;
     position: relative;
+    padding: 0 6px;
+    min-width: 100px;
+    overflow: hidden;
 }
 
 .pane-header {
@@ -587,24 +609,24 @@ button.debug-btn:hover { background: #334155; }
 }
 
 /* ===== Manual Step Override toolbar (inside the right pane, sticky at the bottom) ===== */
+/* @component manual-step-toolbar: Interactive override controls docked at the bottom of the right pane */
 .manual-step-toolbar {
-    position: sticky;
-    bottom: 0;
-    z-index: 5;
     display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    background: var(--info-blue-bg);
-    border: 1px solid var(--info-blue-border);
+    flex-direction: column;
+    gap: 8px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-strong);
     padding: 8px 12px;
     border-radius: 6px;
-    margin-top: 6px;
+    margin-top: 4px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 .manual-step-title {
     font-size: 12px;
     font-weight: bold;
-    color: var(--accent-blue);
+    color: var(--text-heading);
 }
 .manual-step-label {
     font-size: 11px;
@@ -621,28 +643,87 @@ button.debug-btn:hover { background: #334155; }
     color: var(--text-primary);
 }
 .manual-step-btn {
-    padding: 3px 8px;
+    padding: 4px 10px;
     font-size: 11px;
 }
 
-/* Source line + context preview inside the manual step toolbar */
+/* Source line display locked below translation textarea and above override toolbar */
+.current-source-line {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 6px;
+    margin-bottom: 2px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-strong);
+    padding: 6px 10px;
+    border-radius: 6px;
+}
 .manual-step-source-row {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    flex: 1 1 100%;
+    width: 100%;
+}
+.manual-step-context-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    margin-bottom: 4px;
+    flex: 1;
+    min-height: 0;
+}
+.manual-step-grid-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+}
+.manual-step-split-row {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+    flex: 2;
+    min-height: 0;
+}
+.manual-step-split-col {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    width: 50%;
+}
+.manual-step-context-text {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 1.3;
+    padding: 4px;
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    resize: none;
+    flex: 1;
+    min-height: 0;
 }
 .manual-step-source-text {
     width: 100%;
     box-sizing: border-box;
     font-family: monospace;
-    font-size: 11px;
-    padding: 4px 6px;
+    font-size: 12px;
+    line-height: 1.2;
+    padding: 2px 4px;
     border: 1px solid var(--border-strong);
-    border-radius: 4px;
+    border-radius: 3px;
     background: var(--bg-input);
     color: var(--text-primary);
     resize: none;
+    overflow: hidden;
 }
 .manual-step-context-select {
     width: 100%;
@@ -654,12 +735,4 @@ button.debug-btn:hover { background: #334155; }
     border-radius: 4px;
     background: var(--bg-input);
     color: var(--text-primary);
-}
-
-/* Current source line display (always visible during translation) */
-.current-source-line {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin-bottom: 4px;
 }

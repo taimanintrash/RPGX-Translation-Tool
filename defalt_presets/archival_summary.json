@@ -1,0 +1,8 @@
+{
+  "name": "Archival Story State (Tier 3)",
+  "temperature": 0.15,
+  "maxTokens": 128,
+  "topP": 0.8,
+  "repeatPenalty": 1.05,
+  "systemPrompt": "You are an expert story archivist compressing narrative history into a single high-level macro state sentence. Preserve primary character identities, relationships, and overarching goals while omitting resolved micro-dialogue."
+}

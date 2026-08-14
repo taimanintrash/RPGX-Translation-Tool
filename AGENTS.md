@@ -18,5 +18,7 @@ Output updates progressively as you work through a task rather than holding ever
    - Create a clean Git commit with a descriptive message.
 
 ## Commit Behavior
-- At the end of each completed task, commit and sync using `./dual_sync.sh "Commit title" "Verbose description..."` instead of plain `git commit` + `git push`. This script handles committing to the public repo and syncing a snapshot to the private school backup repo in one step.
-- **Verbose Descriptions**: Always provide a detailed, verbose description as the second argument to `dual_sync.sh` to fully log what changes were made and why.
+- At the end of each completed task, create a Git commit.
+- **Verbose Descriptions**: Always provide a detailed, verbose description in the extended body of the Git commit (e.g., using `git commit -m "Title" -m "Detailed bullet points of what was changed and why..."`).
+
+

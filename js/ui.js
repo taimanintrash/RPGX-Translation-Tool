@@ -179,11 +179,7 @@ export function closeDebugMenu() {
     state.debugMaxLinesLimit = isNaN(limitVal) || limitVal < 0 ? 0 : limitVal;
     state.autoSkipNameModal = document.getElementById("autoSkipNameModalCheckbox").checked;
     state.manualStepByStepMode = document.getElementById("manualStepModeCheckbox").checked;
-    // When manual override is disabled, hide the toolbar so only source text + translation remain.
-    if (!state.manualStepByStepMode) {
-        const msToolbar = document.getElementById("manualStepToolbar");
-        if (msToolbar) msToolbar.style.display = "none";
-    }
+    syncManualStepUIVisibility();
     state.stylizationMode = document.getElementById("stylizationModeSelect").value;
 
     try {
@@ -406,92 +402,191 @@ export function closeNameModal() {
  * Called by: ui.js (promptUserForManualStep, input change listeners)
  */
 function refreshStepContextPreview(currentContextWindow) {
-    const ctxSelect = document.getElementById("stepContextPreview");
-    if (!ctxSelect) return;
     const ctxLines = parseInt(document.getElementById("stepContextLinesInput")?.value) || state._stepMaxCtxDefault || 6;
     const rawLimit = parseInt(document.getElementById("stepRawLimitInput")?.value) || 2;
 
-    // If an explicit context window was passed (the live slice), show it.
-    // Otherwise recompute from the stored full history using the current settings.
-    let ctx;
-    if (Array.isArray(currentContextWindow)) {
-        ctx = currentContextWindow;
-    } else {
-        const history = state._stepFullHistory || [];
-        const milestones = state._stepMilestones || [];
-        let formatted = [];
-        if (milestones.length > 0) formatted.push(`[Story Milestones:\n` + milestones.join("\n") + `\n]`);
+    const archivalBox = document.getElementById("stepArchivalSummaryText");
+    const recentBox = document.getElementById("stepRecentSummaryText");
+    const rawBox = document.getElementById("stepRawContextText");
+    const recentSourceBox = document.getElementById("stepRecentSummarySourceText");
+
+    const history = state._stepFullHistory || [];
+    const summaryContext = state._stepSummaryContext || {};
+
+    if (archivalBox) {
+        archivalBox.value = summaryContext.archivalSummary || "";
+    }
+    if (recentBox) {
+        recentBox.value = summaryContext.recentSummary || "";
+    }
+    if (recentSourceBox) {
+        const sourceLines = summaryContext.recentSummarySourceLines || [];
+        recentSourceBox.value = sourceLines.map((line, i) => `[${i}] ${line}`).join("\n") || "";
+    }
+    if (rawBox) {
         const activeRaw = history.slice(Math.max(0, history.length - rawLimit));
-        formatted.push(...activeRaw);
-        const start = Math.max(0, formatted.length - ctxLines);
-        ctx = ctxLines > 0 ? formatted.slice(start) : [];
+        rawBox.value = activeRaw.map((line, i) => `[${i}] ${line}`).join("\n") || "";
     }
 
-    ctxSelect.innerHTML = "";
-    if (ctx.length === 0) {
-        ctxSelect.appendChild(new Option("(no context)", ""));
-    } else {
-        ctx.forEach((line, i) => {
-            const preview = (line || "").substring(0, 80);
-            ctxSelect.appendChild(new Option(`[${i}] ${preview}`, String(i)));
-        });
-    }
-    console.log(`[Trace:UI] Context preview refreshed: ${ctx.length} line(s) (ctxLines=${ctxLines}, rawLimit=${rawLimit}).`);
+    console.log(`[Trace:UI] Context preview refreshed.`);
 }
 
 /**
- * Shows the current source line being translated in the separate always-visible element.
+ * Synchronizes the visibility of the manual step override toolbar.
+ * (The current source line box is permanently visible above the toolbar).
+ * Called by: ui.js (closeDebugMenu, syncManualStepModeLive), main.js (init)
+ */
+export function syncManualStepUIVisibility() {
+    const msToolbar = document.getElementById("manualStepToolbar");
+    const outputLeft = document.getElementById("outputAreaLeft");
+    const labelLeft = document.getElementById("labelPaneLeft");
+    const isEnabled = !!state.manualStepByStepMode;
+
+    if (msToolbar) msToolbar.style.display = isEnabled ? "flex" : "none";
+    if (outputLeft) outputLeft.style.display = isEnabled ? "none" : "block";
+    if (labelLeft) labelLeft.textContent = isEnabled ? "Manual Override" : "Source 1 Output";
+    
+    console.log(`[Trace:UI] syncManualStepUIVisibility() -> manualStepToolbar isEnabled=${isEnabled}`);
+}
+
+/**
+ * Initializes the draggable resize handle between the two source panes.
+ * Called by: main.js (DOMContentLoaded)
+ */
+export function initPaneResizer() {
+    const handle = document.getElementById("paneResizeHandle");
+    const paneLeft = document.getElementById("paneLeft");
+    const paneRight = document.getElementById("paneRight");
+    const wrapper = document.querySelector(".panes-wrapper");
+    if (!handle || !paneLeft || !paneRight || !wrapper) return;
+
+    let isResizing = false;
+
+    handle.addEventListener("mousedown", (e) => {
+        isResizing = true;
+        handle.classList.add("active");
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", (e) => {
+        if (!isResizing) return;
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const offsetX = e.clientX - wrapperRect.left;
+        const totalWidth = wrapperRect.width;
+        const handleWidth = handle.offsetWidth;
+        
+        const leftPercent = Math.max(15, Math.min(85, (offsetX / totalWidth) * 100));
+        const rightPercent = 100 - leftPercent;
+        
+        paneLeft.style.flex = "none";
+        paneRight.style.flex = "none";
+        paneLeft.style.width = `calc(${leftPercent}% - ${handleWidth / 2}px)`;
+        paneRight.style.width = `calc(${rightPercent}% - ${handleWidth / 2}px)`;
+    });
+
+    document.addEventListener("mouseup", () => {
+        if (isResizing) {
+            isResizing = false;
+            handle.classList.remove("active");
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
+        }
+    });
+}
+
+/**
+ * Toggles manual step mode live when the debug modal checkbox changes state.
+ * Called by: HTML event handler on manualStepModeCheckbox
+ */
+export function syncManualStepModeLive(enabled) {
+    state.manualStepByStepMode = !!enabled;
+    syncManualStepUIVisibility();
+    saveUIStateToCache();
+}
+
+/**
+ * Shows the current source line being translated in the permanently visible element.
  * Called by: translator.js (translateViaAiServer main loop)
  */
 export function setCurrentSourceLine(text) {
-    const el = document.getElementById("currentSourceLine");
     const box = document.getElementById("stepSourceText");
-    if (el) el.style.display = "flex";
     if (box) box.value = text || "";
 }
 
 /**
- * Hides the current source line element (e.g. when translation ends).
+ * Clears the source line text when translation ends so the placeholder shows.
+ * The element itself stays visible permanently.
  * Called by: translator.js (translateViaAiServer completion)
  */
 export function hideCurrentSourceLine() {
-    const el = document.getElementById("currentSourceLine");
-    if (el) el.style.display = "none";
+    const box = document.getElementById("stepSourceText");
+    if (box) box.value = "";
 }
 
-export function promptUserForManualStep(currentChunkText, currentContextWindow, fullHistory, milestones, maxContextLinesDefault) {
+export function promptUserForManualStep(currentChunkText, currentContextWindow, fullHistory, summaryContext, maxContextLinesDefault) {
     console.log('[Trace:UI] promptUserForManualStep() invoked; source + context populated.');
     return new Promise((resolve, reject) => {
         const toolbar = document.getElementById("manualStepToolbar");
-        toolbar.style.display = "flex";
+        const titleEl = document.getElementById("manualStepTitle");
+        if (toolbar) toolbar.style.display = "flex";
+        if (titleEl) titleEl.textContent = "Manual Step Override - Action Required";
 
-        // Show the source line being translated at the top of the override UI.
+        // Show the source line being translated in the source box.
         const sourceBox = document.getElementById("stepSourceText");
         if (sourceBox) sourceBox.value = currentChunkText || "";
 
-        // Store raw history + milestones so the preview can recompute live when settings change.
+        // Store raw history + summary context so the preview can recompute live when settings change.
         state._stepFullHistory = Array.isArray(fullHistory) ? fullHistory : [];
-        state._stepMilestones = Array.isArray(milestones) ? milestones : [];
+        if (Array.isArray(summaryContext)) {
+            state._stepMilestones = summaryContext;
+            state._stepSummaryContext = {};
+        } else {
+            state._stepSummaryContext = summaryContext || {};
+            state._stepMilestones = [];
+        }
         state._stepMaxCtxDefault = maxContextLinesDefault || 6;
 
         // Initial population + live refresh of the context preview.
         refreshStepContextPreview(currentContextWindow);
         const ctxInput = document.getElementById("stepContextLinesInput");
         const rawInput = document.getElementById("stepRawLimitInput");
-        if (ctxInput) ctxInput.oninput = () => refreshStepContextPreview();
-        if (rawInput) rawInput.oninput = () => refreshStepContextPreview();
+
+        const handleContextSettingChange = (inputEl, oldVal) => {
+            if (window.confirm("Changing context settings will recompute the active summaries and context window. Are you sure?")) {
+                inputEl.dataset.oldValue = inputEl.value;
+                refreshStepContextPreview();
+            } else {
+                inputEl.value = inputEl.dataset.oldValue || oldVal;
+            }
+        };
+
+        if (ctxInput) {
+            ctxInput.dataset.oldValue = ctxInput.value;
+            ctxInput.onchange = () => handleContextSettingChange(ctxInput, ctxInput.dataset.oldValue);
+        }
+        if (rawInput) {
+            rawInput.dataset.oldValue = rawInput.value;
+            rawInput.onchange = () => handleContextSettingChange(rawInput, rawInput.dataset.oldValue);
+        }
 
         const outputRight = document.getElementById("outputAreaRight");
-        outputRight.classList.add("editable");
+        if (outputRight) outputRight.classList.add("editable");
 
         state.manualStepResolver = (action, newContextCount, rawLimit) => {
-            toolbar.style.display = "none";
+            if (titleEl) titleEl.textContent = "Manual Step Override Active";
+            if (!state.manualStepByStepMode && toolbar) {
+                toolbar.style.display = "none";
+            }
             resolve({ action, newContextCount, rawLimit });
         };
 
         if (state.currentAbortController) {
             state.currentAbortController.signal.addEventListener('abort', () => {
-                toolbar.style.display = "none";
+                if (!state.manualStepByStepMode && toolbar) {
+                    toolbar.style.display = "none";
+                }
                 reject(new Error("Translation cancelled by user."));
             }, { once: true });
         }

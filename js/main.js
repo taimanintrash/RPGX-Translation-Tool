@@ -31,9 +31,9 @@ export const state = {
 import { loadFilesFromCache, loadUIStateFromCache } from './database.js';
 import { initDraggableModal } from './ui.js';
 import { refreshApplicationState, renderComparisonViews } from './parser.js';
-import { loadFiles, removeFile, onSelectID, onCompareSelectionChange, saveEditsToMemory, injectTranslationToRight, downloadFile, updateBenchmarkSceneDropdown } from './parser.js';
+import { loadFiles, removeFile, onSelectID, onSelectIDMobile, onCompareSelectionChange, saveEditsToMemory, injectTranslationToRight, downloadFile, updateBenchmarkSceneDropdown } from './parser.js';
 import { fetchAiModels, translateViaAiServer, stopTranslation, generateStylizationMapWithAI, loadSpecificPreset, loadDefaultPreset, loadAllDefaultPresets } from './translator.js';
-import { openDebugMenu, switchDebugPage, closeDebugMenu, closeDebugMenuWithoutSaving, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, copyStylizationMapToClipboard, toggleDiscoveredSelection, setAllDiscoveredSelection, updateDiscoveredKey, updateDiscoveredVal, resolveNameModal, closeNameModal, resolveManualStepContinue, triggerStepRetranslation } from './ui.js';
+import { openDebugMenu, switchDebugPage, closeDebugMenu, closeDebugMenuWithoutSaving, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, copyStylizationMapToClipboard, toggleDiscoveredSelection, setAllDiscoveredSelection, updateDiscoveredKey, updateDiscoveredVal, resolveNameModal, closeNameModal, resolveManualStepContinue, triggerStepRetranslation, syncManualStepUIVisibility, syncManualStepModeLive, initPaneResizer } from './ui.js';
 import { runParameterSweepBenchmark } from './benchmark.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -88,7 +88,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             renderComparisonViews();
         }
+        syncManualStepUIVisibility();
+    } else {
+        syncManualStepUIVisibility();
     }
+    initPaneResizer();
     console.log('[Trace:Init] Application boot complete.');
 });
 
@@ -137,6 +141,7 @@ function toggleTheme() {
 
 // === EXPOSE MODULE FUNCTIONS TO WINDOW FOR INDEX.HTML EVENT HANDLERS ===
 window.onSelectID = onSelectID;
+window.onSelectIDMobile = onSelectIDMobile;
 window.onCompareSelectionChange = onCompareSelectionChange;
 window.saveEditsToMemory = saveEditsToMemory;
 window.injectTranslationToRight = injectTranslationToRight;
@@ -160,6 +165,8 @@ window.resolveNameModal = resolveNameModal;
 window.closeNameModal = closeNameModal;
 window.resolveManualStepContinue = resolveManualStepContinue;
 window.triggerStepRetranslation = triggerStepRetranslation;
+window.syncManualStepUIVisibility = syncManualStepUIVisibility;
+window.syncManualStepModeLive = syncManualStepModeLive;
 window.runParameterSweepBenchmark = runParameterSweepBenchmark;
 window.translateViaAiServer = translateViaAiServer;
 window.generateStylizationMapWithAI = generateStylizationMapWithAI;
@@ -168,4 +175,3 @@ window.loadDefaultPreset = loadDefaultPreset;
 window.loadAllDefaultPresets = loadAllDefaultPresets;
 window.removeFile = removeFile;
 window.toggleTheme = toggleTheme;
-

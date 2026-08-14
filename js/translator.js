@@ -9,7 +9,9 @@ export const operationPresets = {
     jpEn: { temperature: 0.35, systemPrompt: "You are a specialized Japanese-to-English game localizer adapting natural nuance and character voice." },
     retry: { temperature: 0.2, systemPrompt: "The previous translation attempt failed validation. Carefully re-translate keeping tags and markers exact." },
     namePlate: { temperature: 0.1, systemPrompt: "You are a specialized proper noun and character name localization engine. Output transliterated name cleanly." },
-    stylization: { temperature: 0.2, systemPrompt: "You are a specialized stylization mapper. Analyze the provided game script and generate a JSON mapping of character names and unique speech patterns to standardized stylization keys." }
+    stylization: { temperature: 0.2, systemPrompt: "You are a specialized stylization mapper. Analyze the provided game script and generate a JSON mapping of character names and unique speech patterns to standardized stylization keys." },
+    recentSummary: { temperature: 0.2, systemPrompt: "You are a concise narrative context tracking engine for game translation. Maintain a tightly focused rolling recap of active character dynamics, tone, and immediate scene events without conversational filler." },
+    archivalSummary: { temperature: 0.15, systemPrompt: "You are an expert story archivist compressing narrative history into a single high-level macro state sentence. Preserve primary character identities, relationships, and overarching goals while omitting resolved micro-dialogue." }
 };
 
 /**
@@ -23,7 +25,9 @@ export const defaultPresetManifest = [
     { file: 'defalt_presets/japanese_to_english.json', operationKey: 'jpEn', label: 'Japanese to English' },
     { file: 'defalt_presets/retry_translation.json', operationKey: 'retry', label: 'Retry Translation' },
     { file: 'defalt_presets/name_plate_unique.json', operationKey: 'namePlate', label: 'Name Plate Unique' },
-    { file: 'defalt_presets/stylization_mapping.json', operationKey: 'stylization', label: 'Stylization Mapping' }
+    { file: 'defalt_presets/stylization_mapping.json', operationKey: 'stylization', label: 'Stylization Mapping' },
+    { file: 'defalt_presets/recent_summary.json', operationKey: 'recentSummary', label: 'Recent Scene Summary (Tier 2)' },
+    { file: 'defalt_presets/archival_summary.json', operationKey: 'archivalSummary', label: 'Archival Story State (Tier 3)' }
 ];
 
 /**
@@ -243,23 +247,60 @@ export function cleanModelOutput(rawText) {
 }
 
 /**
- * Summarizes older dialogue context lines into a single sentence via an AI call to preserve history dynamics[cite: 7].
- * Called by: translator.js (translateViaAiServer)[cite: 7]
+ * Cleans up raw LLM summary outputs by stripping preamble words, role labels, and surrounding quotes.
+ * Called by: translator.js (updateRecentSummary, updateArchivalSummary, summarizeOldContext)
  */
-export async function summarizeOldContext(host, model, targetLang, linesToSummarize) {
-    console.log(`[Trace:Context] summarizeOldContext() summarizing ${linesToSummarize.length} line(s).`);
-    let textToSummarize = linesToSummarize.join(" ");
-    let promptText = `Summarize the following previous dialogue lines in 1 sentence in ${targetLang}, tracking core character speaker dynamics.\n\nText:\n${textToSummarize}\n\nSummary:`;
+export function cleanSummaryOutput(rawText) {
+    if (!rawText) return "";
+    let cleaned = rawText.split(/###|\n\nExplanation:|I’m happy to help|Could you please provide|I don’t see any/i)[0];
+    cleaned = cleaned.replace(/^(Summary:|Story Summary:|Updated Story Summary:|Recap:|Updated Recap:|Scene Recap:)\s*/i, '');
+    cleaned = cleaned.trim().replace(/^["']|["']$/g, '');
+    const lines = cleaned.split("\n")
+                         .map(l => l.trim())
+                         .filter(l => l.length > 0 && !l.toLowerCase().startsWith("task:") && !l.toLowerCase().startsWith("rules:"));
+    return lines.join(" ");
+}
+
+/**
+ * Updates the Tier 2 rolling recent scene summary with newly confirmed dialogue lines.
+ * Focuses on active characters, emotional tone, and immediate narrative developments.
+ * Called by: translator.js (translateViaAiServer)
+ */
+export async function updateRecentSummary(host, model, targetLang, currentRecentSummary, newLines) {
+    console.log(`[Trace:Summary:Recent] Updating recent summary with ${newLines.length} line(s).`);
+    const newLinesText = newLines.join("\n");
+    let promptText = "";
+
+    if (!currentRecentSummary || !currentRecentSummary.trim()) {
+        promptText = `Task: Summarize the following dialogue into 1-2 concise sentences in ${targetLang}.\n` +
+                     `Focus on: active character names, their tone/relationship, and the current action or discussion topic.\n` +
+                     `Rules: Output ONLY the concise summary text. No preamble, commentary, or quotes.\n\n` +
+                     `Dialogue:\n${newLinesText}\n\n` +
+                     `Summary:`;
+    } else {
+        promptText = `Task: Update the ongoing scene recap with the new dialogue lines in ${targetLang}.\n` +
+                     `Focus on: active character names, their tone/relationship, and the current action or discussion topic.\n` +
+                     `Rules: Keep the updated recap under 2-3 sentences total. Output ONLY the updated recap. No preamble, commentary, or quotes.\n\n` +
+                     `Current Recap:\n${currentRecentSummary}\n\n` +
+                     `New Dialogue:\n${newLinesText}\n\n` +
+                     `Updated Recap:`;
+    }
+
+    const recentConfig = operationPresets.recentSummary || {
+        temperature: 0.2,
+        systemPrompt: "You are a concise narrative context tracking engine for game translation."
+    };
 
     const payload = {
         model: model,
         messages: [
-            { role: "system", content: operationPresets.benchmark.systemPrompt },
+            { role: "system", content: recentConfig.systemPrompt },
             { role: "user", content: promptText }
         ],
         stream: false,
-        temperature: operationPresets.benchmark.temperature,
-        max_tokens: 128
+        temperature: recentConfig.temperature ?? 0.2,
+        max_tokens: 256,
+        chat_template_kwargs: { "enable_thinking": false }
     };
 
     try {
@@ -269,10 +310,84 @@ export async function summarizeOldContext(host, model, targetLang, linesToSummar
             body: JSON.stringify(payload),
             signal: state.currentAbortController ? state.currentAbortController.signal : undefined
         });
-        if (!res.ok) return "Previous context summary unavailable.";
+        if (!res.ok) return currentRecentSummary || "Ongoing scene dialogue.";
         const data = await res.json();
-        return cleanModelOutput(data.choices?.[0]?.message?.content || "Context segment.");
-    } catch (e) { return "Context summary."; }
+        const raw = data.choices?.[0]?.message?.content || "";
+        const cleaned = cleanSummaryOutput(raw);
+        console.log(`[Trace:Summary:Recent] Updated recent summary: "${cleaned}"`);
+        return cleaned || currentRecentSummary || "Ongoing scene dialogue.";
+    } catch (e) {
+        console.warn("[Trace:Summary:Recent] Failed to update recent summary:", e);
+        return currentRecentSummary || "Ongoing scene dialogue.";
+    }
+}
+
+/**
+ * Updates the Tier 3 archival summary (summary-of-summaries) by compressing an overflowing scene recap.
+ * If an archival summary already exists, it updates itself to preserve macro story state and key relationships.
+ * Called by: translator.js (translateViaAiServer)
+ */
+export async function updateArchivalSummary(host, model, targetLang, currentArchivalSummary, recentSummaryToArchive) {
+    console.log(`[Trace:Summary:Archival] Compressing scene recap into archival summary.`);
+    let promptText = "";
+
+    if (!currentArchivalSummary || !currentArchivalSummary.trim()) {
+        promptText = `Task: Compress the following scene recap into ONE concise sentence in ${targetLang}.\n` +
+                     `Preserve: primary character names, core relationships, and the overall story situation.\n` +
+                     `Rules: Output exactly ONE sentence. No preamble, quotes, or conversational filler.\n\n` +
+                     `Scene Recap:\n${recentSummaryToArchive}\n\n` +
+                     `Story Summary:`;
+    } else {
+        promptText = `Task: Update the long-term story recap with the latest scene developments in ${targetLang}.\n` +
+                     `Preserve: primary character names, core relationships, and macro plot state. Discard finished minor dialogue.\n` +
+                     `Rules: Output exactly ONE comprehensive sentence. No preamble, quotes, or conversational filler.\n\n` +
+                     `Previous Story Summary:\n${currentArchivalSummary}\n\n` +
+                     `Recent Developments:\n${recentSummaryToArchive}\n\n` +
+                     `Updated Story Summary:`;
+    }
+
+    const archivalConfig = operationPresets.archivalSummary || {
+        temperature: 0.15,
+        systemPrompt: "You are an expert story archivist compressing narrative history into a single high-level macro state sentence."
+    };
+
+    const payload = {
+        model: model,
+        messages: [
+            { role: "system", content: archivalConfig.systemPrompt },
+            { role: "user", content: promptText }
+        ],
+        stream: false,
+        temperature: archivalConfig.temperature ?? 0.15,
+        max_tokens: 128,
+        chat_template_kwargs: { "enable_thinking": false }
+    };
+
+    try {
+        const res = await fetch(`${host}/v1/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: state.currentAbortController ? state.currentAbortController.signal : undefined
+        });
+        if (!res.ok) return currentArchivalSummary || recentSummaryToArchive;
+        const data = await res.json();
+        const raw = data.choices?.[0]?.message?.content || "";
+        const cleaned = cleanSummaryOutput(raw);
+        console.log(`[Trace:Summary:Archival] Updated archival summary: "${cleaned}"`);
+        return cleaned || currentArchivalSummary || recentSummaryToArchive;
+    } catch (e) {
+        console.warn("[Trace:Summary:Archival] Failed to update archival summary:", e);
+        return currentArchivalSummary || recentSummaryToArchive;
+    }
+}
+
+/**
+ * Summarizes older dialogue context lines into a single sentence (kept for backwards compatibility).
+ * Called by: translator.js
+ */
+export async function summarizeOldContext(host, model, targetLang, linesToSummarize) {
+    return await updateRecentSummary(host, model, targetLang, "", linesToSummarize);
 }
 
 /**
@@ -552,7 +667,12 @@ export async function translateViaAiServer() {
     let translatedLines = [];
     let dialogueBuffer = [];
     let history = [];
-    let milestoneSummaries = [];
+
+    // --- Tiered Summarization State (Qwen2.5-3B optimized) ---
+    let archivalSummary = "";
+    let recentSummary = "";
+    let recentSummarySourceLines = [];
+    let summarizedUpToIndex = 0;
 
     async function flushBuffer() {
         if (dialogueBuffer.length === 0) return;
@@ -560,21 +680,33 @@ export async function translateViaAiServer() {
         let combinedText = dialogueBuffer.map(item => item.text).join(" ");
         let formattedContextForPrompt = [];
 
-        // history stores ALL confirmed translated dialogue (never truncated).
-        // The raw tail (most recent rawLimitThreshold lines) feeds raw into the prompt;
-        // older confirmed lines beyond the raw tail get summarized into milestones.
-        const rawTail = history.slice(Math.max(0, history.length - rawLimitThreshold));
-        const olderConfirmed = history.slice(0, Math.max(0, history.length - rawLimitThreshold));
+        // Tier 1: Raw Tail (the most recent rawLimitThreshold confirmed lines from history)
+        const rawTailStart = Math.max(0, history.length - rawLimitThreshold);
+        const rawTail = history.slice(rawTailStart);
 
-        // Summarize older confirmed lines when they exceed the context limit.
-        if (olderConfirmed.length > maxContextLines) {
-            const linesToSnapshot = olderConfirmed.slice(0, olderConfirmed.length - maxContextLines);
-            let newMilestone = await summarizeOldContext(host, model, targetLang, linesToSnapshot);
-            milestoneSummaries.push(newMilestone);
+        // Tier 2: Rolling Recent Summary
+        // Incorporate newly confirmed lines that have exited the raw tail window
+        if (rawTailStart > summarizedUpToIndex) {
+            const newlyExitedLines = history.slice(summarizedUpToIndex, rawTailStart);
+            if (newlyExitedLines.length > 0) {
+                recentSummary = await updateRecentSummary(host, model, targetLang, recentSummary, newlyExitedLines);
+                recentSummarySourceLines.push(...newlyExitedLines);
+                summarizedUpToIndex = rawTailStart;
+
+                // Tier 3: Archival Summary (Macro story state compression)
+                // When recentSummary accumulates substantial context (~50 words or >250 chars), compress it into archival
+                const wordCount = recentSummary.trim().split(/\s+/).filter(Boolean).length;
+                if (wordCount >= 50 || recentSummary.length >= 250) {
+                    archivalSummary = await updateArchivalSummary(host, model, targetLang, archivalSummary, recentSummary);
+                    recentSummary = ""; // Reset rolling recent summary for the next scene segment
+                    recentSummarySourceLines = [];
+                }
+            }
         }
 
-        if (milestoneSummaries.length > 0) formattedContextForPrompt.push(`[Story Milestones:\n` + milestoneSummaries.join("\n") + `\n]`);
-        // Feed the raw tail (recent confirmed dialogue) directly.
+        // Build hierarchical prompt context
+        if (archivalSummary) formattedContextForPrompt.push(`[Story Context: ${archivalSummary}]`);
+        if (recentSummary) formattedContextForPrompt.push(`[Recent Scene: ${recentSummary}]`);
         formattedContextForPrompt.push(...rawTail);
 
         let sliceStart = Math.max(0, formattedContextForPrompt.length - maxContextLines);
@@ -590,13 +722,24 @@ export async function translateViaAiServer() {
             let stepResult, keepTranslatingStep = true;
             
             while (keepTranslatingStep) {
-                stepResult = await promptUserForManualStep(combinedText, currentContextSlice, history, milestoneSummaries, maxContextLines);
+                stepResult = await promptUserForManualStep(
+                    combinedText,
+                    currentContextSlice,
+                    history,
+                    { archivalSummary, recentSummary, recentSummarySourceLines },
+                    maxContextLines
+                );
                 if (stepResult.action === "retranslate") {
-                    // newContextCount = step context lines; rawLimit caps how many raw history lines feed the window.
                     const stepRawLimit = stepResult.rawLimit ?? stepResult.newContextCount;
+                    const stepRawTail = history.slice(Math.max(0, history.length - stepRawLimit));
+                    let stepFormattedContext = [];
+                    if (archivalSummary) stepFormattedContext.push(`[Story Context: ${archivalSummary}]`);
+                    if (recentSummary) stepFormattedContext.push(`[Recent Scene: ${recentSummary}]`);
+                    stepFormattedContext.push(...stepRawTail);
+
                     let updatedContextWindow = (maxContextLines > 0 && stepResult.newContextCount > 0)
-                        ? history.slice(Math.max(0, history.length - stepRawLimit), history.length - Math.max(0, history.length - stepResult.newContextCount))
-                        : (maxContextLines > 0 ? history.slice(Math.max(0, history.length - stepResult.newContextCount)) : []);
+                        ? stepFormattedContext.slice(Math.max(0, stepFormattedContext.length - stepResult.newContextCount))
+                        : [];
                     console.log(`[Trace:Translation] Re-translate step: contextLines=${stepResult.newContextCount}, rawLimit=${stepRawLimit}, windowSize=${updatedContextWindow.length}`);
                     translatedCombined = await translateChunkWithContext(host, model, targetLang, combinedText, updatedContextWindow, 'retry');
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
@@ -631,7 +774,6 @@ export async function translateViaAiServer() {
             let trimmedLine = line.trim();
 
             if (loadingStatus) loadingStatus.innerHTML = `Translating line ${idx + 1} of ${effectiveLimit}...`;
-            setCurrentSourceLine(trimmedLine);
 
             if (trimmedLine.startsWith("<NAME_PLATE>")) {
                 console.log(`[Trace:Translation] NAME_PLATE encountered at line ${idx + 1}.`);
@@ -661,6 +803,8 @@ export async function translateViaAiServer() {
                 translatedLines.push(line);
             }
             else {
+                // Only update the source line display for actual dialogue being translated
+                setCurrentSourceLine(trimmedLine);
                 let textToSendToAi = trimmedLine;
 
                 if (state.stylizationMode === "strip") {

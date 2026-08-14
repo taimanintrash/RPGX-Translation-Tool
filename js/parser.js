@@ -180,8 +180,12 @@ export function updateBenchmarkSceneDropdown() {
  */
 export function updateMasterIDList() {
     const selectElement = document.getElementById("scriptSelect");
+    const mobileSelectElement = document.getElementById("scriptSelectMobile");
+    
     const currentSelected = selectElement.value;
     selectElement.innerHTML = "";
+    if (mobileSelectElement) mobileSelectElement.innerHTML = '<option value="">Select script...</option>';
+    
     let allKeys = new Set();
     state.loadedFilesRegistry.forEach(f => Object.keys(f.data).forEach(k => allKeys.add(k)));
 
@@ -189,18 +193,27 @@ export function updateMasterIDList() {
         let count = state.loadedFilesRegistry.filter(f => f.data[key]).length;
         const isComplete = count >= 2;
         const statusSymbol = isComplete ? "+" : "-";
+        
         const opt = new Option(statusSymbol + " " + key + ` (${count} files)`, key);
-        // Inline color is the only cross-browser way to color <option> text.
-        // Complete (>=2 files) is always green; incomplete flips with the theme.
         const isDark = document.documentElement.getAttribute("data-theme") === "dark";
         opt.style.color = isComplete ? "#16a34a" : (isDark ? "#ffffff" : "#000000");
         selectElement.appendChild(opt);
+        
+        if (mobileSelectElement) {
+            const mobileOpt = opt.cloneNode(true);
+            mobileSelectElement.appendChild(mobileOpt);
+        }
     });
 
     if (currentSelected) {
         let rawKey = currentSelected.replace(/^[+-]\s*/, "").split(" ")[0];
         for (let opt of selectElement.options) {
             if (opt.value.includes(rawKey)) { opt.selected = true; break; }
+        }
+        if (mobileSelectElement) {
+            for (let opt of mobileSelectElement.options) {
+                if (opt.value.includes(rawKey)) { opt.selected = true; break; }
+            }
         }
     }
 }
@@ -210,6 +223,19 @@ export function updateMasterIDList() {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function onSelectID() { renderComparisonViews(); saveUIStateToCache(); }
+
+/**
+ * Event handler triggered when a new script ID is selected from the mobile dropdown.
+ * Syncs the main select element and triggers the standard update.
+ */
+export function onSelectIDMobile() { 
+    const mobileSelect = document.getElementById("scriptSelectMobile");
+    const mainSelect = document.getElementById("scriptSelect");
+    if (mobileSelect && mainSelect) {
+        mainSelect.value = mobileSelect.value;
+    }
+    onSelectID(); 
+}
 
 /**
  * Event handler triggered when comparison file selections change, updating views and saving state[cite: 7].
