@@ -32,6 +32,9 @@
     --info-blue-bg: #eff6ff;
     --info-blue-border: #bfdbfe;
     --loading-color: #8b5cf6;
+    --scrollbar-track: #aab2bf;
+    --scrollbar-thumb: #6b7280;
+    --scrollbar-thumb-hover: #4b5563;
 }
 
 [data-theme="dark"] {
@@ -65,6 +68,9 @@
     --info-blue-bg: #1e2d4a;
     --info-blue-border: #1e3a5f;
     --loading-color: #c4b5fd;
+    --scrollbar-track: #0f172a;
+    --scrollbar-thumb: #475569;
+    --scrollbar-thumb-hover: #64748b;
 }
 
 body {
@@ -554,3 +560,31 @@ button.debug-btn:hover { background: #334155; }
     margin-left: auto;
 }
 .theme-toggle-btn:hover { background: #334155; }
+
+/* ===== Theme-aware scrollbars ===== */
+/* WebKit (Chrome, Edge, Safari) */
+*::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+*::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 6px;
+}
+*::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 6px;
+    border: 2px solid var(--scrollbar-track);
+}
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}
+*::-webkit-scrollbar-corner {
+    background: var(--scrollbar-track);
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}

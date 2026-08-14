@@ -148,23 +148,28 @@ export async function fetchAiModels() {
     }
     // Common OpenAI-compatible model-list endpoint variants across LM Studio, Ollama, llama.cpp, etc.
     const endpoints = [`${host}/v1/models`, `${host}/api/v0/models`, `${host}/models`];
+    console.log(`[Trace:Models] Connecting to AI server at ${host}; will try ${endpoints.length} endpoint(s): ${endpoints.join(', ')}`);
     let modelsList = [], success = false;
     const diagnostics = [];
 
     for (const endpoint of endpoints) {
+        console.log(`[Trace:Models] Requesting available models from ${endpoint} ...`);
         try {
             const response = await fetch(endpoint);
+            console.log(`[Trace:Models] ${endpoint} responded with HTTP ${response.status} (${response.ok ? 'OK' : 'not OK'}).`);
             if (!response.ok) {
                 diagnostics.push(`${endpoint} -> HTTP ${response.status}`);
                 continue;
             }
             const data = await response.json();
-            if (Array.isArray(data)) { modelsList = data; success = true; break; }
-            else if (data.data && Array.isArray(data.data)) { modelsList = data.data; success = true; break; }
-            else if (data.models && Array.isArray(data.models)) { modelsList = data.models; success = true; break; }
+            if (Array.isArray(data)) { modelsList = data; success = true; console.log(`[Trace:Models] ${endpoint} returned ${modelsList.length} model(s) (array).`); break; }
+            else if (data.data && Array.isArray(data.data)) { modelsList = data.data; success = true; console.log(`[Trace:Models] ${endpoint} returned ${modelsList.length} model(s) (data.data).`); break; }
+            else if (data.models && Array.isArray(data.models)) { modelsList = data.models; success = true; console.log(`[Trace:Models] ${endpoint} returned ${modelsList.length} model(s) (data.models).`); break; }
+            console.warn(`[Trace:Models] ${endpoint} returned OK but unexpected JSON shape (keys: ${Object.keys(data || {}).join(', ')}).`);
             diagnostics.push(`${endpoint} -> OK but unexpected JSON shape (keys: ${Object.keys(data || {}).join(', ')})`);
         } catch (err) {
             // Browser fetch throws TypeError on network failure or CORS rejection; capture the reason.
+            console.error(`[Trace:Models] ${endpoint} request failed: ${err.name || 'FetchError'}: ${err.message || 'blocked (likely CORS or connection refused)'}`);
             diagnostics.push(`${endpoint} -> ${err.name || 'FetchError'}: ${err.message || 'blocked (likely CORS or connection refused)'}`);
         }
     }

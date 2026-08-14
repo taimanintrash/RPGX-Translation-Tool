@@ -7,6 +7,7 @@ export const state = {
     stylizationMode: "strip",
     pendingDiscoveredMappings: [],
     manualStepByStepMode: false,
+    knownNamesMap: {},
     manualStepResolver: null,
     heavyStylizationMap: {
         "、": "",
