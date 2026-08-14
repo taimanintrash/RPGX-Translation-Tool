@@ -7,6 +7,7 @@ import { translateChunkWithContext, operationPresets } from './translator.js';
  * Called by: main.js[cite: 7]
  */
 export async function runParameterSweepBenchmark() {
+    console.log('[Trace:Benchmark] runParameterSweepBenchmark() invoked.');
     const host = document.getElementById("aiServerHost").value.trim().replace(/\/+$/, "");
     const model = document.getElementById("aiModel").value;
     const targetLang = document.getElementById("targetLanguage").value;
@@ -78,6 +79,7 @@ export async function runParameterSweepBenchmark() {
  * Called by: benchmark.js (runParameterSweepBenchmark)[cite: 7]
  */
 async function gradeCandidateAgent(host, model, candidateText, referenceText) {
+    console.log('[Trace:Benchmark] gradeCandidateAgent() grading candidate translation.');
     let promptText = `You are a strict, objective translation evaluation auditor. Your task is to grade the candidate translation against the reference text or source standards on a strict scale from 1 to 100 (where 100 is flawless and 0 is complete failure).\n\n` +
     `Evaluate specifically across these criteria:\n` +
     `- Pronoun and gender consistency\n` +

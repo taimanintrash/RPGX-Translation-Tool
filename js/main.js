@@ -36,13 +36,18 @@ import { openDebugMenu, switchDebugPage, closeDebugMenu, closeDebugMenuWithoutSa
 import { runParameterSweepBenchmark } from './benchmark.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log('[Trace:Init] DOMContentLoaded fired. Booting application...');
+    // Restore saved theme preference (default: light) before the UI paints to avoid a flash.
+    applyTheme(localStorage.getItem('rpgx-theme') || 'light');
     // Load shipped default presets into memory first so the translation prompts always have a default config.
     await loadAllDefaultPresets();
     const cachedFiles = await loadFilesFromCache();
+    console.log(`[Trace:Init] IndexedDB cache loaded: ${cachedFiles ? cachedFiles.length : 0} file(s).`);
     if (cachedFiles && cachedFiles.length > 0) {
         state.loadedFilesRegistry = cachedFiles;
         refreshApplicationState();
         const cachedState = await loadUIStateFromCache();
+        console.log('[Trace:Init] Restoring cached UI state...');
         if (cachedState) {
             const selectLeft = document.getElementById("fileSelectLeft");
             const selectRight = document.getElementById("fileSelectRight");
@@ -83,7 +88,51 @@ document.addEventListener('DOMContentLoaded', async () => {
             renderComparisonViews();
         }
     }
+    console.log('[Trace:Init] Application boot complete.');
 });
+
+// === Theme (light/dark) toggle ===
+/**
+ * Applies the given theme ('light' or 'dark') to the document root and updates the toggle button label.
+ * Called by: main.js (DOMContentLoaded, toggleTheme)
+ */
+function applyTheme(theme) {
+    // Set on both <html> and <body> for maximum CSS selector compatibility.
+    document.documentElement.setAttribute('data-theme', theme);
+    document.body.setAttribute('data-theme', theme);
+    const btn = document.getElementById('themeToggleBtn');
+    if (btn) btn.textContent = (theme === 'dark') ? 'Light Mode' : 'Dark Mode';
+    // Re-apply inline option status colors so incomplete lines flip black<->white with the theme.
+    recolorScriptSelectOptions();
+    console.log(`[Trace:Theme] Applied theme: ${theme}`);
+}
+
+/**
+ * Re-applies the inline status colors to script-select options after a theme change,
+ * since native <option> elements cannot be restyled via CSS classes.
+ * Called by: main.js (applyTheme)
+ */
+function recolorScriptSelectOptions() {
+    const sel = document.getElementById('scriptSelect');
+    if (!sel) return;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    Array.from(sel.options).forEach(opt => {
+        // Determine completeness from the leading symbol (+ complete, - incomplete).
+        const isComplete = opt.textContent.trim().startsWith('+');
+        opt.style.color = isComplete ? '#16a34a' : (isDark ? '#ffffff' : '#000000');
+    });
+}
+
+/**
+ * Toggles between light and dark themes and persists the choice to localStorage.
+ * Called by: HTML event handler (theme toggle button)
+ */
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    const next = (current === 'dark') ? 'light' : 'dark';
+    applyTheme(next);
+    localStorage.setItem('rpgx-theme', next);
+}
 
 // === EXPOSE MODULE FUNCTIONS TO WINDOW FOR INDEX.HTML EVENT HANDLERS ===
 window.onSelectID = onSelectID;
@@ -117,4 +166,5 @@ window.loadSpecificPreset = loadSpecificPreset;
 window.loadDefaultPreset = loadDefaultPreset;
 window.loadAllDefaultPresets = loadAllDefaultPresets;
 window.removeFile = removeFile;
+window.toggleTheme = toggleTheme;
 

@@ -15,6 +15,7 @@
             <label for="fileInput"><strong>Load JSON/JS Files:</strong></label>
             <input type="file" id="fileInput" accept=".js,.json" multiple onchange="loadFiles(event)">
             <div id="globalWarning" class="warning-box">Warning: Less than 2 data files loaded!</div>
+            <button class="theme-toggle-btn" id="themeToggleBtn" title="Toggle light / dark theme" onclick="toggleTheme()">Dark Mode</button>
         </div>
         <div class="file-list-box" id="fileListBox">
             <em>No files loaded yet. Select multiple files above.</em>

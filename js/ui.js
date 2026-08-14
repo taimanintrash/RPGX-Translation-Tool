@@ -51,6 +51,7 @@ export function initDraggableModal() {
  * Called by: parser.js, translator.js, and ui.js[cite: 7]
  */
 export function showError(msg) {
+    console.log('[Trace:UI] showError():', msg);
     const banner = document.getElementById("errorBanner");
     if (banner) {
         banner.style.display = "block";
@@ -79,6 +80,7 @@ export function clearError() {
  * Called by: ui.js (openDebugMenu)[cite: 7]
  */
 export function renderDistinctPresetControls() {
+    console.log(`[Trace:UI] renderDistinctPresetControls() rendering ${defaultPresetManifest.length} preset row(s).`);
     const container = document.getElementById("distinctPresetsContainer");
     if (!container) return;
     container.innerHTML = "";
@@ -117,6 +119,7 @@ export function renderDistinctPresetControls() {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function openDebugMenu() {
+    console.log('[Trace:UI] openDebugMenu() invoked.');
     state.currentDebugPage = 1;
     updateDebugPageDisplay();
     renderDistinctPresetControls();
@@ -171,6 +174,7 @@ export function updateDebugPageDisplay() {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function closeDebugMenu() {
+    console.log('[Trace:UI] closeDebugMenu() saving settings and closing.');
     const limitVal = parseInt(document.getElementById("maxLinesLimitInput").value);
     state.debugMaxLinesLimit = isNaN(limitVal) || limitVal < 0 ? 0 : limitVal;
     state.autoSkipNameModal = document.getElementById("autoSkipNameModalCheckbox").checked;
@@ -201,6 +205,7 @@ export function closeDebugMenuWithoutSaving() {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function saveStylizationMapFromView() {
+    console.log('[Trace:UI] saveStylizationMapFromView() invoked.');
     try {
         const editorValue = document.getElementById("stylizationMapEditor").value;
         const parsedMap = JSON.parse(editorValue);
@@ -284,6 +289,7 @@ export function updateDiscoveredVal(index, newVal) {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function commitApprovedMappingsToMap() {
+    console.log('[Trace:UI] commitApprovedMappingsToMap() invoked.');
     let selectedItems = state.pendingDiscoveredMappings.filter(item => item.selected);
     if (selectedItems.length === 0) showError("No mappings are selected. Please check at least one item to add.");
 
@@ -318,6 +324,7 @@ export function deleteSelectedDiscoveredMappings() {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export async function copyStylizationMapToClipboard() {
+    console.log('[Trace:UI] copyStylizationMapToClipboard() invoked.');
     const mapText = document.getElementById("stylizationMapEditor").value;
     try {
         await navigator.clipboard.writeText(mapText);
@@ -332,6 +339,7 @@ export async function copyStylizationMapToClipboard() {
  * Called by: translator.js (translateViaOllama)[cite: 7]
  */
 export function promptUserForNameTranslation(originalName, aiTranslatedName) {
+    console.log(`[Trace:UI] promptUserForNameTranslation("${originalName}") invoked; autoSkip=${state.autoSkipNameModal}.`);
     return new Promise((resolve, reject) => {
         if (state.autoSkipNameModal) return resolve(aiTranslatedName);
 

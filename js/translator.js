@@ -67,16 +67,18 @@ function mapPresetJson(operationKey, presetJson, sourceName) {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function loadSpecificPreset(operationKey, event) {
+    console.log(`[Trace:Preset] loadSpecificPreset(operationKey="${operationKey}") invoked.`);
     const file = event.target.files[0];
-    if (!file) return;
+    if (!file) { console.warn('[Trace:Preset] No file selected, aborting.'); return; }
 
     const reader = new FileReader();
     reader.onload = function(e) {
         try {
             mapPresetJson(operationKey, JSON.parse(e.target.result), file.name);
+            console.log(`[Trace:Preset] Custom preset applied to "${operationKey}" from "${file.name}".`);
         } catch (err) {
             showError("Failed to parse preset JSON file.");
-            console.error(err);
+            console.error(`[Trace:Preset] Failed to parse custom preset "${file.name}":`, err);
         }
     };
     reader.readAsText(file);
@@ -88,6 +90,7 @@ export function loadSpecificPreset(operationKey, event) {
  * Called by: HTML event handler / main.js (dynamic default preset buttons)[cite: 7]
  */
 export async function loadDefaultPreset(operationKey) {
+    console.log(`[Trace:Preset] loadDefaultPreset(operationKey="${operationKey}") invoked.`);
     const entry = defaultPresetManifest.find(p => p.operationKey === operationKey);
     if (!entry) {
         showError(`No default preset is registered for operation "${operationKey}".`);
@@ -133,6 +136,7 @@ export async function loadAllDefaultPresets() {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export async function fetchAiModels() {
+    console.log('[Trace:Models] fetchAiModels() invoked.');
     clearError();
     const host = document.getElementById("aiServerHost").value.trim().replace(/\/+$/, "");
     const modelSelect = document.getElementById("aiModel");
@@ -165,6 +169,7 @@ export async function fetchAiModels() {
         }
     }
 
+    console.log(`[Trace:Models] Detection complete. success=${success}, rawModels=${modelsList.length}, diagnostics=${diagnostics.length}`);
     modelSelect.innerHTML = "";
     if (!success || modelsList.length === 0) {
         modelSelect.innerHTML = `<option value="">-- Connection Failed / Check Server --</option>`;
@@ -191,6 +196,7 @@ export async function fetchAiModels() {
         return;
     }
 
+    console.log(`[Trace:Models] Populated dropdown with ${added} model(s).`);
     if (currentSelection) modelSelect.value = currentSelection;
     if (!modelSelect.value && modelSelect.options.length > 0) modelSelect.selectedIndex = 0;
 }
@@ -236,6 +242,7 @@ export function cleanModelOutput(rawText) {
  * Called by: translator.js (translateViaAiServer)[cite: 7]
  */
 export async function summarizeOldContext(host, model, targetLang, linesToSummarize) {
+    console.log(`[Trace:Context] summarizeOldContext() summarizing ${linesToSummarize.length} line(s).`);
     let textToSummarize = linesToSummarize.join(" ");
     let promptText = `Summarize the following previous dialogue lines in 1 sentence in ${targetLang}, tracking core character speaker dynamics.\n\nText:\n${textToSummarize}\n\nSummary:`;
 
@@ -268,7 +275,9 @@ export async function summarizeOldContext(host, model, targetLang, linesToSummar
  * Called by: benchmark.js and translator.js[cite: 7]
  */
 export async function translateChunkWithContext(host, model, targetLang, chunkText, previousContext, presetType = 'main') {
+    console.log(`[Trace:Translate] translateChunkWithContext(preset="${presetType}", contextLines=${previousContext.length}) invoked.`);
     if (/^<[A-Z_]+>/.test(chunkText.trim()) && !chunkText.includes('"')) {
+        console.log('[Trace:Translate] Passing control-tag line through unchanged.');
         return chunkText;
     }
 
@@ -279,6 +288,7 @@ export async function translateChunkWithContext(host, model, targetLang, chunkTe
     let attempts = 0;
     let currentContext = [...previousContext];
     let activePresetConfig = operationPresets[presetType] || operationPresets.main;
+    console.log(`[Trace:Translate] Active preset resolved: temp=${activePresetConfig.temperature}`);
 
     while (attempts <= maxRetries) {
         attempts++;
@@ -324,6 +334,7 @@ export async function translateChunkWithContext(host, model, targetLang, chunkTe
         const data = await res.json();
         let rawResult = data.choices?.[0]?.message?.content || sanitized;
         let cleanedResult = cleanModelOutput(rawResult);
+        console.log(`[Trace:Translate] Attempt ${attempts}/${maxRetries} -> cleaned length ${cleanedResult.length}`);
 
         if (isFallbackRun) {
             return `[MANUAL_OVERRIDE_NEEDED] ${cleanedResult}`;
@@ -354,6 +365,7 @@ export async function translateChunkWithContext(host, model, targetLang, chunkTe
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export async function generateStylizationMapWithAI() {
+    console.log('[Trace:Stylization] generateStylizationMapWithAI() invoked.');
     clearError();
     const host = document.getElementById("aiServerHost").value.trim().replace(/\/+$/, "");
     const model = document.getElementById("aiModel").value;
@@ -445,6 +457,7 @@ export async function generateStylizationMapWithAI() {
             }
         }
 
+        console.log(`[Trace:Stylization] Discovered ${discoveredArray.length} unique mapping candidate(s).`);
         if (discoveredArray.length > 0) {
             state.pendingDiscoveredMappings = discoveredArray;
             renderDiscoveredMappingsUI();
@@ -482,6 +495,7 @@ export function stopTranslation() {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export async function translateViaAiServer() {
+    console.log('[Trace:Translation] translateViaAiServer() invoked.');
     clearError();
     const host = document.getElementById("aiServerHost").value.trim().replace(/\/+$/, "");
     const model = document.getElementById("aiModel").value;
@@ -497,10 +511,10 @@ export async function translateViaAiServer() {
     const progressBar = document.getElementById("translation-progress");
     const stopBtn = document.getElementById("stopTranslateBtn");
 
-    if (!model) { showError("No model selected."); return; }
-    if (!selectElement.value || selectRight.value === "") { showError("Please select a script ID and target file."); return; }
+    if (!model) { console.warn('[Trace:Translation] Aborted: no model selected.'); showError("No model selected."); return; }
+    if (!selectElement.value || selectRight.value === "") { console.warn('[Trace:Translation] Aborted: script ID or target file not selected.'); showError("Please select a script ID and target file."); return; }
 
-    let key = selectElement.value.replace(/^\[(?:OK|!)\]\s*/, "").split(" ")[0];
+    let key = selectElement.value.replace(/^[+-]\s*/, "").split(" ")[0];
     let fileObj = state.loadedFilesRegistry[selectRight.value];
     let fullText = outputLeft.value;
 
@@ -575,6 +589,7 @@ export async function translateViaAiServer() {
     try {
         let totalLines = lines.length;
         let effectiveLimit = (state.debugMaxLinesLimit > 0 && state.debugMaxLinesLimit < totalLines) ? state.debugMaxLinesLimit : totalLines;
+        console.log(`[Trace:Translation] Starting loop: ${effectiveLimit}/${totalLines} lines, preset=${(targetLang.toLowerCase() === 'english') ? 'jpEn' : 'main'}, mode=${state.stylizationMode}, manualStep=${state.manualStepByStepMode}`);
 
         for (let idx = 0; idx < effectiveLimit; idx++) {
             if (state.currentAbortController.signal.aborted) throw new Error("Translation cancelled by user.");
@@ -585,6 +600,7 @@ export async function translateViaAiServer() {
             if (loadingStatus) loadingStatus.innerHTML = `Translating line ${idx + 1} of ${effectiveLimit}...`;
 
             if (trimmedLine.startsWith("<NAME_PLATE>")) {
+                console.log(`[Trace:Translation] NAME_PLATE encountered at line ${idx + 1}.`);
                 await flushBuffer();
                 let nameValue = trimmedLine.replace("<NAME_PLATE>", "").trim();
 
@@ -641,6 +657,7 @@ export async function translateViaAiServer() {
         }
 
         await flushBuffer();
+        console.log('[Trace:Translation] Main loop finished. Flattening results and committing to file.');
 
         let finalCleanedArray = [];
         for (let l of translatedLines) {

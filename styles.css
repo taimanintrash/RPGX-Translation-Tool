@@ -1,4 +1,72 @@
 /* @component ui-theme-root: Defines the global base styles, typography, flex container flow, and light background palette for the application body */
+
+/* ===== Theme variables (light is the default) ===== */
+:root {
+    --bg-app: #98a0ae;
+    --bg-surface: #aab2bf;
+    --bg-subtle: #b6bdc9;
+    --bg-subtle-2: #b2b9c6;
+    --bg-input: #c2c8d2;
+    --bg-input-editable: #b8bfc9;
+    --border-default: #ccc;
+    --border-soft: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --text-primary: #333333;
+    --text-heading: #333333;
+    --text-secondary: #334155;
+    --text-muted: #64748b;
+    --text-dark: #1e293b;
+    --text-darkest: #0f172a;
+    --text-link: #1e40af;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+    --overlay-bg: rgba(0, 0, 0, 0.4);
+    --status-complete: #16a34a;
+    --status-incomplete: #000000;
+    --chip-bg: #e2e8f0;
+    --accent-blue: #1e40af;
+    --warn-bg: #ffeeec;
+    --warn-border: #fecaca;
+    --error-bg: #fef2f2;
+    --error-text: #b91c1c;
+    --error-border: #f87171;
+    --info-blue-bg: #eff6ff;
+    --info-blue-border: #bfdbfe;
+    --loading-color: #8b5cf6;
+}
+
+[data-theme="dark"] {
+    --bg-app: #0f172a;
+    --bg-surface: #1e293b;
+    --bg-subtle: #243349;
+    --bg-subtle-2: #283449;
+    --bg-input: #0f1a2c;
+    --bg-input-editable: #162236;
+    --border-default: #3b4a63;
+    --border-soft: #334155;
+    --border-strong: #475569;
+    --text-primary: #e2e8f0;
+    --text-heading: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --text-dark: #f1f5f9;
+    --text-darkest: #f8fafc;
+    --text-link: #93c5fd;
+    --shadow-color: rgba(0, 0, 0, 0.4);
+    --overlay-bg: rgba(0, 0, 0, 0.65);
+    --status-complete: #22c55e;
+    --status-incomplete: #ffffff;
+    --chip-bg: #334155;
+    --accent-blue: #93c5fd;
+    --warn-bg: #3a1d1d;
+    --warn-border: #7f1d1d;
+    --error-bg: #2a1414;
+    --error-text: #fca5a5;
+    --error-border: #b91c1c;
+    --info-blue-bg: #1e2d4a;
+    --info-blue-border: #1e3a5f;
+    --loading-color: #c4b5fd;
+}
+
 body {
     font-family: Arial, sans-serif;
     margin: 0;
@@ -7,15 +75,17 @@ body {
     flex-direction: column;
     height: 92vh;
     gap: 12px;
-    background-color: #f4f4f9;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* @component top-panel-wrapper: Encloses the multi-file JSON/JS uploader and global warning status indicators */
 .top-panel {
-    background: white;
+    background: var(--bg-surface);
     padding: 12px 15px;
     border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 5px var(--shadow-color);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -32,11 +102,11 @@ body {
 /* @component file-list-box: Container tracking active uploaded file chips and status labels */
 .file-list-box {
     font-size: 13px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-soft);
     padding: 6px 10px;
     border-radius: 4px;
-    color: #334155;
+    color: var(--text-secondary);
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
@@ -45,13 +115,14 @@ body {
 
 /* @component file-tag-pill: Individual pill element showing loaded file names and removal actions */
 .file-tag {
-    background: #e2e8f0;
+    background: var(--chip-bg);
     padding: 3px 8px;
     border-radius: 4px;
     font-family: monospace;
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    color: var(--text-primary);
 }
 
 .file-tag .remove-btn {
@@ -80,10 +151,10 @@ body {
     width: 290px;
     display: flex;
     flex-direction: column;
-    background: white;
+    background: var(--bg-surface);
     padding: 12px;
     border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 5px var(--shadow-color);
     gap: 8px;
 }
 
@@ -92,10 +163,10 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: white;
+    background: var(--bg-surface);
     padding: 15px;
     border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 5px var(--shadow-color);
     overflow: hidden;
     gap: 10px;
 }
@@ -105,10 +176,10 @@ body {
     display: flex;
     gap: 10px;
     align-items: center;
-    background: #f8fafc;
+    background: var(--bg-subtle);
     padding: 8px 12px;
     border-radius: 6px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--border-soft);
     flex-wrap: wrap;
 }
 
@@ -116,9 +187,18 @@ body {
     flex: 1;
     min-width: 140px;
     padding: 6px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     font-size: 13px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+}
+
+.compare-selectors input {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
 }
 
 /* @component translate-config-group: Input controls for local server URL, model selection, and context windows */
@@ -132,8 +212,10 @@ body {
 .translate-config input, .translate-config select {
     padding: 5px;
     font-size: 12px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
+    background: var(--bg-input);
+    color: var(--text-primary);
 }
 
 /* @component panes-wrapper-grid: Side-by-side text container wrapper for source and target comparisons */
@@ -160,18 +242,24 @@ body {
     margin-bottom: 6px;
 }
 
-h3, h4 { margin: 0; color: #333; }
+h3, h4 { margin: 0; color: var(--text-heading); }
 
 select#scriptSelect {
     width: 100%;
     flex: 1;
     padding: 6px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--border-default);
     border-radius: 4px;
     font-family: monospace;
     font-size: 13px;
     box-sizing: border-box;
+    background: var(--bg-input);
+    color: var(--text-primary);
 }
+
+/* Status colors flip with the theme: black in light, white in dark */
+#scriptSelect option.status-complete { color: var(--status-complete); }
+#scriptSelect option.status-incomplete { color: var(--status-incomplete); }
 
 textarea {
     width: 100%;
@@ -180,14 +268,15 @@ textarea {
     padding: 10px;
     font-family: monospace;
     font-size: 13px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--border-default);
     border-radius: 4px;
     box-sizing: border-box;
-    background-color: #fafafa;
+    background-color: var(--bg-input);
+    color: var(--text-primary);
 }
 
 textarea.editable {
-    background-color: #fff;
+    background-color: var(--bg-input-editable);
     border-color: #3b82f6;
 }
 
@@ -267,17 +356,17 @@ button.debug-btn:hover { background: #334155; }
     color: #dc2626;
     font-weight: bold;
     font-size: 12px;
-    background: #ffeeec;
+    background: var(--warn-bg);
     padding: 4px 8px;
     border-radius: 4px;
-    border: 1px solid #fecaca;
+    border: 1px solid var(--warn-border);
     display: none;
 }
 
 .error-banner {
-    color: #b91c1c;
-    background: #fef2f2;
-    border: 1px solid #f87171;
+    color: var(--error-text);
+    background: var(--error-bg);
+    border: 1px solid var(--error-border);
     padding: 10px 14px;
     border-radius: 6px;
     font-size: 13px;
@@ -285,12 +374,12 @@ button.debug-btn:hover { background: #334155; }
     white-space: pre-wrap;
     display: none;
     margin-top: 4px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    box-shadow: 0 1px 3px var(--shadow-color);
 }
 
 #loading-status {
     display: none;
-    color: #8b5cf6;
+    color: var(--loading-color);
     font-style: italic;
     font-size: 12px;
     font-weight: bold;
@@ -316,7 +405,7 @@ button.debug-btn:hover { background: #334155; }
 .modal-overlay {
     position: fixed;
     top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--overlay-bg);
     display: none;
     justify-content: center;
     align-items: center;
@@ -325,12 +414,13 @@ button.debug-btn:hover { background: #334155; }
 }
 
 .modal-content {
-    background: white;
+    background: var(--bg-surface);
+    color: var(--text-primary);
     padding: 16px;
     border-radius: 8px;
     width: 720px;
     height: 620px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    box-shadow: 0 10px 25px var(--shadow-color);
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -340,7 +430,7 @@ button.debug-btn:hover { background: #334155; }
     resize: both;
     overflow: hidden;
     pointer-events: auto;
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(--border-strong);
     min-width: 480px;
     min-height: 400px;
 }
@@ -350,26 +440,26 @@ button.debug-btn:hover { background: #334155; }
     justify-content: space-between;
     align-items: center;
     cursor: move;
-    background: #f8fafc;
+    background: var(--bg-subtle);
     padding: 8px 10px;
     border-radius: 6px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--border-soft);
     user-select: none;
 }
 
-.modal-header h3 { margin: 0; color: #1e293b; font-size: 15px; }
+.modal-header h3 { margin: 0; color: var(--text-dark); font-size: 15px; }
 
 .modal-close-x {
     background: none;
     border: none;
     font-size: 18px;
     font-weight: bold;
-    color: #64748b;
+    color: var(--text-muted);
     cursor: pointer;
     padding: 0;
     line-height: 1;
 }
-.modal-close-x:hover { color: #0f172a; }
+.modal-close-x:hover { color: var(--text-darkest); }
 
 .debug-page {
     display: flex;
@@ -390,9 +480,11 @@ button.debug-btn:hover { background: #334155; }
 .modal-field input, .modal-field select, .modal-field textarea {
     padding: 8px;
     font-size: 13px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     font-family: monospace;
+    background: var(--bg-input);
+    color: var(--text-primary);
 }
 
 .modal-checkbox-row {
@@ -401,7 +493,7 @@ button.debug-btn:hover { background: #334155; }
     gap: 8px;
     font-size: 13px;
     font-weight: bold;
-    color: #334155;
+    color: var(--text-secondary);
     cursor: pointer;
     margin-top: 4px;
 }
@@ -417,6 +509,48 @@ button.debug-btn:hover { background: #334155; }
     justify-content: space-between;
     align-items: center;
     margin-top: auto;
-    border-top: 1px solid #e2e8f0;
+    border-top: 1px solid var(--border-soft);
     padding-top: 10px;
 }
+
+/* ===== Dark-mode overrides for inline-styled elements =====
+   Many elements use inline style="" with hard-coded light colors.
+   These rules use higher specificity / !important to recolor them in dark mode. */
+[data-theme="dark"] .modal-field[style*="background: #f8fafc"] { background: var(--bg-subtle) !important; border-color: var(--border-strong) !important; }
+[data-theme="dark"] .modal-field[style*="background: #f1f5f9"] { background: var(--bg-subtle-2) !important; }
+[data-theme="dark"] .modal-field[style*="background: #f8fafc"] span[style*="color: #64748b"] { color: var(--text-muted) !important; }
+[data-theme="dark"] .modal-field[style*="background: #f8fafc"] em { color: var(--text-muted) !important; }
+[data-theme="dark"] .modal-field span[style*="color: #64748b"] { color: var(--text-muted) !important; }
+[data-theme="dark"] .modal-field em { color: var(--text-muted) !important; }
+
+/* Manual step toolbar (info-blue panel) */
+[data-theme="dark"] #manualStepToolbar[style*="background: #eff6ff"] { background: var(--info-blue-bg) !important; border-color: var(--info-blue-border) !important; }
+[data-theme="dark"] #manualStepToolbar span[style*="color: #1e40af"] { color: var(--accent-blue) !important; }
+
+/* Discovered mappings review rows */
+[data-theme="dark"] #discoveredMappingsContainer em { color: var(--text-muted) !important; }
+[data-theme="dark"] #discoveredMappingsContainer div[style*="background: white"] { background: var(--bg-input) !important; border-color: var(--border-soft) !important; color: var(--text-primary) !important; }
+[data-theme="dark"] #discoveredMappingsContainer div[style*="background: #f8fafc"] { background: var(--bg-subtle) !important; border-color: var(--border-strong) !important; }
+[data-theme="dark"] #discoveredMappingsContainer input[type="text"] { background: var(--bg-input) !important; color: var(--text-primary) !important; border-color: var(--border-strong) !important; }
+[data-theme="dark"] #discoveredMappingsContainer span { color: var(--text-muted) !important; }
+
+/* Parameter sweep / benchmark panel */
+[data-theme="dark"] #benchmarkReportOutput { background: var(--bg-input) !important; color: var(--text-primary) !important; }
+[data-theme="dark"] div[style*="background: #f8fafc"][style*="border: 1px solid #e2e8f0"] { background: var(--bg-subtle) !important; border-color: var(--border-soft) !important; }
+[data-theme="dark"] div[style*="color:#1e293b"] { color: var(--text-heading) !important; }
+[data-theme="dark"] span[style*="color: #64748b"] { color: var(--text-muted) !important; }
+
+/* Name plate modal inputs follow modal-field rules already */
+
+/* Dark mode toggle button */
+.theme-toggle-btn {
+    background: #475569;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-left: auto;
+}
+.theme-toggle-btn:hover { background: #334155; }

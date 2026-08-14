@@ -7,8 +7,9 @@ import { showError } from './ui.js';
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function loadFiles(event) {
+    console.log(`[Trace:Files] loadFiles() invoked with ${event.target.files.length} file(s).`);
     const files = event.target.files;
-    if (!files.length) return;
+    if (!files.length) { console.warn('[Trace:Files] No files selected.'); return; }
     let pendingReads = files.length;
 
     for (let i = 0; i < files.length; i++) {
@@ -45,6 +46,7 @@ export function loadFiles(event) {
  */
 export function checkFinishedReads(pendingReads) {
     if (pendingReads === 0) {
+        console.log('[Trace:Files] All reads finished. Refreshing UI and caching state.');
         refreshApplicationState();
         saveFilesToCache(state.loadedFilesRegistry);
         saveUIStateToCache();
@@ -56,6 +58,7 @@ export function checkFinishedReads(pendingReads) {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function removeFile(fileName) {
+    console.log(`[Trace:Files] removeFile("${fileName}") invoked.`);
     state.loadedFilesRegistry = state.loadedFilesRegistry.filter(f => f.name !== fileName);
     refreshApplicationState();
     saveFilesToCache(state.loadedFilesRegistry);
@@ -67,7 +70,7 @@ export function removeFile(fileName) {
  * Called by: parser.js (loadFiles)[cite: 7]
  */
 export function parseContentToJSON(content, fileName) {
-    try { return JSON.parse(content); } catch (e1) {}
+    try { return JSON.parse(content); } catch (e1) { console.warn(`[Trace:Files] Standard JSON.parse failed for "${fileName}", trying regex extraction.`); }
     try {
         const match = content.match(/\{[\s\S]*\}/);
         if (match) return JSON.parse(match[0]);
@@ -80,6 +83,7 @@ export function parseContentToJSON(content, fileName) {
  * Called by: parser.js and main.js[cite: 7]
  */
 export function refreshApplicationState() {
+    console.log('[Trace:UI] refreshApplicationState() invoked.');
     updateFileListUI();
     updateFileDropdowns();
     updateMasterIDList();
@@ -183,12 +187,18 @@ export function updateMasterIDList() {
 
     Array.from(allKeys).sort().forEach(key => {
         let count = state.loadedFilesRegistry.filter(f => f.data[key]).length;
-        let icon = count >= 2 ? "[OK] " : "[!] ";
-        selectElement.appendChild(new Option(icon + key + ` (${count} files)`, key));
+        const isComplete = count >= 2;
+        const statusSymbol = isComplete ? "+" : "-";
+        const opt = new Option(statusSymbol + " " + key + ` (${count} files)`, key);
+        // Inline color is the only cross-browser way to color <option> text.
+        // Complete (>=2 files) is always green; incomplete flips with the theme.
+        const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+        opt.style.color = isComplete ? "#16a34a" : (isDark ? "#ffffff" : "#000000");
+        selectElement.appendChild(opt);
     });
 
     if (currentSelected) {
-        let rawKey = currentSelected.replace(/^\[(?:OK|!)\]\s*/, "").split(" ")[0];
+        let rawKey = currentSelected.replace(/^[+-]\s*/, "").split(" ")[0];
         for (let opt of selectElement.options) {
             if (opt.value.includes(rawKey)) { opt.selected = true; break; }
         }
@@ -222,7 +232,7 @@ export function renderComparisonViews() {
         outputLeft.value = ""; outputRight.value = ""; return;
     }
 
-    let key = selectElement.value.replace(/^\[(?:OK|!)\]\s*/, "").split(" ")[0];
+    let key = selectElement.value.replace(/^[+-]\s*/, "").split(" ")[0];
     outputLeft.value = (selectLeft.value !== "" && state.loadedFilesRegistry[selectLeft.value]) ? extractScriptText(state.loadedFilesRegistry[selectLeft.value].data, key) : "[No file]";
     outputRight.value = (selectRight.value !== "" && state.loadedFilesRegistry[selectRight.value]) ? extractScriptText(state.loadedFilesRegistry[selectRight.value].data, key) : "[No file]";
 }
@@ -249,10 +259,11 @@ export function extractScriptText(dataObj, key) {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function saveEditsToMemory() {
+    console.log('[Trace:Files] saveEditsToMemory() invoked.');
     const selectElement = document.getElementById("scriptSelect");
     const selectLeft = document.getElementById("fileSelectLeft");
     if (!selectElement.value || selectLeft.value === "") showError("Select script ID and Source 1 file.");
-    let key = selectElement.value.replace(/^\[(?:OK|!)\]\s*/, "").split(" ")[0];
+    let key = selectElement.value.replace(/^[+-]\s*/, "").split(" ")[0];
     let fileObj = state.loadedFilesRegistry[selectLeft.value];
     if (!fileObj.data[key]) showError("ID not found in file.");
 
@@ -275,6 +286,7 @@ export function saveEditsToMemory() {
  * Called by: parser.js and translator.js[cite: 7]
  */
 export function commitTextToRightFile(fileObj, key, linesArray) {
+    console.log(`[Trace:Files] commitTextToRightFile(key="${key}", lines=${linesArray.length}) invoked.`);
     const item = fileObj.data[key];
     if (item && item.SCRIPTS?.PART1?.TRANSLATIONS) {
         item.SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"] = linesArray;
@@ -296,10 +308,11 @@ export function commitTextToRightFile(fileObj, key, linesArray) {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function injectTranslationToRight() {
+    console.log('[Trace:Files] injectTranslationToRight() invoked.');
     const selectElement = document.getElementById("scriptSelect");
     const selectRight = document.getElementById("fileSelectRight");
     if (!selectElement.value || selectRight.value === "") showError("Select script ID and Source 2 target.");
-    let key = selectElement.value.replace(/^\[(?:OK|!)\]\s*/, "").split(" ")[0];
+    let key = selectElement.value.replace(/^[+-]\s*/, "").split(" ")[0];
     let fileObj = state.loadedFilesRegistry[selectRight.value];
     if (!fileObj.data[key]) {
         fileObj.data[key] = { "SCRIPTS": { "PART1": { "TRANSLATIONS": [{ "LANGUAGE": "English", "TRANSLATOR": "Custom", "SCRIPT": [] }] } } };
@@ -312,6 +325,7 @@ export function injectTranslationToRight() {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function downloadFile(idx) {
+    console.log(`[Trace:Files] downloadFile(idx="${idx}") invoked.`);
     if (idx === "" || !state.loadedFilesRegistry[idx]) showError("Select a file to export.");
     let fileObj = state.loadedFilesRegistry[idx];
     const blob = new Blob([JSON.stringify(fileObj.data, null, 4)], { type: "application/json" });

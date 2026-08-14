@@ -21,6 +21,7 @@ export function openDatabase() {
  * Called by: parser.js (checkFinishedReads, removeFile, saveEditsToMemory, commitTextToRightFile)[cite: 7]
  */
 export async function saveFilesToCache(registry) {
+    console.log(`[Trace:Cache] saveFilesToCache(${registry ? registry.length : 0} files) invoked.`);
     try {
         const db = await openDatabase();
         const tx = db.transaction(state.STORE_NAME, "readwrite");
@@ -33,6 +34,7 @@ export async function saveFilesToCache(registry) {
  * Called by: main.js[cite: 7]
  */
 export async function loadFilesFromCache() {
+    console.log('[Trace:Cache] loadFilesFromCache() invoked.');
     try {
         const db = await openDatabase();
         return new Promise((resolve) => {
@@ -49,6 +51,7 @@ export async function loadFilesFromCache() {
  * Called by: parser.js, ui.js, and database.js[cite: 7]
  */
 export async function saveUIStateToCache() {
+    console.log('[Trace:Cache] saveUIStateToCache() invoked.');
     try {
         const db = await openDatabase();
         const tx = db.transaction(state.STORE_NAME, "readwrite");
@@ -72,6 +75,7 @@ export async function saveUIStateToCache() {
  * Called by: main.js[cite: 7]
  */
 export async function loadUIStateFromCache() {
+    console.log('[Trace:Cache] loadUIStateFromCache() invoked.');
     try {
         const db = await openDatabase();
         return new Promise((resolve) => {
