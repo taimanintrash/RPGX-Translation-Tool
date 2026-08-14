@@ -8,7 +8,8 @@ export const operationPresets = {
     benchmark: { temperature: 0.1, systemPrompt: "You are an expert AI quality assurance auditor reviewing script translation consistency." },
     jpEn: { temperature: 0.35, systemPrompt: "You are a specialized Japanese-to-English game localizer adapting natural nuance and character voice." },
     retry: { temperature: 0.2, systemPrompt: "The previous translation attempt failed validation. Carefully re-translate keeping tags and markers exact." },
-    namePlate: { temperature: 0.1, systemPrompt: "You are a specialized proper noun and character name localization engine. Output transliterated name cleanly." }
+    namePlate: { temperature: 0.1, systemPrompt: "You are a specialized proper noun and character name localization engine. Output transliterated name cleanly." },
+    stylization: { temperature: 0.2, systemPrompt: "You are a specialized stylization mapper. Analyze the provided game script and generate a JSON mapping of character names and unique speech patterns to standardized stylization keys." }
 };
 
 /**
@@ -21,7 +22,8 @@ export const defaultPresetManifest = [
     { file: 'defalt_presets/benchmark_prompt.json', operationKey: 'benchmark', label: 'Benchmark Prompt' },
     { file: 'defalt_presets/japanese_to_english.json', operationKey: 'jpEn', label: 'Japanese to English' },
     { file: 'defalt_presets/retry_translation.json', operationKey: 'retry', label: 'Retry Translation' },
-    { file: 'defalt_presets/name_plate_unique.json', operationKey: 'namePlate', label: 'Name Plate Unique' }
+    { file: 'defalt_presets/name_plate_unique.json', operationKey: 'namePlate', label: 'Name Plate Unique' },
+    { file: 'defalt_presets/stylization_mapping.json', operationKey: 'stylization', label: 'Stylization Mapping' }
 ];
 
 /**
@@ -135,28 +137,43 @@ export async function fetchAiModels() {
     const host = document.getElementById("aiServerHost").value.trim().replace(/\/+$/, "");
     const modelSelect = document.getElementById("aiModel");
     const currentSelection = modelSelect.value;
-    const endpoints = [`${host}/v1/models`, `${host}/api/v0/models`];
+    if (!host) {
+        modelSelect.innerHTML = `<option value="">-- Enter Server URL --</option>`;
+        showError("No server URL entered. Set the local AI server address first.");
+        return;
+    }
+    // Common OpenAI-compatible model-list endpoint variants across LM Studio, Ollama, llama.cpp, etc.
+    const endpoints = [`${host}/v1/models`, `${host}/api/v0/models`, `${host}/models`];
     let modelsList = [], success = false;
+    const diagnostics = [];
 
     for (const endpoint of endpoints) {
         try {
             const response = await fetch(endpoint);
-            if (response.ok) {
-                const data = await response.json();
-                if (Array.isArray(data)) { modelsList = data; success = true; break; }
-                else if (data.data && Array.isArray(data.data)) { modelsList = data.data; success = true; break; }
-                else if (data.models && Array.isArray(data.models)) { modelsList = data.models; success = true; break; }
+            if (!response.ok) {
+                diagnostics.push(`${endpoint} -> HTTP ${response.status}`);
+                continue;
             }
-        } catch (err) {}
+            const data = await response.json();
+            if (Array.isArray(data)) { modelsList = data; success = true; break; }
+            else if (data.data && Array.isArray(data.data)) { modelsList = data.data; success = true; break; }
+            else if (data.models && Array.isArray(data.models)) { modelsList = data.models; success = true; break; }
+            diagnostics.push(`${endpoint} -> OK but unexpected JSON shape (keys: ${Object.keys(data || {}).join(', ')})`);
+        } catch (err) {
+            // Browser fetch throws TypeError on network failure or CORS rejection; capture the reason.
+            diagnostics.push(`${endpoint} -> ${err.name || 'FetchError'}: ${err.message || 'blocked (likely CORS or connection refused)'}`);
+        }
     }
 
     modelSelect.innerHTML = "";
     if (!success || modelsList.length === 0) {
         modelSelect.innerHTML = `<option value="">-- Connection Failed / Check Server --</option>`;
-        showError("Could not fetch models. Verify server is running.");
+        const detail = diagnostics.length ? diagnostics.join(' | ') : 'no endpoints attempted';
+        showError(`Could not fetch models from ${host}. Verify the server is running and CORS is enabled. Details: ${detail}`);
         return;
     }
 
+    let added = 0;
     modelsList.forEach(m => {
         const modelId = m.id || m.name || m.model;
         if (modelId) {
@@ -164,8 +181,15 @@ export async function fetchAiModels() {
             opt.value = modelId;
             opt.textContent = modelId;
             modelSelect.appendChild(opt);
+            added++;
         }
     });
+
+    if (added === 0) {
+        modelSelect.innerHTML = `<option value="">-- No Models Loaded on Server --</option>`;
+        showError(`Server at ${host} responded but returned no models. Load a model in your AI server first.`);
+        return;
+    }
 
     if (currentSelection) modelSelect.value = currentSelection;
     if (!modelSelect.value && modelSelect.options.length > 0) modelSelect.selectedIndex = 0;
@@ -376,14 +400,15 @@ export async function generateStylizationMapWithAI() {
                 `"！？":"!"\n\n` +
                 `Snippet:\n${chunkText.substring(0, 800)}\n\nOutput:`;
 
+            const stylizationConfig = operationPresets.stylization || operationPresets.benchmark;
             const payload = {
                 model: model,
                 messages: [
-                    { role: "system", content: operationPresets.benchmark.systemPrompt },
+                    { role: "system", content: stylizationConfig.systemPrompt },
                     { role: "user", content: promptText }
                 ],
                 stream: false,
-                temperature: 0.0,
+                temperature: stylizationConfig.temperature ?? 0.0,
                 max_tokens: 256
             };
 
@@ -475,7 +500,7 @@ export async function translateViaAiServer() {
     if (!model) { showError("No model selected."); return; }
     if (!selectElement.value || selectRight.value === "") { showError("Please select a script ID and target file."); return; }
 
-    let key = selectElement.value.replace(/^[🟢❌]\s*/, "").split(" ")[0];
+    let key = selectElement.value.replace(/^\[(?:OK|!)\]\s*/, "").split(" ")[0];
     let fileObj = state.loadedFilesRegistry[selectRight.value];
     let fullText = outputLeft.value;
 

@@ -1,6 +1,6 @@
 import { state } from './main.js';
 import { extractScriptText } from './parser.js';
-import { translateChunkWithContext } from './translator.js';
+import { translateChunkWithContext, operationPresets } from './translator.js';
 
 /**
  * Runs a multi-dimensional parameter sweep matrix to audit translation inconsistency by testing different context lines and raw limits, then logs the evaluation feedback and scores.
@@ -69,7 +69,7 @@ export async function runParameterSweepBenchmark() {
             reportBox.value = resultsLog;
         }
     }
-    reportBox.value += `\n✨ Inconsistency-focused sweep completed successfully! Check the granular scores and feedback breakdown above.`;
+    reportBox.value += `\nInconsistency-focused sweep completed successfully! Check the granular scores and feedback breakdown above.`;
     console.log("[Benchmark] Sweep matrix execution complete.");
 }
 
@@ -94,14 +94,15 @@ async function gradeCandidateAgent(host, model, candidateText, referenceText) {
     `Flow Score: [0-100]\n` +
     `Feedback: [Provide a concise 1-2 sentence justification for your grading decisions]`;
 
+    const benchmarkConfig = operationPresets.benchmark;
     const payload = {
         model: model,
         messages: [
-            { role: "system", content: "You are a strict evaluation grading engine. Output strictly using the requested text labels. Never wrap responses in markdown code blocks." },
+            { role: "system", content: benchmarkConfig.systemPrompt },
             { role: "user", content: promptText }
         ],
         stream: false,
-        temperature: 0.0,
+        temperature: benchmarkConfig.temperature ?? 0.0,
         max_tokens: 300,
         chat_template_kwargs: { "enable_thinking": false }
     };

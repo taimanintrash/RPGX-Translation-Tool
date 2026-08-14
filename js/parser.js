@@ -101,7 +101,7 @@ export function updateFileListUI() {
             state.loadedFilesRegistry.map(f => `<span class="file-tag">${f.name}<button class="remove-btn" onclick="removeFile('${f.name}')">&times;</button></span>`).join(" ");
     }
     warningBox.style.display = state.loadedFilesRegistry.length < 2 ? "block" : "none";
-    if(state.loadedFilesRegistry.length < 2) warningBox.textContent = `⚠️ Warning: Only ${state.loadedFilesRegistry.length} file loaded.`;
+    if(state.loadedFilesRegistry.length < 2) warningBox.textContent = `Warning: Only ${state.loadedFilesRegistry.length} file loaded.`;
 }
 
 /**
@@ -183,12 +183,12 @@ export function updateMasterIDList() {
 
     Array.from(allKeys).sort().forEach(key => {
         let count = state.loadedFilesRegistry.filter(f => f.data[key]).length;
-        let icon = count >= 2 ? "🟢 " : "❌ ";
+        let icon = count >= 2 ? "[OK] " : "[!] ";
         selectElement.appendChild(new Option(icon + key + ` (${count} files)`, key));
     });
 
     if (currentSelected) {
-        let rawKey = currentSelected.replace(/^[🟢❌]\s*/, "").split(" ")[0];
+        let rawKey = currentSelected.replace(/^\[(?:OK|!)\]\s*/, "").split(" ")[0];
         for (let opt of selectElement.options) {
             if (opt.value.includes(rawKey)) { opt.selected = true; break; }
         }
@@ -222,7 +222,7 @@ export function renderComparisonViews() {
         outputLeft.value = ""; outputRight.value = ""; return;
     }
 
-    let key = selectElement.value.replace(/^[🟢❌]\s*/, "").split(" ")[0];
+    let key = selectElement.value.replace(/^\[(?:OK|!)\]\s*/, "").split(" ")[0];
     outputLeft.value = (selectLeft.value !== "" && state.loadedFilesRegistry[selectLeft.value]) ? extractScriptText(state.loadedFilesRegistry[selectLeft.value].data, key) : "[No file]";
     outputRight.value = (selectRight.value !== "" && state.loadedFilesRegistry[selectRight.value]) ? extractScriptText(state.loadedFilesRegistry[selectRight.value].data, key) : "[No file]";
 }
@@ -252,7 +252,7 @@ export function saveEditsToMemory() {
     const selectElement = document.getElementById("scriptSelect");
     const selectLeft = document.getElementById("fileSelectLeft");
     if (!selectElement.value || selectLeft.value === "") showError("Select script ID and Source 1 file.");
-    let key = selectElement.value.replace(/^[🟢❌]\s*/, "").split(" ")[0];
+    let key = selectElement.value.replace(/^\[(?:OK|!)\]\s*/, "").split(" ")[0];
     let fileObj = state.loadedFilesRegistry[selectLeft.value];
     if (!fileObj.data[key]) showError("ID not found in file.");
 
@@ -299,7 +299,7 @@ export function injectTranslationToRight() {
     const selectElement = document.getElementById("scriptSelect");
     const selectRight = document.getElementById("fileSelectRight");
     if (!selectElement.value || selectRight.value === "") showError("Select script ID and Source 2 target.");
-    let key = selectElement.value.replace(/^[🟢❌]\s*/, "").split(" ")[0];
+    let key = selectElement.value.replace(/^\[(?:OK|!)\]\s*/, "").split(" ")[0];
     let fileObj = state.loadedFilesRegistry[selectRight.value];
     if (!fileObj.data[key]) {
         fileObj.data[key] = { "SCRIPTS": { "PART1": { "TRANSLATIONS": [{ "LANGUAGE": "English", "TRANSLATOR": "Custom", "SCRIPT": [] }] } } };

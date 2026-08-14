@@ -14,7 +14,7 @@
         <div class="file-uploader-row">
             <label for="fileInput"><strong>Load JSON/JS Files:</strong></label>
             <input type="file" id="fileInput" accept=".js,.json" multiple onchange="loadFiles(event)">
-            <div id="globalWarning" class="warning-box">⚠️ Warning: Less than 2 data files loaded!</div>
+            <div id="globalWarning" class="warning-box">Warning: Less than 2 data files loaded!</div>
         </div>
         <div class="file-list-box" id="fileListBox">
             <em>No files loaded yet. Select multiple files above.</em>
@@ -43,7 +43,7 @@
                     <select id="aiModel" title="Select a local model">
                         <option value="">-- Load models first --</option>
                     </select>
-                    <button class="action-btn" title="Refresh local model list from server" onclick="fetchAiModels()">🔄</button>
+                    <button class="action-btn" title="Refresh local model list from server" onclick="fetchAiModels()">↻</button>
 
                     <label for="contextLinesCount" style="font-size: 11px; font-weight: bold;" title="Number of context lines window">Context Lines:</label>
                     <input type="number" id="contextLinesCount" value="6" min="0" max="30" style="width: 35px;" title="Number of context lines window">
@@ -70,11 +70,11 @@
 
             <!-- Step-by-Step Manual Override Action Toolbar -->
             <div id="manualStepToolbar" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px 12px; border-radius: 6px; align-items: center; gap: 10px; flex-wrap: wrap;">
-                <span style="font-size: 12px; font-weight: bold; color: #1e40af;">⚙️ Manual Step Override Active</span>
+                <span style="font-size: 12px; font-weight: bold; color: #1e40af;">Manual Step Override Active</span>
                 <label style="font-size: 11px; font-weight: bold;">Step Context Lines:</label>
                 <input type="number" id="stepContextLinesInput" value="6" min="0" max="30" style="width: 40px; padding: 3px; font-size: 11px;">
-                <button class="translate-btn" style="padding: 3px 8px; font-size: 11px;" onclick="triggerStepRetranslation()">🔄 Re-translate Step</button>
-                <button class="success-btn" style="padding: 3px 8px; font-size: 11px;" onclick="resolveManualStepContinue()">▶️ Continue</button>
+                <button class="translate-btn" style="padding: 3px 8px; font-size: 11px;" onclick="triggerStepRetranslation()">Re-translate Step</button>
+                <button class="success-btn" style="padding: 3px 8px; font-size: 11px;" onclick="resolveManualStepContinue()">▶ Continue</button>
             </div>
 
             <!-- Dual editing panes wrapper for source input and AI translations -->
@@ -95,7 +95,7 @@
                         <div class="pane-actions">
                             <button class="translate-btn" title="Translate via local server" onclick="translateViaAiServer()">AI Translate</button>
                             <button id="stopTranslateBtn" class="stop-btn" title="Cancel active background process" onclick="stopTranslation()">Stop</button>
-                            <button class="debug-btn" title="Open test & debug configurations" onclick="openDebugMenu()">⚙️ Debug & Benchmark</button>
+                            <button class="debug-btn" title="Open test & debug configurations" onclick="openDebugMenu()">Debug & Benchmark</button>
                             <button class="action-btn" title="Copy text directly without AI" onclick="injectTranslationToRight()">Copy Direct</button>
                             <button class="success-btn" onclick="downloadFile(document.getElementById('fileSelectRight').value)">Save File</button>
                         </div>
@@ -154,7 +154,7 @@
 
                 <!-- Distinct Presets Menu Selection (rows generated dynamically from defalt_presets/ manifest) -->
                 <div class="modal-field" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px;">
-                    <label style="font-size: 13px; font-weight: bold; margin-bottom: 6px; display: block;">🎛️ Distinct Operation Presets Menu</label>
+                    <label style="font-size: 13px; font-weight: bold; margin-bottom: 6px; display: block;">Distinct Operation Presets Menu</label>
                     <span style="font-size: 11px; color: #64748b; display: block; margin-bottom: 8px;">Default presets are loaded into memory automatically on startup. Upload your own JSON here to override any operation tier in memory.</span>
                     <div id="distinctPresetsContainer" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
                         <em style="color: #64748b; font-size: 11px; grid-column: span 2;">Loading operation presets...</em>
@@ -168,9 +168,9 @@
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <label><strong>Heavy Stylization Map (JSON):</strong></label>
                         <div style="display: flex; gap: 4px;">
-                            <button class="translate-btn" style="padding: 3px 8px; font-size: 11px;" onclick="generateStylizationMapWithAI()">🤖 Generate Mapping</button>
-                            <button class="action-btn" style="padding: 3px 8px; font-size: 11px; background-color: #16a34a;" onclick="saveStylizationMapFromView()">💾 Save Map</button>
-                            <button class="clipboard-btn" style="padding: 3px 8px; font-size: 11px;" onclick="copyStylizationMapToClipboard()">📋 Copy</button>
+                            <button class="translate-btn" style="padding: 3px 8px; font-size: 11px;" onclick="generateStylizationMapWithAI()">Generate Mapping</button>
+                            <button class="action-btn" style="padding: 3px 8px; font-size: 11px; background-color: #16a34a;" onclick="saveStylizationMapFromView()">Save Map</button>
+                            <button class="clipboard-btn" style="padding: 3px 8px; font-size: 11px;" onclick="copyStylizationMapToClipboard()">Copy</button>
                         </div>
                     </div>
                     <span style="font-size: 11px; color: #64748b;">Key-value pairs targeting punctuation, stutters, and repeating characters.</span>
@@ -182,8 +182,8 @@
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <label><strong>Review Discovered Mappings:</strong></label>
                         <div style="display: flex; gap: 4px;">
-                            <button class="success-btn" style="padding: 3px 8px; font-size: 11px;" onclick="commitApprovedMappingsToMap()">✔️ Add Selected</button>
-                            <button class="action-btn" style="padding: 3px 8px; font-size: 11px; background-color: #dc2626;" onclick="deleteSelectedDiscoveredMappings()">🗑️ Remove Selected</button>
+                            <button class="success-btn" style="padding: 3px 8px; font-size: 11px;" onclick="commitApprovedMappingsToMap()">Add Selected</button>
+                            <button class="action-btn" style="padding: 3px 8px; font-size: 11px; background-color: #dc2626;" onclick="deleteSelectedDiscoveredMappings()">Remove Selected</button>
                         </div>
                     </div>
                     <span style="font-size: 11px; color: #64748b;">Edit fields directly and check the box next to items you want to include or remove.</span>
@@ -206,7 +206,7 @@
             <!-- Page 2: Parameter Sweep & Agent Benchmark Suite (File/Scene Reference Pickers) -->
             <div id="debugPage2" class="debug-page" style="display: none;">
                 <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 6px; display: flex; flex-direction: column; gap: 8px;">
-                    <h4 style="margin:0; color:#1e293b; font-size: 14px;">🧪 Parameter Sweep & Inconsistency-Focused Evaluation Suite</h4>
+                    <h4 style="margin:0; color:#1e293b; font-size: 14px;">Parameter Sweep & Inconsistency-Focused Evaluation Suite</h4>
                     <span style="font-size: 11px; color: #64748b;">Cycles context/raw limit configurations, translates test lines, and runs a granular AI auditor checking general semantic fidelity, tone shifts, and flow inconsistencies against a reference scene.</span>
 
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -236,7 +236,7 @@
                         </div>
                     </div>
 
-                    <button class="translate-btn" style="align-self: flex-start;" onclick="runParameterSweepBenchmark()">🚀 Run Sweep & Inconsistency-Audit Matrix</button>
+                    <button class="translate-btn" style="align-self: flex-start;" onclick="runParameterSweepBenchmark()">Run Sweep & Inconsistency-Audit Matrix</button>
                 </div>
 
                 <div class="modal-field" style="flex: 1; display: flex; flex-direction: column; min-height: 180px;">
@@ -247,8 +247,8 @@
 
             <div class="modal-actions">
                 <div style="display: flex; gap: 6px; align-items: center;">
-                    <button class="action-btn" id="debugPrevBtn" onclick="switchDebugPage(-1)" style="display:none;" title="Previous Page">⬅️ Back</button>
-                    <button class="action-btn" id="debugNextBtn" onclick="switchDebugPage(1)" title="Next Page">Next ➡️</button>
+                    <button class="action-btn" id="debugPrevBtn" onclick="switchDebugPage(-1)" style="display:none;" title="Previous Page">Back</button>
+                    <button class="action-btn" id="debugNextBtn" onclick="switchDebugPage(1)" title="Next Page">Next</button>
                 </div>
                 <div style="display: flex; gap: 6px;">
                     <button class="action-btn" style="background-color: #64748b;" onclick="closeDebugMenuWithoutSaving()">Cancel</button>

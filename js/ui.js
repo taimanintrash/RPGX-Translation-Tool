@@ -54,7 +54,7 @@ export function showError(msg) {
     const banner = document.getElementById("errorBanner");
     if (banner) {
         banner.style.display = "block";
-        banner.textContent = "❌ ERROR:\n" + msg;
+        banner.textContent = "[ERROR]\n" + msg;
     }
     console.error("[Error Banner]", msg);
 }
@@ -101,6 +101,9 @@ export function renderDistinctPresetControls() {
         input.accept = ".json";
         input.style.fontSize = "11px";
         input.style.width = "100%";
+        input.style.border = "none";
+        input.style.marginTop = "2px";
+        input.style.marginBottom = "6px";
         input.title = "Override the " + preset.label + " default with a custom JSON (default already loaded from " + preset.file + ")";
         input.onchange = (event) => loadSpecificPreset(preset.operationKey, event);
         cell.appendChild(input);
@@ -234,7 +237,7 @@ export function renderDiscoveredMappingsUI() {
             <input type="checkbox" ${item.selected ? 'checked' : ''} onchange="toggleDiscoveredSelection(${index}, this.checked)" style="cursor: pointer; width: 14px; height: 14px;">
             <div style="display: flex; align-items: center; gap: 4px; flex: 1; font-family: monospace;">
                 <input type="text" id="discKey_${index}" value="${item.key}" oninput="updateDiscoveredKey(${index}, this.value)" style="width: 45%; padding: 2px 4px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 3px;">
-                <span>➔</span>
+                <span>-&gt;</span>
                 <input type="text" id="discVal_${index}" value="${item.value}" oninput="updateDiscoveredVal(${index}, this.value)" style="width: 45%; padding: 2px 4px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 3px;">
             </div>
         </div>`;
