@@ -1,0 +1,422 @@
+/* @component ui-theme-root: Defines the global base styles, typography, flex container flow, and light background palette for the application body */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    height: 92vh;
+    gap: 12px;
+    background-color: #f4f4f9;
+}
+
+/* @component top-panel-wrapper: Encloses the multi-file JSON/JS uploader and global warning status indicators */
+.top-panel {
+    background: white;
+    padding: 12px 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* @component file-uploader-layout: Manages file input rows and dynamic loading controllers */
+.file-uploader-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+/* @component file-list-box: Container tracking active uploaded file chips and status labels */
+.file-list-box {
+    font-size: 13px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 6px 10px;
+    border-radius: 4px;
+    color: #334155;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+/* @component file-tag-pill: Individual pill element showing loaded file names and removal actions */
+.file-tag {
+    background: #e2e8f0;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.file-tag .remove-btn {
+    background: none;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    padding: 0;
+    line-height: 1;
+}
+
+.file-tag .remove-btn:hover { color: #dc2626; }
+
+/* @component layout-container-core: Master split-pane wrapper holding the sidebar and main workspace editor */
+.container {
+    display: flex;
+    flex: 1;
+    gap: 15px;
+    overflow: hidden;
+}
+
+/* @component sidebar-panel: Left column container housing script ID navigation lists */
+.sidebar {
+    width: 290px;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    gap: 8px;
+}
+
+/* @component main-workspace-content: Right panel area managing comparison selectors, toolbars, and dual text editing panes */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    overflow: hidden;
+    gap: 10px;
+}
+
+/* @component compare-selectors-bar: Houses file drop-downs, AI Server server targets, and translation configurations */
+.compare-selectors {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    flex-wrap: wrap;
+}
+
+.compare-selectors select {
+    flex: 1;
+    min-width: 140px;
+    padding: 6px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+/* @component translate-config-group: Input controls for local server URL, model selection, and context windows */
+.translate-config {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.translate-config input, .translate-config select {
+    padding: 5px;
+    font-size: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+}
+
+/* @component panes-wrapper-grid: Side-by-side text container wrapper for source and target comparisons */
+.panes-wrapper {
+    display: flex;
+    flex: 1;
+    gap: 12px;
+    overflow: hidden;
+}
+
+/* @component editor-pane-single: Individual column configuration for script output panes */
+.pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+}
+
+.pane-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+h3, h4 { margin: 0; color: #333; }
+
+select#scriptSelect {
+    width: 100%;
+    flex: 1;
+    padding: 6px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+textarea {
+    width: 100%;
+    flex: 1;
+    resize: none;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 13px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+    background-color: #fafafa;
+}
+
+textarea.editable {
+    background-color: #fff;
+    border-color: #3b82f6;
+}
+
+/* @component action-button-set: Standardized styling rules for interactive buttons and operational triggers */
+button.action-btn {
+    background: #2563eb;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+button.action-btn:hover { background: #1d4ed8; }
+
+button.success-btn {
+    background: #16a34a;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+button.success-btn:hover { background: #15803d; }
+
+button.translate-btn {
+    background: #8b5cf6;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+button.translate-btn:hover { background: #7c3aed; }
+
+button.clipboard-btn {
+    background: #0ea5e9;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+}
+button.clipboard-btn:hover { background: #0284c7; }
+
+button.stop-btn {
+    background: #dc2626;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    display: none;
+}
+button.stop-btn:hover { background: #b91c1c; }
+
+button.debug-btn {
+    background: #475569;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+button.debug-btn:hover { background: #334155; }
+
+.pane-actions { display: flex; gap: 5px; align-items: center; }
+
+/* @component notification-banner-box: Warning messages, loading progress bars, and error displays */
+.warning-box {
+    color: #dc2626;
+    font-weight: bold;
+    font-size: 12px;
+    background: #ffeeec;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #fecaca;
+    display: none;
+}
+
+.error-banner {
+    color: #b91c1c;
+    background: #fef2f2;
+    border: 1px solid #f87171;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: monospace;
+    white-space: pre-wrap;
+    display: none;
+    margin-top: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+#loading-status {
+    display: none;
+    color: #8b5cf6;
+    font-style: italic;
+    font-size: 12px;
+    font-weight: bold;
+    align-items: center;
+    gap: 6px;
+}
+
+#translation-progress {
+    width: 100%;
+    height: 6px;
+    display: none;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* @component modal-dialog-layer: Floating overlay screens for interactive name plates and debug configurations */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+.modal-content {
+    background: white;
+    padding: 16px;
+    border-radius: 8px;
+    width: 720px;
+    height: 620px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: absolute;
+    top: 10vh;
+    left: calc(50vw - 360px);
+    resize: both;
+    overflow: hidden;
+    pointer-events: auto;
+    border: 1px solid #cbd5e1;
+    min-width: 480px;
+    min-height: 400px;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: move;
+    background: #f8fafc;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    user-select: none;
+}
+
+.modal-header h3 { margin: 0; color: #1e293b; font-size: 15px; }
+
+.modal-close-x {
+    background: none;
+    border: none;
+    font-size: 18px;
+    font-weight: bold;
+    color: #64748b;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+.modal-close-x:hover { color: #0f172a; }
+
+.debug-page {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.modal-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+}
+
+.modal-field input, .modal-field select, .modal-field textarea {
+    padding: 8px;
+    font-size: 13px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.modal-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #334155;
+    cursor: pointer;
+    margin-top: 4px;
+}
+
+.modal-checkbox-row input {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 10px;
+}

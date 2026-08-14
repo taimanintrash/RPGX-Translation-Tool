@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="data:,">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPG Script & Scene Data Viewer & Editor (With Benchmark & Inconsistency Focus)</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- Top control panel container handling file inputs and loader notifications -->
+    <div class="top-panel">
+        <div class="file-uploader-row">
+            <label for="fileInput"><strong>Load JSON/JS Files:</strong></label>
+            <input type="file" id="fileInput" accept=".js,.json" multiple onchange="loadFiles(event)">
+            <div id="globalWarning" class="warning-box">⚠️ Warning: Less than 2 data files loaded!</div>
+        </div>
+        <div class="file-list-box" id="fileListBox">
+            <em>No files loaded yet. Select multiple files above.</em>
+        </div>
+    </div>
+
+    <!-- Master workspace container separating the sidebar navigation from editing panes -->
+    <div class="container">
+        <!-- Sidebar container managing loaded script IDs list selection -->
+        <div class="sidebar">
+            <h3>Script IDs</h3>
+            <select id="scriptSelect" size="2" onchange="onSelectID()"></select>
+        </div>
+
+        <!-- Main workspace element housing comparison drop-downs and text editing components -->
+        <div class="main-content">
+            <!-- Comparison toolbar containing file selection controls and translation parameter setups -->
+            <div class="compare-selectors">
+                <label style="font-size: 13px; font-weight: bold;">Compare:</label>
+                <select id="fileSelectLeft" onchange="onCompareSelectionChange()"></select>
+                <span style="font-size: 13px; color: #64748b;">vs</span>
+                <select id="fileSelectRight" onchange="onCompareSelectionChange()"></select>
+
+                <div class="translate-config">
+                    <input type="text" id="aiServerHost" value="http://127.0.0.1:1234" placeholder="Server URL..." style="width: 135px;" onchange="fetchAiModels()">
+                    <select id="aiModel" title="Select a local model">
+                        <option value="">-- Load models first --</option>
+                    </select>
+                    <button class="action-btn" title="Refresh local model list from server" onclick="fetchAiModels()">🔄</button>
+
+                    <label for="contextLinesCount" style="font-size: 11px; font-weight: bold;" title="Number of context lines window">Context Lines:</label>
+                    <input type="number" id="contextLinesCount" value="6" min="0" max="30" style="width: 35px;" title="Number of context lines window">
+
+                    <label for="rawContextLimit" style="font-size: 11px; font-weight: bold;" title="Raw context limit threshold before milestone summarization">Raw Limit:</label>
+                    <input type="number" id="rawContextLimit" value="2" min="1" max="10" style="width: 30px;" title="Raw context limit threshold before milestone summarization">
+
+                    <select id="targetLanguage">
+                        <option value="English">To: English</option>
+                        <option value="Japanese">To: Japanese</option>
+                        <option value="Spanish">To: Spanish</option>
+                        <option value="French">To: French</option>
+                        <option value="German">To: German</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Progress container displaying active operation status bars and error banners -->
+            <div class="progress-container">
+                <div id="loading-status">Translating...</div>
+                <progress id="translation-progress" max="100" value="0"></progress>
+                <div id="errorBanner" class="error-banner"></div>
+            </div>
+
+            <!-- Step-by-Step Manual Override Action Toolbar -->
+            <div id="manualStepToolbar" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px 12px; border-radius: 6px; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span style="font-size: 12px; font-weight: bold; color: #1e40af;">⚙️ Manual Step Override Active</span>
+                <label style="font-size: 11px; font-weight: bold;">Step Context Lines:</label>
+                <input type="number" id="stepContextLinesInput" value="6" min="0" max="30" style="width: 40px; padding: 3px; font-size: 11px;">
+                <button class="translate-btn" style="padding: 3px 8px; font-size: 11px;" onclick="triggerStepRetranslation()">🔄 Re-translate Step</button>
+                <button class="success-btn" style="padding: 3px 8px; font-size: 11px;" onclick="resolveManualStepContinue()">▶️ Continue</button>
+            </div>
+
+            <!-- Dual editing panes wrapper for source input and AI translations -->
+            <div class="panes-wrapper">
+                <div class="pane">
+                    <div class="pane-header">
+                        <h4 id="labelPaneLeft">Source 1 Output</h4>
+                        <div class="pane-actions">
+                            <button class="action-btn" onclick="saveEditsToMemory()">Save Edits</button>
+                            <button class="success-btn" onclick="downloadFile(document.getElementById('fileSelectLeft').value)">Save File</button>
+                        </div>
+                    </div>
+                    <textarea id="outputAreaLeft" class="editable" placeholder="Select a script ID..."></textarea>
+                </div>
+                <div class="pane">
+                    <div class="pane-header">
+                        <h4 id="labelPaneRight">Source 2 Output</h4>
+                        <div class="pane-actions">
+                            <button class="translate-btn" title="Translate via local server" onclick="translateViaAiServer()">AI Translate</button>
+                            <button id="stopTranslateBtn" class="stop-btn" title="Cancel active background process" onclick="stopTranslation()">Stop</button>
+                            <button class="debug-btn" title="Open test & debug configurations" onclick="openDebugMenu()">⚙️ Debug & Benchmark</button>
+                            <button class="action-btn" title="Copy text directly without AI" onclick="injectTranslationToRight()">Copy Direct</button>
+                            <button class="success-btn" onclick="downloadFile(document.getElementById('fileSelectRight').value)">Save File</button>
+                        </div>
+                    </div>
+                    <textarea id="outputAreaRight" class="editable" placeholder="Select a script ID..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Name Plate Review Interactive Modal Dialog -->
+    <div id="nameModalOverlay" class="modal-overlay" style="pointer-events: auto;">
+        <div class="modal-content" style="width: 520px; height: auto; position: static; resize: none;">
+            <div class="modal-header" style="cursor: default;">
+                <h3>Review Character Name Plate</h3>
+                <button class="modal-close-x" onclick="closeNameModal()">&times;</button>
+            </div>
+            <div class="modal-field">
+                <label>Original Japanese Name:</label>
+                <input type="text" id="modalOriginalName" readonly style="background: #f1f5f9;">
+            </div>
+            <div class="modal-field">
+                <label>AI Translated Name (Editable):</label>
+                <input type="text" id="modalInputName">
+            </div>
+            <div class="modal-actions" style="justify-content: flex-end; border: none;">
+                <button class="action-btn" onclick="resolveNameModal()">Confirm & Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating & Resizable Debug Configuration Modal Menu -->
+    <div id="debugModalOverlay" class="modal-overlay">
+        <div class="modal-content" id="draggableDebugModal">
+            <div class="modal-header" id="debugModalHeader">
+                <h3 id="debugModalTitle">Translation & Stylization (Page 1 / 2)</h3>
+                <button class="modal-close-x" title="Close without saving changes" onclick="closeDebugMenuWithoutSaving()">&times;</button>
+            </div>
+
+            <!-- Page 1: Stylization Map & Tools -->
+            <div id="debugPage1" class="debug-page">
+                <div class="modal-field">
+                    <label for="maxLinesLimitInput"><strong>Limit Max Lines to Translate:</strong></label>
+                    <input type="number" id="maxLinesLimitInput" value="0" min="0" placeholder="e.g. 10">
+                </div>
+                <div class="modal-field">
+                    <label for="stylizationModeSelect"><strong>Stylization Masking Mode:</strong></label>
+                    <select id="stylizationModeSelect" style="padding: 6px; font-size: 13px;">
+                        <option value="strip">Strip & Re-inject (Recommended for 3B/small models)</option>
+                        <option value="delineate">Delineate/Pass to Prompt (For robust larger models)</option>
+                        <option value="disabled">Disabled Entirely (Pass raw text directly)</option>
+                    </select>
+                </div>
+
+                <hr style="width:100%; border:0; border-top:1px solid #e2e8f0; margin: 4px 0;">
+
+                <!-- Distinct Presets Menu Selection -->
+                <div class="modal-field" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px;">
+                    <label style="font-size: 13px; font-weight: bold; margin-bottom: 6px; display: block;">🎛️ Distinct Operation Presets Menu</label>
+                    <span style="font-size: 11px; color: #64748b; display: block; margin-bottom: 8px;">Load unique JSON config presets for each specific translation operation tier.</span>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                        <div>
+                            <label style="font-weight: bold;">Main Translation:</label>
+                            <input type="file" id="presetMain" accept=".json" onchange="loadSpecificPreset('main', event)" style="font-size: 11px; width: 100%;">
+                        </div>
+                        <div>
+                            <label style="font-weight: bold;">Benchmark Prompt:</label>
+                            <input type="file" id="presetBenchmark" accept=".json" onchange="loadSpecificPreset('benchmark', event)" style="font-size: 11px; width: 100%;">
+                        </div>
+                        <div>
+                            <label style="font-weight: bold;">Japanese to English:</label>
+                            <input type="file" id="presetJpEn" accept=".json" onchange="loadSpecificPreset('jpEn', event)" style="font-size: 11px; width: 100%;">
+                        </div>
+                        <div>
+                            <label style="font-weight: bold;">Retry Translation:</label>
+                            <input type="file" id="presetRetry" accept=".json" onchange="loadSpecificPreset('retry', event)" style="font-size: 11px; width: 100%;">
+                        </div>
+                        <div style="grid-column: span 2;">
+                            <label style="font-weight: bold;">Name Plate Unique Prompt:</label>
+                            <input type="file" id="presetNamePlate" accept=".json" onchange="loadSpecificPreset('namePlate', event)" style="font-size: 11px; width: 100%;">
+                        </div>
+                    </div>
+                </div>
+
+                <hr style="width:100%; border:0; border-top:1px solid #e2e8f0; margin: 4px 0;">
+
+                <div class="modal-field">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <label><strong>Heavy Stylization Map (JSON):</strong></label>
+                        <div style="display: flex; gap: 4px;">
+                            <button class="translate-btn" style="padding: 3px 8px; font-size: 11px;" onclick="generateStylizationMapWithAI()">🤖 Generate Mapping</button>
+                            <button class="action-btn" style="padding: 3px 8px; font-size: 11px; background-color: #16a34a;" onclick="saveStylizationMapFromView()">💾 Save Map</button>
+                            <button class="clipboard-btn" style="padding: 3px 8px; font-size: 11px;" onclick="copyStylizationMapToClipboard()">📋 Copy</button>
+                        </div>
+                    </div>
+                    <span style="font-size: 11px; color: #64748b;">Key-value pairs targeting punctuation, stutters, and repeating characters.</span>
+                    <textarea id="stylizationMapEditor" rows="5" style="width:100%; font-family:monospace; resize:vertical; box-sizing:border-box;"></textarea>
+                </div>
+
+                <!-- Discovered Mappings Review Sub-Menu -->
+                <div class="modal-field">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <label><strong>Review Discovered Mappings:</strong></label>
+                        <div style="display: flex; gap: 4px;">
+                            <button class="success-btn" style="padding: 3px 8px; font-size: 11px;" onclick="commitApprovedMappingsToMap()">✔️ Add Selected</button>
+                            <button class="action-btn" style="padding: 3px 8px; font-size: 11px; background-color: #dc2626;" onclick="deleteSelectedDiscoveredMappings()">🗑️ Remove Selected</button>
+                        </div>
+                    </div>
+                    <span style="font-size: 11px; color: #64748b;">Edit fields directly and check the box next to items you want to include or remove.</span>
+                    <div id="discoveredMappingsContainer">
+                        <em style="color: #64748b; font-size: 11px;">No pending mappings discovered yet. Click "Generate Mapping" above.</em>
+                    </div>
+                </div>
+
+                <div class="modal-checkbox-row">
+                    <input type="checkbox" id="autoSkipNameModalCheckbox">
+                    <label for="autoSkipNameModalCheckbox">Auto-override / auto-fill name plates without pausing</label>
+                </div>
+
+                <div class="modal-checkbox-row">
+                    <input type="checkbox" id="manualStepModeCheckbox">
+                    <label for="manualStepModeCheckbox">Enable manual step-by-step translation override mode</label>
+                </div>
+            </div>
+
+            <!-- Page 2: Parameter Sweep & Agent Benchmark Suite (File/Scene Reference Pickers) -->
+            <div id="debugPage2" class="debug-page" style="display: none;">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 6px; display: flex; flex-direction: column; gap: 8px;">
+                    <h4 style="margin:0; color:#1e293b; font-size: 14px;">🧪 Parameter Sweep & Inconsistency-Focused Evaluation Suite</h4>
+                    <span style="font-size: 11px; color: #64748b;">Cycles context/raw limit configurations, translates test lines, and runs a granular AI auditor checking general semantic fidelity, tone shifts, and flow inconsistencies against a reference scene.</span>
+
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <div class="modal-field" style="flex: 1;">
+                            <label style="font-size:11px;"><strong>Context Sweeps (Comma-separated):</strong></label>
+                            <input type="text" id="sweepContextsInput" value="2, 6, 12">
+                        </div>
+                        <div class="modal-field" style="flex: 1;">
+                            <label style="font-size:11px;"><strong>Raw Limits Sweeps (Comma-separated):</strong></label>
+                            <input type="text" id="sweepRawLimitsInput" value="1, 3, 5">
+                        </div>
+                    </div>
+
+                    <!-- Reference File & Scene ID selectors -->
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <div class="modal-field" style="flex: 1;">
+                            <label style="font-size:11px;"><strong>Gold Standard Reference File:</strong></label>
+                            <select id="benchmarkRefFileSelect" onchange="updateBenchmarkSceneDropdown()" style="padding: 6px; font-size: 12px; font-family: monospace;">
+                                <option value="">-- Select Reference File --</option>
+                            </select>
+                        </div>
+                        <div class="modal-field" style="flex: 1;">
+                            <label style="font-size:11px;"><strong>Gold Standard Reference Scene ID:</strong></label>
+                            <select id="benchmarkRefSceneSelect" style="padding: 6px; font-size: 12px; font-family: monospace;">
+                                <option value="">-- Select Scene ID --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button class="translate-btn" style="align-self: flex-start;" onclick="runParameterSweepBenchmark()">🚀 Run Sweep & Inconsistency-Audit Matrix</button>
+                </div>
+
+                <div class="modal-field" style="flex: 1; display: flex; flex-direction: column; min-height: 180px;">
+                    <label><strong>Benchmark & Granular Inconsistency Report Output:</strong></label>
+                    <textarea id="benchmarkReportOutput" readonly style="background: #f1f5f9; font-size: 12px; flex: 1; resize: none;" placeholder="Agent results with granular multi-dimensional scores will show here..."></textarea>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <button class="action-btn" id="debugPrevBtn" onclick="switchDebugPage(-1)" style="display:none;" title="Previous Page">⬅️ Back</button>
+                    <button class="action-btn" id="debugNextBtn" onclick="switchDebugPage(1)" title="Next Page">Next ➡️</button>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button class="action-btn" style="background-color: #64748b;" onclick="closeDebugMenuWithoutSaving()">Cancel</button>
+                    <button class="action-btn" onclick="closeDebugMenu()">Save & Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "name": "Rolling Scene Summary",
+  "temperature": 0.2,
+  "maxTokens": 256,
+  "topP": 0.85,
+  "repeatPenalty": 1.1,
+  "systemPrompt": "You are a narrative context tracker. Maintain a rolling recap of the scene. Focus on who is present, their emotional tone, and immediate events. RULES: 1) Keep the recap to 2-3 concise sentences. 2) Do NOT include conversational filler, quotes, or dialogue. 3) Output ONLY the recap text."
+}

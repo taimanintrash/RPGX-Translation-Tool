@@ -1,0 +1,8 @@
+# Rate limits and background tracking communication files
+rate.txt
+agent_rate.txt
+.usage_tracker.log
+
+# OS-specific metadata
+.DS_Store
+Thumbs.db

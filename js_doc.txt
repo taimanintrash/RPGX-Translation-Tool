@@ -1,0 +1,194 @@
+================================================================================
+FUNCTION REFERENCE DIRECTORY
+================================================================================
+
+--------------------------------------------------------------------------------
+benchmark.js
+--------------------------------------------------------------------------------
+* runParameterSweepBenchmark: Runs a multi-dimensional parameter sweep matrix to audit translation inconsistency by testing different context lines and raw limits, then logs the evaluation feedback and scores[cite: 13].
+  - Called by: main.js
+
+* gradeCandidateAgent: Acts as an evaluation grading engine that prompts an AI model to score a candidate translation against a reference standard across gender consistency, semantic fidelity, and conversational flow[cite: 13].
+  - Called by: benchmark.js (runParameterSweepBenchmark)[cite: 13]
+
+--------------------------------------------------------------------------------
+database.js
+--------------------------------------------------------------------------------
+* openDatabase: Opens or initializes the IndexedDB database used for caching application state and loaded files.
+  - Called by: database.js (saveFilesToCache, loadFilesFromCache, saveUIStateToCache, loadUIStateFromCache)
+
+* saveFilesToCache: Saves the current registry of loaded files into IndexedDB storage.
+  - Called by: parser.js (checkFinishedReads, removeFile, saveEditsToMemory, commitTextToRightFile)
+
+* loadFilesFromCache: Retrieves the cached file registry from IndexedDB.
+  - Called by: main.js
+
+* saveUIStateToCache: Saves the current user interface options and settings values into IndexedDB.
+  - Called by: parser.js (checkFinishedReads, removeFile, onSelectID, onCompareSelectionChange), ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap), and database.js (saveUIStateToCache)
+
+* loadUIStateFromCache: Retrieves cached user interface state settings from IndexedDB.
+  - Called by: main.js
+
+--------------------------------------------------------------------------------
+main.js
+--------------------------------------------------------------------------------
+* [No standalone functions exported; contains DOMContentLoaded initialization listeners and exposes internal module functions globally to window for HTML event handlers].
+
+--------------------------------------------------------------------------------
+parser.js
+--------------------------------------------------------------------------------
+* loadFiles: Handles the file selection event via FileReader, reads file content asynchronously, and passes it to JSON parsing.
+  - Called by: HTML event handler / main.js
+
+* checkFinishedReads: Checks if all asynchronous file reading operations have finished, then triggers application state refresh and caching.
+  - Called by: parser.js (loadFiles)
+
+* removeFile: Removes a specified file from the loaded files registry, updates the application state, and updates the cache.
+  - Called by: HTML event handler / main.js
+
+* parseContentToJSON: Safely parses text content into a JSON object, attempting alternative regex extraction if standard parsing fails.
+  - Called by: parser.js (loadFiles)
+
+* refreshApplicationState: Refreshes all core user interface elements including file lists, dropdowns, and comparison views.
+  - Called by: parser.js (checkFinishedReads, removeFile), and main.js
+
+* updateFileListUI: Updates the visual tag list displaying all currently loaded files and global warning indicators.
+  - Called by: parser.js (refreshApplicationState)
+
+* updateFileDropdowns: Populates the source file selection dropdowns on the UI.
+  - Called by: parser.js (refreshApplicationState)
+
+* updateBenchmarkFileDropdown: Populates the reference file selection dropdown specific to the benchmark suite.
+  - Called by: parser.js (refreshApplicationState)
+
+* updateBenchmarkSceneDropdown: Populates the scene ID dropdown based on the selected reference file for benchmarking.
+  - Called by: parser.js (updateBenchmarkFileDropdown)
+
+* updateMasterIDList: Updates the master script ID selection dropdown with unique keys across all loaded files.
+  - Called by: parser.js (refreshApplicationState, commitTextToRightFile)
+
+* onSelectID: Event handler triggered when a new script ID is selected, updating comparison views and saving state.
+  - Called by: HTML event handler / main.js
+
+* onCompareSelectionChange: Event handler triggered when comparison file selections change, updating views and saving state.
+  - Called by: HTML event handler / main.js
+
+* renderComparisonViews: Extracts and populates text content for the left and right comparison text areas based on current selections.
+  - Called by: parser.js (onSelectID, onCompareSelectionChange), and main.js
+
+* extractScriptText: Extracts raw text blocks or script lines safely from a data object using specific key paths or fallback structures.
+  - Called by: parser.js (renderComparisonViews), and benchmark.js (runParameterSweepBenchmark)[cite: 13]
+
+* saveEditsToMemory: Saves manual edits made in the left text area back into the respective file registry object in memory.
+  - Called by: HTML event handler / main.js
+
+* commitTextToRightFile: Commits line arrays into the target file registry object, updates views, and caches changes.
+  - Called by: parser.js (injectTranslationToRight), and translator.js (translateViaOllama)
+
+* injectTranslationToRight: Injects the text currently in the left output area into the right target file registry.
+  - Called by: HTML event handler / main.js
+
+* downloadFile: Generates and triggers a browser download for a JSON file export of the specified registry item.
+  - Called by: HTML event handler / main.js
+
+--------------------------------------------------------------------------------
+translator.js
+--------------------------------------------------------------------------------
+* loadSpecificPreset: Loads and maps preset configurations from an uploaded JSON file for a specified operation type.
+  - Called by: HTML event handler / main.js
+
+* fetchOllamaModels: Queries available local Ollama model endpoints and populates the model selection dropdown list.
+  - Called by: HTML event handler / main.js
+
+* wrapTextToLines: Wraps a given string of text into an array of lines bounded by a maximum character length limit.
+  - Called by: translator.js (translateViaOllama)
+
+* cleanModelOutput: Cleans up raw LLM outputs by stripping conversational filler words, explanation prefixes, code block formatting, and surrounding quotes.
+  - Called by: translator.js (summarizeOldContext, translateChunkWithContext)
+
+* summarizeOldContext: Summarizes older dialogue context lines into a single sentence via an AI call to preserve history dynamics.
+  - Called by: translator.js (translateViaOllama)
+
+* translateChunkWithContext: Translates a text chunk or chunk with prior history context using configured system parameters and handles retry logic.
+  - Called by: benchmark.js (runParameterSweepBenchmark), and translator.js (translateViaOllama, generateStylizationMapWithAI)[cite: 13]
+
+* generateStylizationMapWithAI: Analyzes source text blocks to discover character stutters, ticks, and punctuation anomalies, formatting them into a stylization mapping list.
+  - Called by: HTML event handler / main.js
+
+* stopTranslation: Aborts ongoing translation or generation processes using an active AbortController.
+  - Called by: HTML event handler / main.js
+
+* translateViaOllama: Manages the core sequential translation loop across lines, handling buffers, name plates, stylized pattern matching, context windows, and manual step checkpoints.
+  - Called by: HTML event handler / main.js
+
+--------------------------------------------------------------------------------
+ui.js
+--------------------------------------------------------------------------------
+* initDraggableModal: Initializes mouse drag-and-drop mechanics for the floating debug modal window.
+  - Called by: main.js
+
+* showError: Displays an error message banner on the user interface.
+  - Called by: parser.js (loadFiles), translator.js (fetchOllamaModels, generateStylizationMapWithAI, translateViaOllama), and ui.js (copyStylizationMapToClipboard)
+
+* clearError: Clears and hides the error message banner.
+  - Called by: translator.js (fetchOllamaModels, generateStylizationMapWithAI, translateViaOllama)
+
+* openDebugMenu: Opens the debug modal overlay and initializes input values and UI page elements.
+  - Called by: HTML event handler / main.js
+
+* switchDebugPage: Switches between different pages within the debug modal interface.
+  - Called by: HTML event handler / main.js
+
+* updateDebugPageDisplay: Updates the visibility of sections and button states for the current debug page view.
+  - Called by: ui.js (openDebugMenu, switchDebugPage)
+
+* closeDebugMenu: Saves configuration changes from the debug modal inputs and closes the debug overlay.
+  - Called by: HTML event handler / main.js
+
+* closeDebugMenuWithoutSaving: Closes the debug modal overlay without saving input changes.
+  - Called by: HTML event handler / main.js
+
+* saveStylizationMapFromView: Parses and saves the current JSON contents of the stylization map editor to application memory and cache.
+  - Called by: HTML event handler / main.js
+
+* renderDiscoveredMappingsUI: Renders the dynamic HTML container listing discovered stylization mappings pending review.
+  - Called by: translator.js (generateStylizationMapWithAI), and ui.js (openDebugMenu, setAllDiscoveredSelection, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings)
+
+* toggleDiscoveredSelection: Updates the selection status of an individual pending discovered mapping item.
+  - Called by: HTML event handler / main.js
+
+* setAllDiscoveredSelection: Sets the selection state for all pending discovered mapping items at once.
+  - Called by: HTML event handler / main.js
+
+* updateDiscoveredKey: Updates the key string of a pending discovered mapping entry.
+  - Called by: HTML event handler / main.js
+
+* updateDiscoveredVal: Updates the value string of a pending discovered mapping entry.
+  - Called by: HTML event handler / main.js
+
+* commitApprovedMappingsToMap: Commits selected pending discovered mappings into the active heavy stylization map dictionary.
+  - Called by: HTML event handler / main.js
+
+* deleteSelectedDiscoveredMappings: Deletes selected items from the pending discovered mappings list.
+  - Called by: HTML event handler / main.js
+
+* copyStylizationMapToClipboard: Copies the current text contents of the stylization map editor to the system clipboard.
+  - Called by: HTML event handler / main.js
+
+* promptUserForNameTranslation: Displays a modal prompt to let the user review or modify character name translations interactively.
+  - Called by: translator.js (translateViaOllama)
+
+* resolveNameModal: Resolves the active name translation modal promise with the user's input value.
+  - Called by: HTML event handler / main.js
+
+* closeNameModal: Closes the name translation modal and passes an empty fallback value.
+  - Called by: HTML event handler / main.js
+
+* promptUserForManualStep: Opens the manual step toolbar to allow step-by-step translation evaluation and editing.
+  - Called by: translator.js (translateViaOllama)
+
+* resolveManualStepContinue: Resolves the manual step prompt indicating a continue action.
+  - Called by: HTML event handler / main.js
+
+* triggerStepRetranslation: Resolves the manual step prompt indicating that a re-translation pass is required.
+  - Called by: HTML event handler / main.js

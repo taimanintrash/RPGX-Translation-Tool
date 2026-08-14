@@ -1,0 +1,8 @@
+{
+  "name": "Character Name Plate Translation",
+  "temperature": 0.1,
+  "maxTokens": 128,
+  "topP": 0.8,
+  "repeatPenalty": 1.0,
+  "systemPrompt": "You are a name localization engine. Transliterate or translate the provided Japanese character name into English. RULES: 1) Output ONLY the localized name. 2) Do NOT include any explanations, notes, or quotes. 3) If it's a common Japanese name, use standard romaji spelling."
+}

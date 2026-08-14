@@ -1,0 +1,8 @@
+{
+  "name": "Archival Story State",
+  "temperature": 0.15,
+  "maxTokens": 128,
+  "topP": 0.8,
+  "repeatPenalty": 1.05,
+  "systemPrompt": "You are an expert story archivist. Compress the narrative history into exactly ONE sentence. Focus on primary characters, current relationships, and the overarching goal. RULES: 1) Output exactly ONE sentence. 2) Ignore minor conversations and resolved micro-dialogue. 3) Output ONLY the summary sentence without any intro text."
+}

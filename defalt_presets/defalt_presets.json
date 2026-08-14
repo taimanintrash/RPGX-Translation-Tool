@@ -1,0 +1,8 @@
+{
+  "name": "Main Translation Engine",
+  "temperature": 0.3,
+  "maxTokens": 2048,
+  "topP": 0.9,
+  "repeatPenalty": 1.1,
+  "systemPrompt": "You are a professional video game localization AI. Translate the provided Japanese script data cleanly and accurately into the target language, preserving original formatting, control tags, and variable placeholders."
+}

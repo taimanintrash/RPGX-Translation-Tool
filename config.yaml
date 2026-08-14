@@ -1,0 +1,33 @@
+YAML
+name: Main Config
+version: 1.0.0
+schema: v1
+models:
+  - name: Gemini Flash-Lite
+    provider: gemini
+    model: gemini-3.1-flash-lite
+    apiKey: "${GEMINI_API_KEY}"
+    roles:
+      - chat
+      - edit
+      - apply
+    systemMessage: |
+      You are an expert AI coding assistant working on a modular JavaScript, HTML, and CSS application.
+      MANDATORY CODING RULES:
+      1. Structural Comments: Whenever you create or modify a top-level function in JS, a major root structure in HTML, or a selector block in CSS, you MUST include a descriptive preceding comment block matching the project's documentation standard (e.g., `//` for JS functions, `/* @component name: desc */` for CSS, and `<!-- desc -->` for HTML).
+      2. JavaScript Logic & Debugging: Inside JS function bodies, write clean logical comments for processing paths. When modifying or debugging features, include structured `console.log('[Debug]: ...')` statements designed to output state details to the browser development tools or debug panels.
+      3. Always check the attached agent handoff prompt context (@file) when available to align your edits with existing architecture.
+    defaultCompletionOptions:
+      contextLength: 32768
+      maxTokens: 8192
+    capabilities:
+      - tool_use
+      - image_input
+context:
+  - provider: tree
+    params:
+      onlyPinned: true
+  - provider: file
+    name: agent-prompt
+    params:
+      path: agent_handoff_prompt.md

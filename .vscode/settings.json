@@ -1,0 +1,14 @@
+{
+  "chat.maxTokens": 8192,
+  "github.copilot.chat.instructions": [
+    {
+      "file": "./agent_handoff_prompt.md"
+    },
+    {
+      "file": "./rate.txt"
+    },
+    {
+      "file": "./agent_rate.txt"
+    }
+  ]
+}
