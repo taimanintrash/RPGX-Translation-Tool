@@ -529,9 +529,6 @@ button.debug-btn:hover { background: #334155; }
 [data-theme="dark"] .modal-field span[style*="color: #64748b"] { color: var(--text-muted) !important; }
 [data-theme="dark"] .modal-field em { color: var(--text-muted) !important; }
 
-/* Manual step toolbar (info-blue panel) */
-[data-theme="dark"] #manualStepToolbar[style*="background: #eff6ff"] { background: var(--info-blue-bg) !important; border-color: var(--info-blue-border) !important; }
-[data-theme="dark"] #manualStepToolbar span[style*="color: #1e40af"] { color: var(--accent-blue) !important; }
 
 /* Discovered mappings review rows */
 [data-theme="dark"] #discoveredMappingsContainer em { color: var(--text-muted) !important; }
@@ -587,4 +584,82 @@ button.debug-btn:hover { background: #334155; }
 * {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* ===== Manual Step Override toolbar (inside the right pane, sticky at the bottom) ===== */
+.manual-step-toolbar {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: var(--info-blue-bg);
+    border: 1px solid var(--info-blue-border);
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-top: 6px;
+}
+.manual-step-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--accent-blue);
+}
+.manual-step-label {
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--text-secondary);
+}
+.manual-step-input {
+    width: 48px;
+    padding: 3px;
+    font-size: 11px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+}
+.manual-step-btn {
+    padding: 3px 8px;
+    font-size: 11px;
+}
+
+/* Source line + context preview inside the manual step toolbar */
+.manual-step-source-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 100%;
+}
+.manual-step-source-text {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 4px 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    resize: none;
+}
+.manual-step-context-select {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 4px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+}
+
+/* Current source line display (always visible during translation) */
+.current-source-line {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 4px;
 }

@@ -1,5 +1,5 @@
 import { state } from './main.js';
-import { showError, clearError, promptUserForNameTranslation, promptUserForManualStep, renderDiscoveredMappingsUI } from './ui.js';
+import { showError, clearError, promptUserForNameTranslation, promptUserForManualStep, renderDiscoveredMappingsUI, setCurrentSourceLine, hideCurrentSourceLine } from './ui.js';
 import { commitTextToRightFile } from './parser.js';
 
 // Dictionary mapping distinct presets to individual operation parameters
@@ -340,13 +340,24 @@ export async function translateChunkWithContext(host, model, targetLang, chunkTe
         let rawResult = data.choices?.[0]?.message?.content || sanitized;
         let cleanedResult = cleanModelOutput(rawResult);
         console.log(`[Trace:Translate] Attempt ${attempts}/${maxRetries} -> cleaned length ${cleanedResult.length}`);
+        console.log(`[Trace:Translate:Response] raw: ${rawResult}`);
+        console.log(`[Trace:Translate:Response] cleaned: ${cleanedResult}`);
 
         if (isFallbackRun) {
             return `[MANUAL_OVERRIDE_NEEDED] ${cleanedResult}`;
         }
 
+        // --- jp->en validation checks ---
         const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(cleanedResult);
+        // Detect leftover romaji fragments (common untranslated jp words) that signal the jp->en prompt didn't fully translate.
+        const romajiFragments = /\b(nani|boku|ore|watashi|konnichiwa|sugoi|kawaii|baka|senpai|sensei|sayonara|arigatou|doko|dare|naze|shinjirarenai|yatta|ganbatte)\b/i.test(cleanedResult);
+        console.log(`[Trace:Translate:Detect] hasJapanese=${hasJapanese}, romajiFragments=${romajiFragments}, contextLines=${currentContext.length}`);
+        if (hasJapanese) console.warn(`[Trace:Translate:Detect] Japanese characters still present in output -> will retry.`);
+        if (romajiFragments) console.warn(`[Trace:Translate:Detect] Romaji fragment detected in output -> jp->en prompt may not have fully translated.`);
+
+        // Context-leak detection: did any prior context line bleed into the output?
         let hasOldContext = false;
+        let leakedContextLine = "";
         
         for (let ctxLine of currentContext) {
             let cleanCtx = ctxLine.trim();
@@ -355,12 +366,18 @@ export async function translateChunkWithContext(host, model, targetLang, chunkTe
                 let contextSnippet = cleanCtx.substring(0, sampleSize);
                 if (cleanedResult.includes(contextSnippet) || cleanedResult.includes(cleanCtx)) {
                     hasOldContext = true;
+                    leakedContextLine = cleanCtx;
                     break;
                 }
             }
         }
+        if (hasOldContext) console.warn(`[Trace:Translate:Detect] Context leak detected -> output contains a prior context line: "${leakedContextLine.substring(0, 60)}..."`);
 
-        if (!hasJapanese && !hasOldContext) return cleanedResult; 
+        if (!hasJapanese && !hasOldContext && !romajiFragments) {
+            console.log(`[Trace:Translate:Pass] Output passed all checks (no Japanese, no romaji, no context leak). Accepting translation.`);
+            return cleanedResult; 
+        }
+        console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, hasOldContext=${hasOldContext}, romajiFragments=${romajiFragments}). Dropping oldest context and retrying.`);
         if (currentContext.length > 0) currentContext.shift();
     }
 }
@@ -534,7 +551,7 @@ export async function translateViaAiServer() {
     let lines = fullText.split("\n");
     let translatedLines = [];
     let dialogueBuffer = [];
-    let recentContextHistory = [];
+    let history = [];
     let milestoneSummaries = [];
 
     async function flushBuffer() {
@@ -543,16 +560,22 @@ export async function translateViaAiServer() {
         let combinedText = dialogueBuffer.map(item => item.text).join(" ");
         let formattedContextForPrompt = [];
 
-        if (recentContextHistory.length > rawLimitThreshold) {
-            let linesToSnapshot = recentContextHistory.slice(0, recentContextHistory.length - rawLimitThreshold);
-            let activeRawLines = recentContextHistory.slice(recentContextHistory.length - rawLimitThreshold);
+        // history stores ALL confirmed translated dialogue (never truncated).
+        // The raw tail (most recent rawLimitThreshold lines) feeds raw into the prompt;
+        // older confirmed lines beyond the raw tail get summarized into milestones.
+        const rawTail = history.slice(Math.max(0, history.length - rawLimitThreshold));
+        const olderConfirmed = history.slice(0, Math.max(0, history.length - rawLimitThreshold));
+
+        // Summarize older confirmed lines when they exceed the context limit.
+        if (olderConfirmed.length > maxContextLines) {
+            const linesToSnapshot = olderConfirmed.slice(0, olderConfirmed.length - maxContextLines);
             let newMilestone = await summarizeOldContext(host, model, targetLang, linesToSnapshot);
             milestoneSummaries.push(newMilestone);
-            recentContextHistory = activeRawLines;
         }
 
         if (milestoneSummaries.length > 0) formattedContextForPrompt.push(`[Story Milestones:\n` + milestoneSummaries.join("\n") + `\n]`);
-        formattedContextForPrompt.push(...recentContextHistory);
+        // Feed the raw tail (recent confirmed dialogue) directly.
+        formattedContextForPrompt.push(...rawTail);
 
         let sliceStart = Math.max(0, formattedContextForPrompt.length - maxContextLines);
         let currentContextSlice = maxContextLines > 0 ? formattedContextForPrompt.slice(sliceStart) : [];
@@ -567,9 +590,14 @@ export async function translateViaAiServer() {
             let stepResult, keepTranslatingStep = true;
             
             while (keepTranslatingStep) {
-                stepResult = await promptUserForManualStep(combinedText, currentContextSlice);
+                stepResult = await promptUserForManualStep(combinedText, currentContextSlice, history, milestoneSummaries, maxContextLines);
                 if (stepResult.action === "retranslate") {
-                    let updatedContextWindow = maxContextLines > 0 ? recentContextHistory.slice(Math.max(0, recentContextHistory.length - stepResult.newContextCount)) : [];
+                    // newContextCount = step context lines; rawLimit caps how many raw history lines feed the window.
+                    const stepRawLimit = stepResult.rawLimit ?? stepResult.newContextCount;
+                    let updatedContextWindow = (maxContextLines > 0 && stepResult.newContextCount > 0)
+                        ? history.slice(Math.max(0, history.length - stepRawLimit), history.length - Math.max(0, history.length - stepResult.newContextCount))
+                        : (maxContextLines > 0 ? history.slice(Math.max(0, history.length - stepResult.newContextCount)) : []);
+                    console.log(`[Trace:Translation] Re-translate step: contextLines=${stepResult.newContextCount}, rawLimit=${stepRawLimit}, windowSize=${updatedContextWindow.length}`);
                     translatedCombined = await translateChunkWithContext(host, model, targetLang, combinedText, updatedContextWindow, 'retry');
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
@@ -581,7 +609,7 @@ export async function translateViaAiServer() {
             }
         }
 
-        recentContextHistory.push(translatedCombined);
+        history.push(translatedCombined);
         let wrappedLines = wrapTextToLines(translatedCombined, 42);
 
         for (let i = 0; i < dialogueBuffer.length; i++) {
@@ -603,6 +631,7 @@ export async function translateViaAiServer() {
             let trimmedLine = line.trim();
 
             if (loadingStatus) loadingStatus.innerHTML = `Translating line ${idx + 1} of ${effectiveLimit}...`;
+            setCurrentSourceLine(trimmedLine);
 
             if (trimmedLine.startsWith("<NAME_PLATE>")) {
                 console.log(`[Trace:Translation] NAME_PLATE encountered at line ${idx + 1}.`);
@@ -618,6 +647,7 @@ export async function translateViaAiServer() {
                     } else {
                         let namePrompt = `Transliterate this character name into ${targetLang}. Return strictly the clean name text only:\n${cleanName}`;
                         let aiTranslatedName = await translateChunkWithContext(host, model, targetLang, namePrompt, [], 'namePlate');
+                        console.log(`[Trace:Translation:NamePlate] cleanName="${cleanName}" -> aiTranslatedName="${aiTranslatedName}"`);
                         finalUserApprovedName = await promptUserForNameTranslation(cleanName, aiTranslatedName);
                         state.knownNamesMap[cleanName] = finalUserApprovedName;
                     }
@@ -662,6 +692,7 @@ export async function translateViaAiServer() {
         }
 
         await flushBuffer();
+        hideCurrentSourceLine();
         console.log('[Trace:Translation] Main loop finished. Flattening results and committing to file.');
 
         let finalCleanedArray = [];

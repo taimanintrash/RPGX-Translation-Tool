@@ -179,6 +179,11 @@ export function closeDebugMenu() {
     state.debugMaxLinesLimit = isNaN(limitVal) || limitVal < 0 ? 0 : limitVal;
     state.autoSkipNameModal = document.getElementById("autoSkipNameModalCheckbox").checked;
     state.manualStepByStepMode = document.getElementById("manualStepModeCheckbox").checked;
+    // When manual override is disabled, hide the toolbar so only source text + translation remain.
+    if (!state.manualStepByStepMode) {
+        const msToolbar = document.getElementById("manualStepToolbar");
+        if (msToolbar) msToolbar.style.display = "none";
+    }
     state.stylizationMode = document.getElementById("stylizationModeSelect").value;
 
     try {
@@ -396,17 +401,92 @@ export function closeNameModal() {
  * Opens the manual step toolbar to allow step-by-step translation evaluation and editing[cite: 7].
  * Called by: translator.js (translateViaOllama)[cite: 7]
  */
-export function promptUserForManualStep(currentChunkText, currentContextWindow) {
+/**
+ * Recomputes the context-preview dropdown from the stored full history + current step settings.
+ * Called by: ui.js (promptUserForManualStep, input change listeners)
+ */
+function refreshStepContextPreview(currentContextWindow) {
+    const ctxSelect = document.getElementById("stepContextPreview");
+    if (!ctxSelect) return;
+    const ctxLines = parseInt(document.getElementById("stepContextLinesInput")?.value) || state._stepMaxCtxDefault || 6;
+    const rawLimit = parseInt(document.getElementById("stepRawLimitInput")?.value) || 2;
+
+    // If an explicit context window was passed (the live slice), show it.
+    // Otherwise recompute from the stored full history using the current settings.
+    let ctx;
+    if (Array.isArray(currentContextWindow)) {
+        ctx = currentContextWindow;
+    } else {
+        const history = state._stepFullHistory || [];
+        const milestones = state._stepMilestones || [];
+        let formatted = [];
+        if (milestones.length > 0) formatted.push(`[Story Milestones:\n` + milestones.join("\n") + `\n]`);
+        const activeRaw = history.slice(Math.max(0, history.length - rawLimit));
+        formatted.push(...activeRaw);
+        const start = Math.max(0, formatted.length - ctxLines);
+        ctx = ctxLines > 0 ? formatted.slice(start) : [];
+    }
+
+    ctxSelect.innerHTML = "";
+    if (ctx.length === 0) {
+        ctxSelect.appendChild(new Option("(no context)", ""));
+    } else {
+        ctx.forEach((line, i) => {
+            const preview = (line || "").substring(0, 80);
+            ctxSelect.appendChild(new Option(`[${i}] ${preview}`, String(i)));
+        });
+    }
+    console.log(`[Trace:UI] Context preview refreshed: ${ctx.length} line(s) (ctxLines=${ctxLines}, rawLimit=${rawLimit}).`);
+}
+
+/**
+ * Shows the current source line being translated in the separate always-visible element.
+ * Called by: translator.js (translateViaAiServer main loop)
+ */
+export function setCurrentSourceLine(text) {
+    const el = document.getElementById("currentSourceLine");
+    const box = document.getElementById("stepSourceText");
+    if (el) el.style.display = "flex";
+    if (box) box.value = text || "";
+}
+
+/**
+ * Hides the current source line element (e.g. when translation ends).
+ * Called by: translator.js (translateViaAiServer completion)
+ */
+export function hideCurrentSourceLine() {
+    const el = document.getElementById("currentSourceLine");
+    if (el) el.style.display = "none";
+}
+
+export function promptUserForManualStep(currentChunkText, currentContextWindow, fullHistory, milestones, maxContextLinesDefault) {
+    console.log('[Trace:UI] promptUserForManualStep() invoked; source + context populated.');
     return new Promise((resolve, reject) => {
         const toolbar = document.getElementById("manualStepToolbar");
         toolbar.style.display = "flex";
-        
+
+        // Show the source line being translated at the top of the override UI.
+        const sourceBox = document.getElementById("stepSourceText");
+        if (sourceBox) sourceBox.value = currentChunkText || "";
+
+        // Store raw history + milestones so the preview can recompute live when settings change.
+        state._stepFullHistory = Array.isArray(fullHistory) ? fullHistory : [];
+        state._stepMilestones = Array.isArray(milestones) ? milestones : [];
+        state._stepMaxCtxDefault = maxContextLinesDefault || 6;
+
+        // Initial population + live refresh of the context preview.
+        refreshStepContextPreview(currentContextWindow);
+        const ctxInput = document.getElementById("stepContextLinesInput");
+        const rawInput = document.getElementById("stepRawLimitInput");
+        if (ctxInput) ctxInput.oninput = () => refreshStepContextPreview();
+        if (rawInput) rawInput.oninput = () => refreshStepContextPreview();
+
         const outputRight = document.getElementById("outputAreaRight");
         outputRight.classList.add("editable");
 
-        state.manualStepResolver = (action, newContextCount) => {
+        state.manualStepResolver = (action, newContextCount, rawLimit) => {
             toolbar.style.display = "none";
-            resolve({ action, newContextCount });
+            resolve({ action, newContextCount, rawLimit });
         };
 
         if (state.currentAbortController) {
@@ -424,8 +504,9 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow) 
  */
 export function resolveManualStepContinue() {
     const contextCount = parseInt(document.getElementById("stepContextLinesInput").value) || 6;
+    const rawLimit = parseInt(document.getElementById("stepRawLimitInput").value) || 2;
     if (state.manualStepResolver) {
-        state.manualStepResolver("continue", contextCount);
+        state.manualStepResolver("continue", contextCount, rawLimit);
         state.manualStepResolver = null;
     }
 }
@@ -436,8 +517,9 @@ export function resolveManualStepContinue() {
  */
 export async function triggerStepRetranslation() {
     const contextCount = parseInt(document.getElementById("stepContextLinesInput").value) || 6;
+    const rawLimit = parseInt(document.getElementById("stepRawLimitInput").value) || 2;
     if (state.manualStepResolver) {
-        state.manualStepResolver("retranslate", contextCount);
+        state.manualStepResolver("retranslate", contextCount, rawLimit);
         state.manualStepResolver = null;
     }
 }

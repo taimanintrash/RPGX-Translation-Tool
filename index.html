@@ -69,15 +69,6 @@
                 <div id="errorBanner" class="error-banner"></div>
             </div>
 
-            <!-- Step-by-Step Manual Override Action Toolbar -->
-            <div id="manualStepToolbar" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; padding: 8px 12px; border-radius: 6px; align-items: center; gap: 10px; flex-wrap: wrap;">
-                <span style="font-size: 12px; font-weight: bold; color: #1e40af;">Manual Step Override Active</span>
-                <label style="font-size: 11px; font-weight: bold;">Step Context Lines:</label>
-                <input type="number" id="stepContextLinesInput" value="6" min="0" max="30" style="width: 40px; padding: 3px; font-size: 11px;">
-                <button class="translate-btn" style="padding: 3px 8px; font-size: 11px;" onclick="triggerStepRetranslation()">Re-translate Step</button>
-                <button class="success-btn" style="padding: 3px 8px; font-size: 11px;" onclick="resolveManualStepContinue()">▶ Continue</button>
-            </div>
-
             <!-- Dual editing panes wrapper for source input and AI translations -->
             <div class="panes-wrapper">
                 <div class="pane">
@@ -101,7 +92,29 @@
                             <button class="success-btn" onclick="downloadFile(document.getElementById('fileSelectRight').value)">Save File</button>
                         </div>
                     </div>
+                    <!-- Current source line being translated (always visible, pushed up when override activates) -->
+                    <div id="currentSourceLine" class="current-source-line" style="display: none;">
+                        <label class="manual-step-label">Source line:</label>
+                        <textarea id="stepSourceText" class="manual-step-source-text" readonly rows="2"></textarea>
+                    </div>
                     <textarea id="outputAreaRight" class="editable" placeholder="Select a script ID..."></textarea>
+                    <!-- Manual Step Override toolbar: pushes up below the source line when activated -->
+                    <div id="manualStepToolbar" class="manual-step-toolbar" style="display: none;">
+                        <span class="manual-step-title">Manual Step Override Active</span>
+                        <!-- Context lines actually sent to the prompt -->
+                        <div class="manual-step-source-row">
+                            <label class="manual-step-label">Context sent to prompt:</label>
+                            <select id="stepContextPreview" class="manual-step-context-select" size="4">
+                                <option value="">(no context)</option>
+                            </select>
+                        </div>
+                        <label class="manual-step-label">Step Context Lines:</label>
+                        <input type="number" id="stepContextLinesInput" value="6" min="0" max="30" class="manual-step-input">
+                        <label class="manual-step-label">Raw Context Limit:</label>
+                        <input type="number" id="stepRawLimitInput" value="2" min="0" max="30" class="manual-step-input">
+                        <button class="translate-btn manual-step-btn" onclick="triggerStepRetranslation()">Re-translate Step</button>
+                        <button class="success-btn manual-step-btn" onclick="resolveManualStepContinue()">Continue</button>
+                    </div>
                 </div>
             </div>
         </div>
