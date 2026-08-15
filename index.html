@@ -45,12 +45,14 @@
         <div class="main-content" id="mainContent">
             <!-- Comparison toolbar containing file selection controls and translation parameter setups -->
             <div class="compare-selectors">
-                <label style="font-size: 13px; font-weight: bold;">Compare:</label>
-                <select id="fileSelectLeft" onchange="onCompareSelectionChange()"></select>
-                <span style="font-size: 13px; color: #64748b;">vs</span>
-                <select id="fileSelectRight" onchange="onCompareSelectionChange()"></select>
-
                 <div class="translate-config">
+                    <div class="fileSelectDiv">
+                        <label style="font-size: 13px; font-weight: bold;">Compare:</label>
+                        <select id="fileSelectLeft" onchange="onCompareSelectionChange()"></select>
+                        <span style="font-size: 13px; color: #64748b;">vs</span>
+                        <select id="fileSelectRight" onchange="onCompareSelectionChange()"></select>
+                    </div>
+
                     <!-- Group 1: Mobile Script ID Selector -->
                     <div class="config-group config-group-script">
                         <select id="scriptSelectMobile" class="mobile-script-select" onchange="onSelectIDMobile()"

@@ -108,6 +108,7 @@ body {
 /* Hide the browser default "No file chosen" label text */
 #fileInput {
     color: transparent;
+    --text-primary: black;
     width: 105px;
 }
 
@@ -311,6 +312,15 @@ body {
     gap: 6px;
 }
 
+.fileSelectDiv {
+    display: flex;
+    gap: 10px;
+    min-width: 50px;
+    width: 100%;
+
+}
+
+
 @media (max-width: 1020px) {
     .top-panel {
         flex-wrap: nowrap !important;
@@ -350,7 +360,7 @@ body {
     }
 
     .compare-selectors select {
-        flex: none !important;
+        flex: 1 !important;
         min-width: 0;
         width: auto;
     }
@@ -389,6 +399,19 @@ body {
         text-overflow: ellipsis;
         overflow: hidden;
         white-space: nowrap;
+    }
+}
+
+@media (max-width: 660px) {
+    .fileSelectDiv {
+        display: inline-block;
+        width: auto;
+    }
+
+    #fileSelectLeft,
+    #fileSelectRight {
+        max-width: 120px !important;
+
     }
 }
 
