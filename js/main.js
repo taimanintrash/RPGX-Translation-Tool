@@ -169,6 +169,7 @@ window.resolveNameModal = resolveNameModal;
 window.closeNameModal = closeNameModal;
 window.resolveManualStepContinue = resolveManualStepContinue;
 window.triggerStepRetranslation = triggerStepRetranslation;
+window.applyStepContextSettings = applyStepContextSettings;
 window.syncManualStepUIVisibility = syncManualStepUIVisibility;
 window.syncManualStepModeLive = syncManualStepModeLive;
 window.runParameterSweepBenchmark = runParameterSweepBenchmark;

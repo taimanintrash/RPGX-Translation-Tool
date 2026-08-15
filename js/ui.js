@@ -701,14 +701,10 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
             console.log(`[Trace:UI] Raw tail preview updated (no summary recalc).`);
         };
 
-        if (ctxInput) {
-            ctxInput.dataset.oldValue = ctxInput.value;
-            ctxInput.onchange = () => handleContextLinesChange(ctxInput, ctxInput.dataset.oldValue);
-        }
-        if (rawInput) {
-            rawInput.dataset.oldValue = rawInput.value;
-            rawInput.onchange = () => handleRawLinesChange(rawInput);
-        }
+        // Context changes are applied via the Apply button (applyStepContextSettings),
+        // not auto-recalc on change.
+        if (ctxInput) ctxInput.dataset.oldValue = ctxInput.value;
+        if (rawInput) rawInput.dataset.oldValue = rawInput.value;
 
         const outputRight = document.getElementById("outputAreaRight");
         if (outputRight) outputRight.classList.add("editable");
@@ -749,6 +745,14 @@ export function resolveManualStepContinue() {
  * Resolves the manual step prompt indicating that a re-translation pass is required[cite: 7].
  * Called by: HTML event handler / main.js[cite: 7]
  */
+export function applyStepContextSettings() {
+    console.log('[Trace:UI] applyStepContextSettings() invoked.');
+    // Recalculate summaries from history with the current manual override settings,
+    // then update the preview. This updates the summary state in-place before the
+    // next retranslate uses it.
+    refreshStepContextPreview().catch(e => console.warn('[Trace:UI] Apply context settings failed:', e));
+}
+
 export async function triggerStepRetranslation() {
     const contextCount = parseInt(document.getElementById("stepContextLinesInput").value) || 0;
     const rawLimit = parseInt(document.getElementById("stepRawLimitInput").value) || 0;

@@ -981,17 +981,20 @@ export async function translateViaAiServer() {
                     maxContextLines
                 );
                 if (stepResult.action === "retranslate") {
-                    const stepRawLimit = stepResult.rawLimit ?? stepResult.newContextCount;
-                    const stepRawTail = history.slice(Math.max(0, history.length - stepRawLimit));
-                    let stepFormattedContext = [];
-                    if (archivalSummary) stepFormattedContext.push(`[Story Context: ${archivalSummary}]`);
-                    if (recentSummary) stepFormattedContext.push(`[Recent Scene: ${recentSummary}]`);
-                    stepFormattedContext.push(...stepRawTail);
-
-                    let updatedContextWindow = (maxContextLines > 0 && stepResult.newContextCount > 0)
-                        ? stepFormattedContext.slice(Math.max(0, stepFormattedContext.length - stepResult.newContextCount))
-                        : [];
-                    console.log(`[Trace:Translation] Re-translate step: contextLines=${stepResult.newContextCount}, rawLimit=${stepRawLimit}, windowSize=${updatedContextWindow.length}`);
+                    const stepCtxLines = stepResult.newContextCount || maxContextLines;
+                    const stepRawLimit = stepResult.rawLimit ?? rawLimitThreshold;
+                    // Rebuild the context window using the updated settings via buildTieredContextWindow,
+                    // so the retranslate uses the same tiered summary pipeline as the main translation.
+                    let updatedContextWindow = await buildTieredContextWindow(host, model, history, stepCtxLines, stepRawLimit, {
+                        get archivalSummary() { return archivalSummary; },
+                        set archivalSummary(v) { archivalSummary = v; },
+                        get recentSummary() { return recentSummary; },
+                        set recentSummary(v) { recentSummary = v; },
+                        get recentSummarySourceLines() { return recentSummarySourceLines; },
+                        get summarizedUpToIndex() { return summarizedUpToIndex; },
+                        set summarizedUpToIndex(v) { summarizedUpToIndex = v; }
+                    });
+                    console.log(`[Trace:Translation] Re-translate step: contextLines=${stepCtxLines}, rawLimit=${stepRawLimit}, windowSize=${updatedContextWindow.length}`);
                     translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry', activeSpeakerName);
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");

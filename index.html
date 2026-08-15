@@ -161,6 +161,8 @@
                             <label class="manual-step-label">Raw Lines:</label>
                             <input type="number" id="stepRawLimitInput" value="0" min="0" max="100"
                                 class="manual-step-input">
+                            <button id="stepApplyContextBtn" class="translate-btn manual-step-btn"
+                                onclick="applyStepContextSettings()" title="Apply context settings and recalculate summaries">Apply</button>
                             <div style="display: flex; gap: 8px; margin-left: auto;">
                                 <button id="stepRetranslateBtn" class="translate-btn manual-step-btn"
                                     onclick="triggerStepRetranslation()">Retranslate</button>
