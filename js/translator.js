@@ -659,6 +659,20 @@ export async function translateChunkWithContext(host, model, chunkText, previous
  * and unquoted keys. Returns an array of { key, value }.
  * Called by: generateStylizationMapWithAI
  */
+/**
+ * Validates a key/value pair from a stylization mapping output.
+ * Rejects empty keys, keys with newlines, pure-numeric keys, and
+ * object/array values. Returns true if the pair is valid.
+ */
+function isValidMappingPair(key, value) {
+    if (!key || typeof key !== "string") return false;
+    if (key.length === 0 || key.length > 100) return false;
+    if (/\n|\r/.test(key)) return false;
+    if (/^\d+$/.test(key.trim())) return false;
+    if (value === null || typeof value === "object") return false;
+    return true;
+}
+
 function parseMappingOutput(content) {
     if (!content || !content.trim()) return [];
     let pairs = [];
@@ -668,7 +682,8 @@ function parseMappingOutput(content) {
         let obj = JSON.parse(content);
         if (obj && typeof obj === "object" && !Array.isArray(obj)) {
             for (let [k, v] of Object.entries(obj)) {
-                if (typeof k === "string") pairs.push({ key: k, value: String(v ?? "") });
+                let val = String(v ?? "");
+                if (isValidMappingPair(k, val)) pairs.push({ key: k, value: val });
             }
             if (pairs.length > 0) return pairs;
         }
@@ -681,7 +696,8 @@ function parseMappingOutput(content) {
             let obj = JSON.parse(jsonMatch[0]);
             if (obj && typeof obj === "object" && !Array.isArray(obj)) {
                 for (let [k, v] of Object.entries(obj)) {
-                    if (typeof k === "string") pairs.push({ key: k, value: String(v ?? "") });
+                    let val = String(v ?? "");
+                    if (isValidMappingPair(k, val)) pairs.push({ key: k, value: val });
                 }
                 if (pairs.length > 0) return pairs;
             }
@@ -692,7 +708,7 @@ function parseMappingOutput(content) {
     let lines = content.split("\n");
     for (let line of lines) {
         let match = line.match(/["']?([^"'\s,:]+)["']?\s*:\s*["']([^"']*)["']/);
-        if (match) {
+        if (match && isValidMappingPair(match[1], match[2])) {
             pairs.push({ key: match[1], value: match[2] });
         }
     }
@@ -835,10 +851,18 @@ export async function generateStylizationMapWithAI() {
                 // individual "key":"value" lines, single-quoted pairs, or unquoted keys.
                 let phasePairs = parseMappingOutput(content);
                 for (let { key, value } of phasePairs) {
-                    if (!seenKeys.has(key)) {
-                        seenKeys.add(key);
-                        discoveredArray.push({ key, value, selected: false });
+                    // Skip if the key already exists in the base heavyStylizationMap.
+                    if (state.heavyStylizationMap && Object.prototype.hasOwnProperty.call(state.heavyStylizationMap, key)) {
+                        console.log(`[Trace:Stylization] Skipping duplicate of base map entry: "${key}"`);
+                        continue;
                     }
+                    // Skip if we already discovered this key (dedup across phases/chunks).
+                    if (seenKeys.has(key)) {
+                        console.log(`[Trace:Stylization] Skipping duplicate discovered key: "${key}"`);
+                        continue;
+                    }
+                    seenKeys.add(key);
+                    discoveredArray.push({ key, value, selected: false });
                 }
             }
         }
