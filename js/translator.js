@@ -990,7 +990,8 @@ export async function translateViaAiServer() {
                     currentContextSlice,
                     history,
                     { archivalSummary, recentSummary, recentSummarySourceLines },
-                    maxContextLines
+                    maxContextLines,
+                    rawLimitThreshold
                 );
                 if (stepResult.action === "retranslate") {
                     const stepCtxLines = stepResult.newContextCount || maxContextLines;

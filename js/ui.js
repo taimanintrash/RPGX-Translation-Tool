@@ -650,7 +650,7 @@ export function hideCurrentSourceLine() {
     if (box) box.value = "";
 }
 
-export function promptUserForManualStep(currentChunkText, currentContextWindow, fullHistory, summaryContext, maxContextLinesDefault) {
+export function promptUserForManualStep(currentChunkText, currentContextWindow, fullHistory, summaryContext, maxContextLinesDefault, rawLimitDefault) {
     console.log('[Trace:UI] promptUserForManualStep() invoked; source + context populated.');
     return new Promise((resolve, reject) => {
         const toolbar = document.getElementById("manualStepToolbar");
@@ -672,11 +672,26 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
             state._stepMilestones = [];
         }
         state._stepMaxCtxDefault = maxContextLinesDefault || 0;
+        state._stepMaxRawDefault = rawLimitDefault || 0;
+
+        // Sync the manual override inputs to the current main .translate-config values
+        // at the start of each manual step, so the preview reflects the Summary/Raw Lines
+        // the user just set instead of stale values from a prior step.
+        const ctxInput = document.getElementById("stepContextLinesInput");
+        const rawInput = document.getElementById("stepRawLimitInput");
+        if (ctxInput) {
+            ctxInput.value = maxContextLinesDefault || 0;
+            ctxInput.dataset.oldValue = ctxInput.value;
+            ctxInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        if (rawInput) {
+            rawInput.value = rawLimitDefault || 0;
+            rawInput.dataset.oldValue = rawInput.value;
+            rawInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
 
         // Initial population + live refresh of the context preview.
         refreshStepContextPreview(currentContextWindow).catch(e => console.warn('[Trace:UI] Preview refresh failed:', e));
-        const ctxInput = document.getElementById("stepContextLinesInput");
-        const rawInput = document.getElementById("stepRawLimitInput");
 
         // Context-lines change is a destructive recompute: confirm before applying.
         const handleContextLinesChange = (inputEl, oldVal) => {
