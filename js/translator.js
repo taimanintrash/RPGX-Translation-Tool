@@ -814,6 +814,43 @@ export async function buildTieredContextWindow(host, model, history, maxContextL
     return currentContextSlice;
 }
 
+/**
+ * Resolves a <NAME_PLATE> line into a translated name plate line and the active speaker name.
+ * Shared by the production pipeline (translateViaAiServer) and the benchmark sweep so both
+ * use the identical name-plate resolution path (namePlate preset, knownNamesMap caching).
+ *
+ * Returns { namePlateLine, speakerName } where speakerName is "Narrator" when the plate is
+ * empty (denoting narration) and the resolved name otherwise.
+ *
+ * Called by: translator.js (translateViaAiServer), benchmark.js (runParameterSweepBenchmark)
+ */
+export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept = false) {
+    let nameValue = rawNamePlateLine.replace("<NAME_PLATE>", "").trim();
+
+    if (nameValue && nameValue !== '""' && nameValue !== '') {
+        let cleanName = nameValue.replace(/^[\u300c\u300e"']|[\u300d\u300f"']$/g, '').trim();
+        let finalUserApprovedName = "";
+
+        if (state.knownNamesMap[cleanName]) {
+            finalUserApprovedName = state.knownNamesMap[cleanName];
+        } else {
+            let namePrompt = `Transliterate this character name. Return strictly the clean name text only:\n${cleanName}`;
+            let aiTranslatedName = await translateChunkWithContext(host, model, namePrompt, [], 'namePlate');
+            console.log(`[Trace:NamePlate] cleanName="${cleanName}" -> aiTranslatedName="${aiTranslatedName}"`);
+            // In benchmark mode (autoAccept) skip the interactive UI prompt and accept the AI result.
+            finalUserApprovedName = autoAccept ? aiTranslatedName : await promptUserForNameTranslation(cleanName, aiTranslatedName);
+            state.knownNamesMap[cleanName] = finalUserApprovedName;
+        }
+        return {
+            namePlateLine: `<NAME_PLATE>"${finalUserApprovedName}"`,
+            speakerName: finalUserApprovedName
+        };
+    } else {
+        // An empty name plate denotes narration in this visual novel format.
+        return { namePlateLine: "<NAME_PLATE>", speakerName: "Narrator" };
+    }
+}
+
 export async function translateViaAiServer() {
     console.log('[Trace:Translation] translateViaAiServer() invoked.');
     clearError();
@@ -991,30 +1028,9 @@ export async function translateViaAiServer() {
             if (trimmedLine.startsWith("<NAME_PLATE>")) {
                 console.log(`[Trace:Translation] NAME_PLATE encountered at line ${idx + 1}.`);
                 await flushBuffer();
-                let nameValue = trimmedLine.replace("<NAME_PLATE>", "").trim();
-
-                if (nameValue && nameValue !== '""' && nameValue !== '') {
-                    let cleanName = nameValue.replace(/^["'||||||「『]|["'|」』]$/g, '').trim();
-                    let finalUserApprovedName = "";
-
-                    if (state.knownNamesMap[cleanName]) {
-                        finalUserApprovedName = state.knownNamesMap[cleanName];
-                    } else {
-                        let namePrompt = `Transliterate this character name. Return strictly the clean name text only:\n${cleanName}`;
-                        let aiTranslatedName = await translateChunkWithContext(host, model, namePrompt, [], 'namePlate');
-                        console.log(`[Trace:Translation:NamePlate] cleanName="${cleanName}" -> aiTranslatedName="${aiTranslatedName}"`);
-                        finalUserApprovedName = await promptUserForNameTranslation(cleanName, aiTranslatedName);
-                        state.knownNamesMap[cleanName] = finalUserApprovedName;
-                    }
-                    translatedLines.push("<NAME_PLATE>\"" + finalUserApprovedName + "\"");
-                    activeSpeakerName = finalUserApprovedName;
-                } else {
-                    translatedLines.push("<NAME_PLATE>");
-                    // An empty name plate denotes narration in this visual novel format;
-                    // tag it so the model keeps third-person narrative voice rather than
-                    // drifting into first-person dialogue pronouns.
-                    activeSpeakerName = "Narrator";
-                }
+                let namePlateResult = await resolveNamePlate(host, model, trimmedLine);
+                translatedLines.push(namePlateResult.namePlateLine);
+                activeSpeakerName = namePlateResult.speakerName;
             }
             else if (trimmedLine.startsWith("<") || trimmedLine === "") {
                 await flushBuffer();

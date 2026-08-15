@@ -1,6 +1,6 @@
 import { state } from './main.js';
 import { extractScriptText } from './parser.js';
-import { translateChunkWithContext, buildTieredContextWindow, operationPresets } from './translator.js';
+import { translateChunkWithContext, buildTieredContextWindow, resolveNamePlate, operationPresets } from './translator.js';
 
 /**
  * Runs a multi-dimensional parameter sweep matrix to audit translation inconsistency by testing different context lines and raw limits, then logs the evaluation feedback and scores.
@@ -53,6 +53,7 @@ export async function runParameterSweepBenchmark() {
 
             let translatedLines = [];
             let history = [];
+            let activeSpeakerName = "";
 
             // Shared tiered-summary state (mirrors translateViaAiServer so the benchmark
             // exercises the production context pipeline: Raw Tail -> Recent Summary -> Archival Summary).
@@ -63,17 +64,40 @@ export async function runParameterSweepBenchmark() {
                 summarizedUpToIndex: 0
             };
 
+            // Speaker-tag regex shared with the production strip/push logic.
+            const SPEAKER_TAG_RE = /^(?:\[\s*Speaker\s*:[^\]]*\]\s*)+/i;
+
             for (let line of lines) {
                 let trimmed = line.trim();
-                if (trimmed.startsWith("<") || trimmed === "") {
+
+                if (trimmed.startsWith("<NAME_PLATE>")) {
+                    // Resolve name plates via the shared production path (namePlate preset +
+                    // knownNamesMap caching). autoAccept skips the interactive UI prompt so the
+                    // benchmark runs unattended.
+                    let namePlateResult = await resolveNamePlate(host, model, trimmed, true);
+                    translatedLines.push(namePlateResult.namePlateLine);
+                    activeSpeakerName = namePlateResult.speakerName;
+                } else if (trimmed.startsWith("<") || trimmed === "") {
                     translatedLines.push(line);
                 } else {
+                    // Prefix the active speaker as a tagged context marker, mirroring production,
+                    // so the model knows who is speaking and keeps pronouns/gender consistent.
+                    let textWithSpeaker = activeSpeakerName
+                        ? `[Speaker: ${activeSpeakerName}] ${trimmed}`
+                        : trimmed;
+
                     let currentContextSlice = await buildTieredContextWindow(
                         host, model, history, cLine, rLimit, summaryState
                     );
-                    let res = await translateChunkWithContext(host, model, trimmed, currentContextSlice, 'jpEn');
+                    let res = await translateChunkWithContext(host, model, textWithSpeaker, currentContextSlice, 'jpEn');
+
+                    // Push to history WITH the speaker tag retained so subsequent lines (and the
+                    // tiered summary) retain speaker context, then strip the tag for the committed
+                    // output — identical to the production flushBuffer flow.
                     history.push(res);
-                    translatedLines.push(res);
+                    let committed = res.replace(SPEAKER_TAG_RE, "").trim();
+                    committed = committed.replace(/^Speaker:\s*[^:\n]+:?\s*/i, "").trim();
+                    translatedLines.push(committed);
                 }
             }
 
