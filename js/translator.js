@@ -871,11 +871,32 @@ export async function translateViaAiServer() {
         let activePresetKey = 'jpEn';
         let translatedCombined = await translateChunkWithContext(host, model, combinedText, currentContextSlice, activePresetKey);
 
+        // Speaker-tag integrity check: if the input carried a [Speaker: ...] context marker,
+        // the translated output must preserve it (the model should keep the tag, not drop or
+        // translate it). A missing tag means the model lost the speaker anchor -> trigger one
+        // retry with the retry preset so pronoun/gender context is not silently lost.
+        const inputHasSpeakerTag = /\[\s*Speaker\s*:/i.test(combinedText);
+        const SPEAKER_TAG_RE = /^(?:\[\s*Speaker\s*:[^\]]*\]\s*)+/i;
+        let outputHasSpeakerTag = SPEAKER_TAG_RE.test(translatedCombined);
+        if (inputHasSpeakerTag && !outputHasSpeakerTag) {
+            console.warn(`[Trace:Translation:SpeakerTag] Output lost the [Speaker:] marker; retrying with retry preset.`);
+            let retryResult = await translateChunkWithContext(host, model, combinedText, currentContextSlice, 'retry');
+            // Accept the retry only if it restored the tag; otherwise keep the original
+            // (best-effort) so a flaky small model cannot stall the whole run.
+            if (SPEAKER_TAG_RE.test(retryResult)) {
+                translatedCombined = retryResult;
+                outputHasSpeakerTag = true;
+            } else {
+                console.warn(`[Trace:Translation:SpeakerTag] Retry also lost the marker; accepting best-effort output.`);
+            }
+        }
+
         // Strip any [Speaker: ...] context marker the model may have echoed or translated back
-        // into the output, so only the clean translated dialogue is committed.
-        translatedCombined = translatedCombined.replace(/^(?:\[Speaker:[^\]]*\]\s*)+/i, "").trim();
+        // into the output, so only the clean translated dialogue is committed to the file.
+        let committedTranslation = translatedCombined.replace(SPEAKER_TAG_RE, "").trim();
         // Also strip a loose "Speaker:" variant some models emit without brackets.
-        translatedCombined = translatedCombined.replace(/^Speaker:\s*[^:\n]+:?\s*/i, "").trim();
+        committedTranslation = committedTranslation.replace(/^Speaker:\s*[^:\n]+:?\s*/i, "").trim();
+        translatedCombined = committedTranslation;
 
         if (state.manualStepByStepMode) {
             translatedLines[dialogueBuffer[0].index] = translatedCombined;
@@ -941,7 +962,18 @@ export async function translateViaAiServer() {
             }
         }
 
-        history.push(translatedCombined);
+        // Push the final translation to history WITH the speaker tag re-attached so that
+        // subsequent lines (and the tiered summary) retain speaker context. The committed
+        // output above has the tag stripped; we re-attach it here for history only.
+        if (inputHasSpeakerTag && outputHasSpeakerTag) {
+            // Recover the original speaker marker from the input; fall back to a rebuilt one.
+            const tagMatch = combinedText.match(SPEAKER_TAG_RE);
+            const speakerTag = tagMatch ? tagMatch[0].trim() : "[Speaker: Narrator]";
+            history.push(`${speakerTag} ${translatedCombined}`);
+        } else {
+            history.push(translatedCombined);
+        }
+
         let wrappedLines = wrapTextToLines(translatedCombined, 42);
 
         for (let i = 0; i < dialogueBuffer.length; i++) {
