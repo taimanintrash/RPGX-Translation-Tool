@@ -7,7 +7,11 @@ cd "$(dirname "$0")"
 
 COMMIT_MSG=${1:-"Sync changes"}
 COMMIT_BODY=${2:-""}
-ANTAMAINE_TOKEN="<REDACTED_PAT>"
+
+if [ -f .env ]; then
+    export $(cat .env | xargs)
+fi
+
 ANTAMAINE_URL="https://antAmaine:${ANTAMAINE_TOKEN}@github.com/antAmaine/RPGX-Translation-Tool.git"
 
 echo "=== 1. Committing to PUBLIC repository (taimanintrash) ==="
