@@ -654,6 +654,68 @@ export async function translateChunkWithContext(host, model, chunkText, previous
 }
 
 /**
+ * Parses stylization mapping output from a model into key/value pairs.
+ * Handles JSON objects, per-line "key":"value" pairs, single-quoted pairs,
+ * and unquoted keys. Returns an array of { key, value }.
+ * Called by: generateStylizationMapWithAI
+ */
+/**
+ * Validates a key/value pair from a stylization mapping output.
+ * Rejects empty keys, keys with newlines, pure-numeric keys, and
+ * object/array values. Returns true if the pair is valid.
+ */
+function isValidMappingPair(key, value) {
+    if (!key || typeof key !== "string") return false;
+    if (key.length === 0 || key.length > 100) return false;
+    if (/\n|\r/.test(key)) return false;
+    if (/^\d+$/.test(key.trim())) return false;
+    if (value === null || typeof value === "object") return false;
+    return true;
+}
+
+function parseMappingOutput(content) {
+    if (!content || !content.trim()) return [];
+    let pairs = [];
+
+    // 1. Try parsing as a JSON object first (most reliable).
+    try {
+        let obj = JSON.parse(content);
+        if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+            for (let [k, v] of Object.entries(obj)) {
+                let val = String(v ?? "");
+                if (isValidMappingPair(k, val)) pairs.push({ key: k, value: val });
+            }
+            if (pairs.length > 0) return pairs;
+        }
+    } catch (e) { /* not a JSON object, fall through to line-by-line */ }
+
+    // 2. Try extracting a JSON object from mixed text (model may wrap it).
+    let jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+        try {
+            let obj = JSON.parse(jsonMatch[0]);
+            if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+                for (let [k, v] of Object.entries(obj)) {
+                    let val = String(v ?? "");
+                    if (isValidMappingPair(k, val)) pairs.push({ key: k, value: val });
+                }
+                if (pairs.length > 0) return pairs;
+            }
+        } catch (e) { /* fall through */ }
+    }
+
+    // 3. Fall back to line-by-line regex matching with flexible quoting.
+    let lines = content.split("\n");
+    for (let line of lines) {
+        let match = line.match(/["']?([^"'\s,:]+)["']?\s*:\s*["']([^"']*)["']/);
+        if (match && isValidMappingPair(match[1], match[2])) {
+            pairs.push({ key: match[1], value: match[2] });
+        }
+    }
+    return pairs;
+}
+
+/**
  * Analyzes source text blocks to discover character stutters, ticks, and punctuation anomalies, formatting them into a stylization mapping list[cite: 7].
  * Called by: HTML event handler / main.js[cite: 7]
  */
@@ -785,17 +847,22 @@ export async function generateStylizationMapWithAI() {
                 const data = await res.json();
                 let content = (data.choices?.[0]?.message?.content || "").replace(/```/g, "").trim();
 
-                let lines = content.split("\n");
-                for (let line of lines) {
-                    let match = line.match(/"([^"]+)"\s*:\s*"([^"]*)"/);
-                    if (match) {
-                        let k = match[1];
-                        let v = match[2];
-                        if (!seenKeys.has(k)) {
-                            seenKeys.add(k);
-                            discoveredArray.push({ key: k, value: v, selected: false });
-                        }
+                // Parse the model output flexibly. Models may return a JSON object,
+                // individual "key":"value" lines, single-quoted pairs, or unquoted keys.
+                let phasePairs = parseMappingOutput(content);
+                for (let { key, value } of phasePairs) {
+                    // Skip if the key already exists in the base heavyStylizationMap.
+                    if (state.heavyStylizationMap && Object.prototype.hasOwnProperty.call(state.heavyStylizationMap, key)) {
+                        console.log(`[Trace:Stylization] Skipping duplicate of base map entry: "${key}"`);
+                        continue;
                     }
+                    // Skip if we already discovered this key (dedup across phases/chunks).
+                    if (seenKeys.has(key)) {
+                        console.log(`[Trace:Stylization] Skipping duplicate discovered key: "${key}"`);
+                        continue;
+                    }
+                    seenKeys.add(key);
+                    discoveredArray.push({ key, value, selected: false });
                 }
             }
         }
