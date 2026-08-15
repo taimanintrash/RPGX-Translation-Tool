@@ -77,12 +77,37 @@ export async function runParameterSweepBenchmark() {
                 }
             }
 
-            let candidateOutput = translatedLines.join("\n");
-            let scoreData = await gradeCandidateAgent(host, model, candidateOutput, referenceStandard);
-            console.log(`[Benchmark Result] Context: ${cLine}, Raw Limit: ${rLimit} | Score: ${scoreData.overallScore}/100`, scoreData);
+            // Chunked grading: split the translated block into fixed-size batches and grade each
+            // chunk independently via the auditor, then average the chunk scores on the backend.
+            // This gives finer-grained signal than a single whole-block grade and isolates where
+            // quality drops within the cell. Lines that are control tags or blank pass through
+            // untranslated and are grouped with their adjacent dialogue for context.
+            const CHUNK_SIZE = 5;
+            let translatedChunks = [];
+            for (let i = 0; i < translatedLines.length; i += CHUNK_SIZE) {
+                translatedChunks.push(translatedLines.slice(i, i + CHUNK_SIZE).join("\n"));
+            }
+
+            let chunkScores = [];
+            for (let ci = 0; ci < translatedChunks.length; ci++) {
+                let chunkScore = await gradeCandidateAgent(host, model, translatedChunks[ci], referenceStandard);
+                console.log(`[Benchmark Chunk] cell(Context=${cLine}, RawLimit=${rLimit}) chunk ${ci + 1}/${translatedChunks.length} -> Score: ${chunkScore.overallScore}/100`, chunkScore);
+                chunkScores.push(chunkScore);
+            }
+
+            // Backend score recomputation: average the per-chunk scores into one cell score.
+            let avg = (arr) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
+            let scoreData = {
+                overallScore: avg(chunkScores.map(s => s.overallScore)),
+                genderScore: avg(chunkScores.map(s => s.genderScore)),
+                semanticScore: avg(chunkScores.map(s => s.semanticScore)),
+                flowScore: avg(chunkScores.map(s => s.flowScore)),
+                feedback: chunkScores.map((s, i) => `Chunk ${i + 1} (${s.overallScore}/100): ${s.feedback}`).join("\n")
+            };
+            console.log(`[Benchmark Result] Context: ${cLine}, Raw Limit: ${rLimit} | Score: ${scoreData.overallScore}/100 (avg of ${chunkScores.length} chunk(s))`, scoreData);
 
             resultsLog += `--------------------------------------------------\n`;
-            resultsLog += `[Config] Context Lines: ${cLine} | Raw Limit: ${rLimit}\n`;
+            resultsLog += `[Config] Context Lines: ${cLine} | Raw Limit: ${rLimit} (${translatedChunks.length} chunk(s) of ${CHUNK_SIZE} lines)\n`;
             resultsLog += `[Overall Score]: ${scoreData.overallScore}/100\n`;
             resultsLog += `  ├── Pronoun/Gender Consistency: ${scoreData.genderScore}/100\n`;
             resultsLog += `  ├── Semantic Fidelity: ${scoreData.semanticScore}/100\n`;
