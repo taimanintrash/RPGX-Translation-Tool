@@ -105,6 +105,15 @@ body {
     gap: 15px;
 }
 
+/* Hide the browser default "No file chosen" label text */
+#fileInput {
+    color: transparent;
+    width: 105px;
+}
+#fileInput::file-selector-button {
+    color: var(--text-primary);
+}
+
 .top-panel-group {
     display: flex;
     align-items: center;
@@ -124,7 +133,7 @@ body {
 .theme-btn-group {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 4px;
 }
 
 @media (max-height: 800px) {
@@ -164,9 +173,9 @@ body {
     gap: 8px;
     align-items: center;
     flex: none;
-    width: 100%;
+    width: 100%; /* forces onto a second line */
     order: 3;
-    min-width: 200px;
+    min-width: 0;
 }
 
 /* @component file-tag-pill: Individual pill element showing loaded file names and removal actions */
@@ -286,10 +295,9 @@ body {
 .translate-config {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-left: auto;
+    gap: 15px; /* give it some breathing room */
     flex-wrap: wrap;
-    max-width: 100%;
+    width: 100%; /* Take full width on next line to prevent premature wrapping */
 }
 
 /* Sub-groups inside translate-config, visually separated */
@@ -301,6 +309,22 @@ body {
 
 
 @media (max-width: 1000px) {
+    .top-panel {
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+    }
+
+    .file-list-box {
+        width: auto !important;
+        flex: 1 1 auto !important;
+        padding: 2px 6px !important;
+        font-size: 10px !important;
+    }
+
+    #globalWarning {
+        display: none !important;
+    }
+
     .sidebar,
     .sidebar-resize-handle {
         display: none !important;
@@ -308,6 +332,60 @@ body {
 
     .mobile-script-select {
         display: block !important;
+    }
+
+    .top-panel button,
+    .compare-selectors button,
+    .compare-selectors select,
+    .compare-selectors input,
+    .file-list-box strong,
+    .file-tag,
+    .compare-selectors label,
+    .compare-selectors span {
+        font-size: 10px !important;
+        padding: 3px 6px !important;
+    }
+
+    .compare-selectors select {
+        flex: none !important;
+        min-width: 0 !important;
+        width: auto !important;
+    }
+
+    #aiServerHost {
+        width: 90px !important;
+    }
+
+    #aiModel {
+        max-width: 90px !important;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+
+    .auto-number-input {
+        padding: 2px 3px !important;
+    }
+
+    #fileInput {
+        width: 80px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
+    #fileInput::file-selector-button {
+        font-size: 10px !important;
+        padding: 3px 6px !important;
+        margin: 0 !important;
+    }
+}
+
+@media (max-width: 1200px) {
+    #aiModel {
+        max-width: 150px;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
     }
 }
 
@@ -319,6 +397,13 @@ body {
     border-radius: 4px;
     background: var(--bg-input);
     color: var(--text-primary);
+}
+
+.mobile-script-select,
+#aiModel,
+#targetLanguage {
+    width: auto !important;
+    max-width: 100%;
 }
 
 /* Auto-sizing number input: flat min-width floor + dynamic calc width from JS */
