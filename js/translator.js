@@ -563,6 +563,15 @@ export async function translateChunkWithContext(host, model, chunkText, previous
         const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(cleanedResult);
         const romajiFragment = isNamePlatePreset ? null : detectRomajiFragment(cleanedResult);
 
+        // Speaker-tag integrity: if the sanitized input carried a [Speaker: Name] marker, the
+        // translated output must preserve it (the model keeps the tag, not drops or translates
+        // it). A dropped tag means the model lost the speaker anchor. This is a hard-fail
+        // condition checked on every retry attempt; if all 5 retries fail to restore the tag,
+        // the existing fallback (operationPresets.retry) takes over.
+        const SPEAKER_TAG_RE = /^(?:\[\s*Speaker\s*:[^\]]*\]\s*)+/i;
+        const inputHasSpeakerTag = SPEAKER_TAG_RE.test(sanitized);
+        const outputLostSpeakerTag = inputHasSpeakerTag && !SPEAKER_TAG_RE.test(cleanedResult);
+
         // Context-leak detection: did any prior context line bleed into the output?
         let hasOldContext = false;
         let leakedContextLine = "";
@@ -596,6 +605,7 @@ export async function translateChunkWithContext(host, model, chunkText, previous
         if (hasJapanese) console.warn(`[Trace:Translate:Detect] Japanese characters still present in output -> will retry.`);
         if (romajiFragment) console.warn(`[Trace:Translate:Detect] Romaji fragment "${romajiFragment}" left in output -> will retry.`);
         if (hasOldContext) console.warn(`[Trace:Translate:Detect] Context leak detected -> output contains a prior context line: "${leakedContextLine.substring(0, 60)}..."`);
+        if (outputLostSpeakerTag) console.warn(`[Trace:Translate:Detect] [Speaker:] marker lost from output -> will retry.`);
 
         // Advisory AI-FAIL warning (attempt > validatorHardFailWindow): log but do not block.
         if (!isNamePlatePreset && !qualityPass && !validatorIsHardFail) {
@@ -604,7 +614,7 @@ export async function translateChunkWithContext(host, model, chunkText, previous
 
         // Hard-fail conditions: Japanese chars, romaji fragment, context leak, or an AI
         // FAIL within the early hard-fail window. Any of these forces a retry.
-        const failedHardCheck = hasJapanese || !!romajiFragment || hasOldContext;
+        const failedHardCheck = hasJapanese || !!romajiFragment || hasOldContext || outputLostSpeakerTag;
         const failedAiHardCheck = validatorIsHardFail && !qualityPass;
 
         if (!failedHardCheck && !failedAiHardCheck) {
@@ -615,7 +625,7 @@ export async function translateChunkWithContext(host, model, chunkText, previous
             }
             return cleanedResult;
         }
-        console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, romajiFragment=${romajiFragment ? `'${romajiFragment}'` : 'none'}, hasOldContext=${hasOldContext}, aiHardFail=${failedAiHardCheck}). Dropping oldest context and retrying.`);
+        console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, romajiFragment=${romajiFragment ? `'${romajiFragment}'` : 'none'}, hasOldContext=${hasOldContext}, outputLostSpeakerTag=${outputLostSpeakerTag}, aiHardFail=${failedAiHardCheck}). Dropping oldest context and retrying.`);
         if (currentContext.length > 0) currentContext.shift();
     }
 }
@@ -871,32 +881,14 @@ export async function translateViaAiServer() {
         let activePresetKey = 'jpEn';
         let translatedCombined = await translateChunkWithContext(host, model, combinedText, currentContextSlice, activePresetKey);
 
-        // Speaker-tag integrity check: if the input carried a [Speaker: ...] context marker,
-        // the translated output must preserve it (the model should keep the tag, not drop or
-        // translate it). A missing tag means the model lost the speaker anchor -> trigger one
-        // retry with the retry preset so pronoun/gender context is not silently lost.
-        const inputHasSpeakerTag = /\[\s*Speaker\s*:/i.test(combinedText);
-        const SPEAKER_TAG_RE = /^(?:\[\s*Speaker\s*:[^\]]*\]\s*)+/i;
-        let outputHasSpeakerTag = SPEAKER_TAG_RE.test(translatedCombined);
-        if (inputHasSpeakerTag && !outputHasSpeakerTag) {
-            console.warn(`[Trace:Translation:SpeakerTag] Output lost the [Speaker:] marker; retrying with retry preset.`);
-            let retryResult = await translateChunkWithContext(host, model, combinedText, currentContextSlice, 'retry');
-            // Accept the retry only if it restored the tag; otherwise keep the original
-            // (best-effort) so a flaky small model cannot stall the whole run.
-            if (SPEAKER_TAG_RE.test(retryResult)) {
-                translatedCombined = retryResult;
-                outputHasSpeakerTag = true;
-            } else {
-                console.warn(`[Trace:Translation:SpeakerTag] Retry also lost the marker; accepting best-effort output.`);
-            }
-        }
-
         // Strip any [Speaker: ...] context marker the model may have echoed or translated back
         // into the output, so only the clean translated dialogue is committed to the file.
-        let committedTranslation = translatedCombined.replace(SPEAKER_TAG_RE, "").trim();
+        // The tag-integrity check (output must preserve the tag when the input had one) is
+        // enforced inside translateChunkWithContext's retry loop as a hard-fail condition.
+        const SPEAKER_TAG_RE = /^(?:\[\s*Speaker\s*:[^\]]*\]\s*)+/i;
+        translatedCombined = translatedCombined.replace(SPEAKER_TAG_RE, "").trim();
         // Also strip a loose "Speaker:" variant some models emit without brackets.
-        committedTranslation = committedTranslation.replace(/^Speaker:\s*[^:\n]+:?\s*/i, "").trim();
-        translatedCombined = committedTranslation;
+        translatedCombined = translatedCombined.replace(/^Speaker:\s*[^:\n]+:?\s*/i, "").trim();
 
         if (state.manualStepByStepMode) {
             translatedLines[dialogueBuffer[0].index] = translatedCombined;
@@ -965,8 +957,8 @@ export async function translateViaAiServer() {
         // Push the final translation to history WITH the speaker tag re-attached so that
         // subsequent lines (and the tiered summary) retain speaker context. The committed
         // output above has the tag stripped; we re-attach it here for history only.
-        if (inputHasSpeakerTag && outputHasSpeakerTag) {
-            // Recover the original speaker marker from the input; fall back to a rebuilt one.
+        const inputHadSpeakerTag = SPEAKER_TAG_RE.test(combinedText);
+        if (inputHadSpeakerTag) {
             const tagMatch = combinedText.match(SPEAKER_TAG_RE);
             const speakerTag = tagMatch ? tagMatch[0].trim() : "[Speaker: Narrator]";
             history.push(`${speakerTag} ${translatedCombined}`);
