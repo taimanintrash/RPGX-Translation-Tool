@@ -521,20 +521,23 @@ export async function translateChunkWithContext(host, model, chunkText, previous
             `- Preserve original character tone and pronoun context.\n` +
             `- Output ONLY the translated string with no filler or preambles.\n\n`;
 
-        if (speakerName) {
-            promptText += `<speaker>${speakerName}</speaker>\n\n`;
-        }
-
         if (currentContext && currentContext.length > 0) {
             promptText += `<history>\n` + currentContext.join("\n") + `\n</history>\n\n`;
         }
 
         promptText += `<current_input>\n${textToTranslate}\n</current_input>\n\nTranslation:`;
 
+        // Inject the speaker into the system prompt (not the user message) so the 3B model
+        // treats it as context/instruction rather than content to echo back in the output.
+        let systemPrompt = activePresetConfig.systemPrompt;
+        if (speakerName) {
+            systemPrompt += ` The current speaker is ${speakerName}. Keep this character's pronouns and gender consistent. Do not include the speaker name or any speaker tags in the output.`;
+        }
+
         const payload = {
             model: model,
             messages: [
-                { role: "system", content: activePresetConfig.systemPrompt },
+                { role: "system", content: systemPrompt },
                 { role: "user", content: promptText }
             ],
             stream: false,
