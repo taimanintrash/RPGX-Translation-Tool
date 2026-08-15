@@ -157,6 +157,7 @@ window.openDebugMenu = openDebugMenu;
 window.switchDebugPage = switchDebugPage;
 window.closeDebugMenu = closeDebugMenu;
 window.closeDebugMenuWithoutSaving = closeDebugMenuWithoutSaving;
+window.saveStylizationMapFromView = saveStylizationMapFromView;
 window.commitApprovedMappingsToMap = commitApprovedMappingsToMap;
 window.deleteSelectedDiscoveredMappings = deleteSelectedDiscoveredMappings;
 window.copyStylizationMapToClipboard = copyStylizationMapToClipboard;
