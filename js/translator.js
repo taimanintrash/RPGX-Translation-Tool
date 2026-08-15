@@ -919,7 +919,7 @@ export async function translateViaAiServer() {
     async function flushBuffer() {
         if (dialogueBuffer.length === 0) return;
 
-        let combinedText = dialogueBuffer.map(item => item.text).join(" ");
+        let combinedText = dialogueBuffer.map(item => item.text).join(" ").replace(/\n/g, " ").trim();
 
         // Tiered context window (Raw Tail -> Recent Summary -> Archival Summary) is built by the
         // shared helper so the production pipeline and benchmark sweep grade under identical conditions.
@@ -1036,9 +1036,11 @@ export async function translateViaAiServer() {
                 translatedLines.push(line);
             }
             else {
-                // Only update the source line display for actual dialogue being translated
-                setCurrentSourceLine(trimmedLine);
-                let textToSendToAi = trimmedLine;
+                // Strip embedded newlines so the source line displays cleanly and the
+                // prompt text is a single coherent string (multi-line breaks confuse the 3B model).
+                let cleanSourceLine = trimmedLine.replace(/\n/g, " ").trim();
+                setCurrentSourceLine(cleanSourceLine);
+                let textToSendToAi = cleanSourceLine;
 
                 if (state.stylizationMode === "strip") {
                     let extractedStylizations = [];
