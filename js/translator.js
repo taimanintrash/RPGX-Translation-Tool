@@ -846,6 +846,16 @@ export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept
             finalUserApprovedName = autoAccept ? aiTranslatedName : await promptUserForNameTranslation(cleanName, aiTranslatedName);
             state.knownNamesMap[cleanName] = finalUserApprovedName;
         }
+
+        // Merge the resolved Japanese name -> English name into the stylization map so that
+        // occurrences of the character's name inside dialogue text are auto-replaced before
+        // translation (strip mode), just like stutters and ticks. This keeps names consistent
+        // across name plates and in-dialogue references without extra model calls.
+        if (cleanName && finalUserApprovedName && cleanName !== finalUserApprovedName) {
+            state.heavyStylizationMap[cleanName] = finalUserApprovedName;
+            console.log(`[Trace:NamePlate] Merged "${cleanName}" -> "${finalUserApprovedName}" into stylization map for in-dialogue auto-replacement.`);
+        }
+
         return {
             namePlateLine: `<NAME_PLATE>"${finalUserApprovedName}"`,
             speakerName: finalUserApprovedName
