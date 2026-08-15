@@ -904,8 +904,15 @@ export async function translateViaAiServer() {
     clearError();
     const host = document.getElementById("aiServerHost").value.trim().replace(/\/+$/, "");
     const model = document.getElementById("aiModel").value;
-    const maxContextLines = parseInt(document.getElementById("contextLinesCount").value) || 0;
-    const rawLimitThreshold = parseInt(document.getElementById("rawContextLimit").value) || 0;
+    // Use the manual-override values applied via the Apply button when present;
+    // otherwise fall back to the main .translate-config inputs. This overrides
+    // the pipeline values without writing back to the UI inputs.
+    const maxContextLines = (state.appliedContextLines !== null && !isNaN(state.appliedContextLines))
+        ? state.appliedContextLines
+        : (parseInt(document.getElementById("contextLinesCount").value) || 0);
+    const rawLimitThreshold = (state.appliedRawLimit !== null && !isNaN(state.appliedRawLimit))
+        ? state.appliedRawLimit
+        : (parseInt(document.getElementById("rawContextLimit").value) || 0);
 
     const selectElement = document.getElementById("scriptSelect");
     const selectRight = document.getElementById("fileSelectRight");

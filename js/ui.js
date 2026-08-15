@@ -747,6 +747,14 @@ export function resolveManualStepContinue() {
  */
 export function applyStepContextSettings() {
     console.log('[Trace:UI] applyStepContextSettings() invoked.');
+    // Store the manual override values in shared state so the main translation
+    // pipeline reads them at translation time, without writing back to the
+    // .translate-config UI inputs.
+    const contextCount = parseInt(document.getElementById("stepContextLinesInput").value) || 0;
+    const rawLimit = parseInt(document.getElementById("stepRawLimitInput").value) || 0;
+    state.appliedContextLines = contextCount;
+    state.appliedRawLimit = rawLimit;
+    console.log(`[Trace:UI] Applied override values -> contextLines=${contextCount}, rawLimit=${rawLimit}`);
     // Recalculate summaries from history with the current manual override settings,
     // then update the preview. This updates the summary state in-place before the
     // next retranslate uses it.
