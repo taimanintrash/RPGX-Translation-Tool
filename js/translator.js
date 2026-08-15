@@ -862,14 +862,27 @@ export async function translateViaAiServer() {
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
                 } else {
-                    // Read the committed translation from translatedLines (the unfiltered
-                    // source of truth), NOT from outputRight.value, whose filtered lines
-                    // drift out of sync with dialogueBuffer[0].index and silently drop
-                    // the real line from history/memory.
-                    let finalManualText = translatedLines[dialogueBuffer[0].index];
-                    if (finalManualText === undefined || finalManualText === "") {
-                        finalManualText = translatedCombined;
+                    // The user edits the translation directly in the outputRight textarea,
+                    // so we MUST read their edited text back from there (not from
+                    // translatedLines, which holds the pre-edit AI output). However,
+                    // outputRight.value is rebuilt with translatedLines.filter(l => l !== ""),
+                    // so its line indices drift from dialogueBuffer[0].index (an index into
+                    // the unfiltered translatedLines). Map the unfiltered target index to its
+                    // position among non-empty lines so we read back the correct edited line
+                    // instead of silently dropping it or grabbing the wrong one.
+                    const targetUnfilteredIndex = dialogueBuffer[0].index;
+                    let nonEmptySeen = -1;
+                    let mappedFilteredIndex = -1;
+                    for (let i = 0; i <= targetUnfilteredIndex && i < translatedLines.length; i++) {
+                        if (translatedLines[i] !== "") {
+                            nonEmptySeen++;
+                            if (i === targetUnfilteredIndex) mappedFilteredIndex = nonEmptySeen;
+                        }
                     }
+                    const displayedLines = outputRight.value.split("\n");
+                    let finalManualText = (mappedFilteredIndex >= 0 && displayedLines[mappedFilteredIndex] !== undefined)
+                        ? displayedLines[mappedFilteredIndex]
+                        : translatedCombined;
                     translatedCombined = finalManualText;
                     keepTranslatingStep = false;
                 }
