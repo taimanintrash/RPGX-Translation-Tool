@@ -691,20 +691,33 @@ export async function generateStylizationMapWithAI() {
             let chunkText = sourceLines.slice(i * 50, (i + 1) * 50).join("\n");
             if (!chunkText.trim()) continue;
 
-            const promptText = `Analyze this visual novel text snippet to find repeated stutters, stylized character ticks, Japanese punctuation, and sound effects.\n` +
+            const promptText = `Analyze this visual novel text snippet to find Japanese punctuation, sound effects, onomatopoeia, and speech stutters/ticks.\n` +
                 `Return lines strictly formatted as pairs:\n` +
                 `"source_pattern":"replacement_string"\n` +
                 `No markdown formatting blocks or extra chatter.\n\n` +
                 `Guidelines:\n` +
-                `- Convert Japanese punctuation to English equivalents (e.g. 、 -> comma, 。 -> ., ー -> -).\n` +
-                `- Translate Japanese sound effects and onomatopoeia to English (e.g. あああ -> Aaaah, きゃあ -> Kyaa).\n` +
-                `- Map speech stutters and ticks to English (e.g. びりびり -> bzz-bzz).\n\n` +
+                `- Convert Japanese punctuation to English equivalents (e.g. \u3001 -> "", \u3002 -> ".", \uff01 -> "!", \uff1f -> "?", \u30fc -> "-", \u2026 -> "...").\n` +
+                `- Translate Japanese sound effects and onomatopoeia to natural English (e.g. \u3042\u3042\u3042 -> Aaaah, \u304d\u3083\u3042 -> Kyaa, \u3073\u308a\u3073\u308a -> bzz-bzz, \u3075\u3075 -> Hehe, \u3050\u306c\u306c -> Grrr).\n` +
+                `- Map speech stutters and repeated-kana ticks to English equivalents (e.g. \u30c3\uff01 -> "!", \u2015\u2015 -> "\u2014").\n` +
+                `- Map character name spellings to their English form (e.g. \u51db\u5b50 -> Rinko, \u71d0 -> Rin).\n\n` +
+                `STRICT RULES (violations make the mapping corrupt the translation):\n` +
+                `- Each source_pattern must be a self-contained punctuation mark, sound effect, stutter, or name \u2014 NEVER a full sentence or dialogue fragment.\n` +
+                `- NEVER output a single kana or a 2-character kana fragment as a pattern (e.g. \u306a, \u306f, \u3060, \u304b, \u3093, \u306e, \u3046) \u2014 they appear inside words and would corrupt them.\n` +
+                `- NEVER output a pattern that contains a sentence-ending punctuation mark (. ! ? \u3002 \uff01 \uff1f) as part of a longer phrase \u2014 if it ends a sentence, it is dialogue, not a tick.\n` +
+                `- NEVER output a pattern mapping to "" unless the pattern is pure punctuation being stripped (e.g. \u3001, \uff0c).\n` +
+                `- NEVER output pronouns (\u4ffa, \u3042\u3044\u3064) or common grammar particles as patterns.\n` +
+                `- Keep replacement strings short and natural; sound effects stay lowercase or capitalized as a word.\n\n` +
                 `Example:\n` +
-                `"、":""\n` +
-                `"！？":"!"\n` +
-                `"あああ":"Aaaah"\n` +
-                `"きゃあ":"Kyaa"\n\n` +
-                `Snippet:\n${chunkText.substring(0, 800)}\n\nOutput:`;
+                `"\u3001":""\n` +
+                `"\u3002":"."\n` +
+                `"\uff01\uff1f":"!"\n` +
+                `"\u30c3\uff01":"!"\n` +
+                `"\u3042\u3042\u3042":"Aaaah"\n` +
+                `"\u304d\u3083\u3042":"Kyaa"\n` +
+                `"\u3073\u308a\u3073\u308a":"bzz-bzz"\n` +
+                `"\u51db\u5b50":"Rinko"\n\n` +
+                `Snippet:\n${chunkText.substring(0, 800)}\n\n` +
+                `Output:`;
 
             const stylizationConfig = operationPresets.stylization || operationPresets.benchmark;
             const payload = {
