@@ -1,4 +1,4 @@
-# RPG Script & Scene Data Viewer, Editor & Dedicated JP-to-EN Translation Suite
+# RPG Script & Scene Data Viewer, Editor & Translation Suite
 
 A lightweight, single-file HTML5 web tool built for visual novel localizers, script editors, and AI translation. It is a dedicated Japanese-to-English translation tool. It allows you to parse, compare, edit, and translate complex game script files locally using OpenAI-compatible local AI servers like **LM Studio**. This tool is specifically engineered and optimized for small local LLMs, and is currently being actively tested and tuned with **Qwen-3B-Instruct**. Note: To modify prompts or validation criteria, edit the JSON preset configuration files in the `default_presets/` directory.
 
@@ -95,6 +95,20 @@ Once the page is open:
     * Click **Re-Translate** with adjusted context lines or raw limits to re-prompt the model.
 * When new character names are encountered in `<NAME_PLATE>`, approve or modify transliterations in the modal dialog.
 * Click **Save File** to export your completed translations.
+
+---
+
+## Prompt Engineering for Small Models
+
+Small local models (like Qwen-2.5-3B) require strict prompt structures to avoid hallucinations and formatting breaks. Follow these guidelines when editing `default_presets/`:
+
+1. **Always Use English**: Write system prompts in English, regardless of the target translation language. Open-weight models follow strict logic best in English. Instructions in other languages increase the risk of conversational drift.
+2. **Rule-Bound Structure**: Avoid generic paragraphs. Establish a persona and append a numbered `RULES:` block.
+3. **Negative Constraints**: Explicitly ban unwanted behaviors (e.g., `Do NOT include explanations`).
+4. **Enforce JSON Rigidity**: When expecting JSON, state `Output strictly in valid JSON format` and explicitly ban markdown wrappers to prevent parsing failures.
+
+**Example Prompt:**
+> "You are a specialized Japanese-to-English game localizer. Translate the dialogue naturally while maintaining character voice and nuance. RULES: 1) Output ONLY the translated English text. 2) Do NOT include any explanations, notes, or preamble. 3) Preserve all original game tags and structural formatting exactly."
 
 ---
 
