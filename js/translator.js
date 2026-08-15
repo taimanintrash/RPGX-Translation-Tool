@@ -482,7 +482,7 @@ export async function assessTranslationQualityWithAI(host, model, translatedText
  * Translates a text chunk or chunk with prior history context using configured system parameters and handles retry logic[cite: 7].
  * Called by: benchmark.js and translator.js[cite: 7]
  */
-export async function translateChunkWithContext(host, model, chunkText, previousContext, presetType = 'jpEn', speakerName = '') {
+export async function translateChunkWithContext(host, model, chunkText, previousContext, presetType = 'jpEn', speakerName = '', tempAdjust = 0) {
     console.log(`[Trace:Translate] translateChunkWithContext(preset="${presetType}", contextLines=${previousContext.length}) invoked.`);
     if (/^<[A-Z_]+>/.test(chunkText.trim()) && !chunkText.includes('"')) {
         console.log('[Trace:Translate] Passing control-tag line through unchanged.');
@@ -537,7 +537,7 @@ export async function translateChunkWithContext(host, model, chunkText, previous
                 { role: "user", content: promptText }
             ],
             stream: false,
-            temperature: activePresetConfig.temperature + (attempts > 1 ? (attempts * 0.1) : 0),
+            temperature: Math.max(0.05, activePresetConfig.temperature + tempAdjust - (attempts > 1 ? ((attempts - 1) * 0.05) : 0)),
             max_tokens: 1024,
             chat_template_kwargs: { "enable_thinking": false }
         };
@@ -579,7 +579,12 @@ export async function translateChunkWithContext(host, model, chunkText, previous
         let leakedContextLine = "";
 
         for (let ctxLine of currentContext) {
-            let cleanCtx = ctxLine.trim();
+            // Strip the [Speaker: Name] prefix history entries carry so the leak check
+            // compares the actual translation text. Without this, a context line like
+            // "[Speaker: Rinko] Stupidly asking..." never matched an output of
+            // "Stupidly asking..." because the prefix pushed the snippet past the
+            // matching text.
+            let cleanCtx = ctxLine.trim().replace(/^\[Speaker: [^\]]+\]\s*/, "");
             if (cleanCtx.length > 15) {
                 let sampleSize = Math.min(cleanCtx.length, 25);
                 let contextSnippet = cleanCtx.substring(0, sampleSize);
