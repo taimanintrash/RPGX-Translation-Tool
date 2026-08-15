@@ -216,10 +216,12 @@ export async function fetchAiModels() {
  * Called by: translator.js (translateViaAiServer)[cite: 7]
  */
 export function wrapTextToLines(text, maxLineLength = 40) {
-    const words = text.split(" ");
+    // Split on any whitespace (including newlines) so multi-line input is handled
+    // correctly. The previous split(" ") kept embedded newlines glued to words
+    // (e.g. "the\ncar" treated as one token), corrupting wrapped output.
+    const words = text.split(/\s+/).filter(Boolean);
     let lines = [];
     let currentLine = "";
-
     for (let word of words) {
         if ((currentLine + " " + word).trim().length <= maxLineLength) {
             currentLine = (currentLine + " " + word).trim();
@@ -863,26 +865,33 @@ export async function translateViaAiServer() {
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
                 } else {
                     // The user edits the translation directly in the outputRight textarea,
-                    // so we MUST read their edited text back from there (not from
-                    // translatedLines, which holds the pre-edit AI output). However,
-                    // outputRight.value is rebuilt with translatedLines.filter(l => l !== ""),
-                    // so its line indices drift from dialogueBuffer[0].index (an index into
-                    // the unfiltered translatedLines). Map the unfiltered target index to its
-                    // position among non-empty lines so we read back the correct edited line
-                    // instead of silently dropping it or grabbing the wrong one.
+                    // so read their edited text back from there. A single translatedLines
+                    // entry may span multiple display lines (multi-line narration), so we
+                    // cannot map to a single display-line index. Instead, reconstruct the
+                    // display block for the target entry by replaying the same
+                    // filter(l !== "") + join("\n") order and capturing every display line
+                    // that belongs to dialogueBuffer[0].index.
                     const targetUnfilteredIndex = dialogueBuffer[0].index;
-                    let nonEmptySeen = -1;
-                    let mappedFilteredIndex = -1;
-                    for (let i = 0; i <= targetUnfilteredIndex && i < translatedLines.length; i++) {
-                        if (translatedLines[i] !== "") {
-                            nonEmptySeen++;
-                            if (i === targetUnfilteredIndex) mappedFilteredIndex = nonEmptySeen;
-                        }
-                    }
                     const displayedLines = outputRight.value.split("\n");
-                    let finalManualText = (mappedFilteredIndex >= 0 && displayedLines[mappedFilteredIndex] !== undefined)
-                        ? displayedLines[mappedFilteredIndex]
-                        : translatedCombined;
+                    let displayCursor = 0;
+                    let blockStart = -1;
+                    let blockEnd = -1;
+                    for (let i = 0; i < translatedLines.length; i++) {
+                        if (translatedLines[i] === "") continue;
+                        const entryLineCount = translatedLines[i].split("\n").length;
+                        if (i === targetUnfilteredIndex) {
+                            blockStart = displayCursor;
+                            blockEnd = displayCursor + entryLineCount;
+                            break;
+                        }
+                        displayCursor += entryLineCount;
+                    }
+                    let finalManualText;
+                    if (blockStart >= 0 && blockEnd <= displayedLines.length) {
+                        finalManualText = displayedLines.slice(blockStart, blockEnd).join("\n");
+                    } else {
+                        finalManualText = translatedCombined;
+                    }
                     translatedCombined = finalManualText;
                     keepTranslatingStep = false;
                 }
