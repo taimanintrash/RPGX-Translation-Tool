@@ -679,12 +679,19 @@ export async function generateStylizationMapWithAI() {
             let chunkText = sourceLines.slice(i * 50, (i + 1) * 50).join("\n");
             if (!chunkText.trim()) continue;
 
-            const promptText = `Analyze this visual novel text snippet to find repeated stutters, stylized character ticks, and punctuation anomalies.\n` +
+            const promptText = `Analyze this visual novel text snippet to find repeated stutters, stylized character ticks, Japanese punctuation, and sound effects.\n` +
                 `Return lines strictly formatted as pairs:\n` +
                 `"source_pattern":"replacement_string"\n` +
-                `No markdown formatting blocks or extra chatter. Example:\n` +
+                `No markdown formatting blocks or extra chatter.\n\n` +
+                `Guidelines:\n` +
+                `- Convert Japanese punctuation to English equivalents (e.g. 、 -> comma, 。 -> ., ー -> -).\n` +
+                `- Translate Japanese sound effects and onomatopoeia to English (e.g. あああ -> Aaaah, きゃあ -> Kyaa).\n` +
+                `- Map speech stutters and ticks to English (e.g. びりびり -> bzz-bzz).\n\n` +
+                `Example:\n` +
                 `"、":""\n` +
-                `"！？":"!"\n\n` +
+                `"！？":"!"\n` +
+                `"あああ":"Aaaah"\n` +
+                `"きゃあ":"Kyaa"\n\n` +
                 `Snippet:\n${chunkText.substring(0, 800)}\n\nOutput:`;
 
             const stylizationConfig = operationPresets.stylization || operationPresets.benchmark;
