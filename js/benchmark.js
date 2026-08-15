@@ -82,7 +82,7 @@ export async function runParameterSweepBenchmark() {
             // This gives finer-grained signal than a single whole-block grade and isolates where
             // quality drops within the cell. Lines that are control tags or blank pass through
             // untranslated and are grouped with their adjacent dialogue for context.
-            const CHUNK_SIZE = 5;
+            const CHUNK_SIZE = Math.max(1, parseInt(document.getElementById("benchmarkChunkSizeInput")?.value, 10) || 5);
             let translatedChunks = [];
             for (let i = 0; i < translatedLines.length; i += CHUNK_SIZE) {
                 translatedChunks.push(translatedLines.slice(i, i + CHUNK_SIZE).join("\n"));
