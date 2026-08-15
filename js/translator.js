@@ -579,7 +579,12 @@ export async function translateChunkWithContext(host, model, chunkText, previous
         let leakedContextLine = "";
 
         for (let ctxLine of currentContext) {
-            let cleanCtx = ctxLine.trim();
+            // Strip the [Speaker: Name] prefix history entries carry so the leak check
+            // compares the actual translation text. Without this, a context line like
+            // "[Speaker: Rinko] Stupidly asking..." never matched an output of
+            // "Stupidly asking..." because the prefix pushed the snippet past the
+            // matching text.
+            let cleanCtx = ctxLine.trim().replace(/^\[Speaker: [^\]]+\]\s*/, "");
             if (cleanCtx.length > 15) {
                 let sampleSize = Math.min(cleanCtx.length, 25);
                 let contextSnippet = cleanCtx.substring(0, sampleSize);
