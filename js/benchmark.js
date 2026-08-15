@@ -10,7 +10,12 @@ export async function runParameterSweepBenchmark() {
     console.log('[Trace:Benchmark] runParameterSweepBenchmark() invoked.');
     const host = document.getElementById("aiServerHost").value.trim().replace(/\/+$/, "");
     const model = document.getElementById("aiModel").value;
-    const sourceText = document.getElementById("outputAreaLeft").value;
+    // Prefer a dedicated benchmark text input (debug page 2) when populated,
+    // otherwise fall back to the Source 1 output area.
+    const benchmarkTextInput = document.getElementById("benchmarkTextInput");
+    const sourceText = (benchmarkTextInput && benchmarkTextInput.value.trim())
+        ? benchmarkTextInput.value
+        : document.getElementById("outputAreaLeft").value;
 
     const refFileIdx = document.getElementById("benchmarkRefFileSelect").value;
     const refSceneId = document.getElementById("benchmarkRefSceneSelect").value;
@@ -33,7 +38,12 @@ export async function runParameterSweepBenchmark() {
 
     console.log("[Benchmark] Starting parameter sweep matrix...", { contextValues, rawLimitValues, model });
     reportBox.value = "⏳ Running parameter sweep matrix with granular multi-dimensional inconsistency auditing...\n";
-    let lines = sourceText.split("\n").slice(0, 15);
+    // Respect the debug "Limit Max Lines to Translate" setting from page 1.
+    // 0 (or unset) means no limit; otherwise cap the benchmark line count.
+    const maxLinesLimit = state.debugMaxLinesLimit > 0 ? state.debugMaxLinesLimit : 0;
+    let allLines = sourceText.split("\n");
+    let lines = maxLinesLimit > 0 ? allLines.slice(0, maxLinesLimit) : allLines;
+    console.log(`[Benchmark] Using ${lines.length} line(s) (maxLinesLimit=${maxLinesLimit}).`);
     let resultsLog = "";
 
     for (let cLine of contextValues) {
@@ -116,8 +126,10 @@ async function gradeCandidateAgent(host, model, candidateText, referenceText) {
         });
 
         if (!res.ok) {
-            console.error("[Agent Evaluation HTTP Error]", res.status);
-            return { overallScore: 0, genderScore: 0, semanticScore: 0, flowScore: 0, feedback: `HTTP ${res.status} Error` };
+            let errBody = "";
+            try { errBody = await res.text(); } catch (_) {}
+            console.error("[Agent Evaluation HTTP Error]", res.status, errBody);
+            return { overallScore: 0, genderScore: 0, semanticScore: 0, flowScore: 0, feedback: `HTTP ${res.status} Error: ${errBody.substring(0, 200)}` };
         }
 
         const data = await res.json();
