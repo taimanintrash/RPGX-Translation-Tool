@@ -420,8 +420,16 @@ export async function assessTranslationQualityWithAI(host, model, translatedText
         });
         if (!res.ok) return true; // Fail open
         const data = await res.json();
-        const content = data.choices?.[0]?.message?.content || "";
-        return !content.toUpperCase().includes('FAIL');
+        const content = (data.choices?.[0]?.message?.content || "").trim();
+        // Qwen2.5-3B often returns prose, lowercase, trailing punctuation, or echoes the
+        // instruction text ("Return 'FAIL' if..."). Treat the validator as advisory: only
+        // a clean, standalone FAIL verdict (possibly with minor surrounding punctuation)
+        // counts as a real failure. Anything else (PASS, prose, empty, echoed instructions)
+        // is treated as a pass so the deterministic Japanese/context checks remain the gate.
+        const upper = content.toUpperCase();
+        const isExplicitFail = /^\s*(?:RESULT:?\s*)?FAIL[\s.!?]*$/.test(upper);
+        const isEchoedInstruction = upper.includes("RETURN 'FAIL'") || upper.includes('RETURN "FAIL"');
+        return !isExplicitFail || isEchoedInstruction;
     } catch (e) {
         console.warn("[Trace:Validator] Error evaluating translation quality:", e);
         return true;
@@ -502,11 +510,14 @@ export async function translateChunkWithContext(host, model, chunkText, previous
 
         // --- jp->en validation checks ---
         const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(cleanedResult);
-        const qualityPass = await assessTranslationQualityWithAI(host, model, cleanedResult);
-        
-        console.log(`[Trace:Translate:Detect] hasJapanese=${hasJapanese}, qualityPass=${qualityPass}, contextLines=${currentContext.length}`);
-        if (hasJapanese) console.warn(`[Trace:Translate:Detect] Japanese characters still present in output -> will retry.`);
-        if (!qualityPass) console.warn(`[Trace:Translate:Detect] AI validation failed -> poor localization or fragments detected.`);
+
+        // The AI validator is advisory for small models (e.g. Qwen2.5-3B) that cannot
+        // reliably emit clean PASS/FAIL tokens. The deterministic Japanese + context-leak
+        // checks below are the primary gate. Skip the validator entirely for namePlate
+        // chunks: a single transliterated token has no localization quality to grade beyond
+        // the Japanese-character check, and the extra round-trip only wastes time/retries.
+        const isNamePlatePreset = presetType === 'namePlate';
+        const qualityPass = isNamePlatePreset ? true : await assessTranslationQualityWithAI(host, model, cleanedResult);
 
         // Context-leak detection: did any prior context line bleed into the output?
         let hasOldContext = false;
@@ -524,10 +535,21 @@ export async function translateChunkWithContext(host, model, chunkText, previous
                 }
             }
         }
-        if (hasOldContext) console.warn(`[Trace:Translate:Detect] Context leak detected -> output contains a prior context line: "${leakedContextLine.substring(0, 60)}..."`);
 
-        if (!hasJapanese && !hasOldContext && qualityPass) {
-            console.log(`[Trace:Translate:Pass] Output passed all checks (no Japanese, no context leak, passed AI validation). Accepting translation.`);
+        console.log(`[Trace:Translate:Detect] hasJapanese=${hasJapanese}, qualityPass=${qualityPass} (validator=${!isNamePlatePreset}), hasOldContext=${hasOldContext}, contextLines=${currentContext.length}`);
+        if (hasJapanese) console.warn(`[Trace:Translate:Detect] Japanese characters still present in output -> will retry.`);
+        if (hasOldContext) console.warn(`[Trace:Translate:Detect] Context leak detected -> output contains a prior context line: "${leakedContextLine.substring(0, 60)}..."`);
+        if (!qualityPass) console.warn(`[Trace:Translate:Detect] AI validation failed -> poor localization or fragments detected.`);
+
+        // Accept when the deterministic checks pass. The advisory validator alone cannot
+        // block acceptance of a Japanese-free, leak-free output, because small models flip
+        // it to FAIL spuriously on perfectly good translations (e.g. "Menchi").
+        if (!hasJapanese && !hasOldContext) {
+            if (!qualityPass) {
+                console.log(`[Trace:Translate:Pass] Accepting translation despite advisory AI FAIL (deterministic checks passed; validator advisory only).`);
+            } else {
+                console.log(`[Trace:Translate:Pass] Output passed all checks (no Japanese, no context leak, passed AI validation). Accepting translation.`);
+            }
             return cleanedResult;
         }
         console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, hasOldContext=${hasOldContext}, qualityPass=${qualityPass}). Dropping oldest context and retrying.`);
@@ -782,7 +804,14 @@ export async function translateViaAiServer() {
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
                 } else {
-                    let finalManualText = outputRight.value.split("\n")[dialogueBuffer[0].index] || translatedCombined;
+                    // Read the committed translation from translatedLines (the unfiltered
+                    // source of truth), NOT from outputRight.value, whose filtered lines
+                    // drift out of sync with dialogueBuffer[0].index and silently drop
+                    // the real line from history/memory.
+                    let finalManualText = translatedLines[dialogueBuffer[0].index];
+                    if (finalManualText === undefined || finalManualText === "") {
+                        finalManualText = translatedCombined;
+                    }
                     translatedCombined = finalManualText;
                     keepTranslatingStep = false;
                 }

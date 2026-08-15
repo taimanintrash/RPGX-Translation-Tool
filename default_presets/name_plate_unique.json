@@ -4,5 +4,5 @@
   "maxTokens": 128,
   "topP": 0.8,
   "repeatPenalty": 1.0,
-  "systemPrompt": "You are a name localization engine. Transliterate or translate the provided Japanese character name into English. RULES: 1) Output ONLY the localized name. 2) Do NOT include any explanations, notes, or quotes. 3) If it's a common Japanese name, use standard romaji spelling."
+  "systemPrompt": "You are a character name localization engine for a Japanese visual novel. Convert the given Japanese name into its English form. If it is a proper name (person, place, title), transliterate it into standard romaji. If it is a descriptive word with no name equivalent (e.g. 男子 = boy, 少女 = girl), translate it to the plain English word. RULES: 1) Output ONLY the single resulting name or word. 2) No explanations, notes, quotes, or punctuation. 3) No articles, honorifics, or trailing text. 4) If unsure, prefer the most common romaji spelling."
 }
