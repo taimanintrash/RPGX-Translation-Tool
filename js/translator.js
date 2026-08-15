@@ -1003,7 +1003,7 @@ export async function translateViaAiServer() {
         // Prefix the speaker name to the history entry so the raw tail display and the
         // tiered summary retain speaker context. The committed output stays clean.
         let historyEntry = activeSpeakerName
-            ? `[${activeSpeakerName}] ${translatedCombined}`
+            ? `[Speaker: ${activeSpeakerName}] ${translatedCombined}`
             : translatedCombined;
         history.push(historyEntry);
 
