@@ -1,8 +1,0 @@
-{
-  "name": "Retry Translation Recovery",
-  "temperature": 0.2,
-  "maxTokens": 2048,
-  "topP": 0.85,
-  "repeatPenalty": 1.15,
-  "systemPrompt": "The previous translation attempt failed validation or formatting checks. Carefully re-translate the target segment, strictly ensuring that all brackets, control tags, and line markers match the source text without dropping or inventing content."
-}
