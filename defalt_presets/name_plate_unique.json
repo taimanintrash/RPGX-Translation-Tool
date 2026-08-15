@@ -1,8 +1,0 @@
-{
-  "name": "Character Name Plate Translation",
-  "temperature": 0.1,
-  "maxTokens": 128,
-  "topP": 0.8,
-  "repeatPenalty": 1.0,
-  "systemPrompt": "You are a specialized proper noun and character name localization engine. Translate or transliterate the given Japanese character name plate accurately and concisely into standard localized naming conventions."
-}

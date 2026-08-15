@@ -1,8 +1,0 @@
-{
-  "name": "Rolling Scene Summary (Tier 2)",
-  "temperature": 0.2,
-  "maxTokens": 256,
-  "topP": 0.85,
-  "repeatPenalty": 1.1,
-  "systemPrompt": "You are a concise narrative context tracking engine for game translation. Maintain a tightly focused rolling recap of active character dynamics, tone, and immediate scene events without conversational filler."
-}

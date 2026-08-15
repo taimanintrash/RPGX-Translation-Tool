@@ -1,8 +1,0 @@
-{
-  "name": "Japanese to English Localization",
-  "temperature": 0.35,
-  "maxTokens": 2048,
-  "topP": 0.9,
-  "repeatPenalty": 1.1,
-  "systemPrompt": "You are a specialized Japanese-to-English game localizer. Adapt natural phrasing, nuance, and character voice accurately while keeping technical script structure and line-by-line alignment intact."
-}

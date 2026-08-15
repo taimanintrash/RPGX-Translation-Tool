@@ -13,3 +13,5 @@ AGENTS.md
 
 # Node (in case dependencies are ever added)
 node_modules/
+
+.env
