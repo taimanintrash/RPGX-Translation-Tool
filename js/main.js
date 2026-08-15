@@ -38,7 +38,7 @@ import { initDraggableModal } from './ui.js';
 import { refreshApplicationState, renderComparisonViews } from './parser.js';
 import { loadFiles, removeFile, onSelectID, onSelectIDMobile, onCompareSelectionChange, saveEditsToMemory, injectTranslationToRight, downloadFile, updateBenchmarkSceneDropdown } from './parser.js';
 import { fetchAiModels, translateViaAiServer, stopTranslation, generateStylizationMapWithAI, loadSpecificPreset, loadDefaultPreset, loadAllDefaultPresets } from './translator.js';
-import { openDebugMenu, switchDebugPage, closeDebugMenu, closeDebugMenuWithoutSaving, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, copyStylizationMapToClipboard, toggleDiscoveredSelection, setAllDiscoveredSelection, updateDiscoveredKey, updateDiscoveredVal, resolveNameModal, closeNameModal, resolveManualStepContinue, triggerStepRetranslation, syncManualStepUIVisibility, syncManualStepModeLive, initPaneResizer, initAutoNumberInputs } from './ui.js';
+import { openDebugMenu, switchDebugPage, closeDebugMenu, closeDebugMenuWithoutSaving, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, copyStylizationMapToClipboard, toggleDiscoveredSelection, setAllDiscoveredSelection, updateDiscoveredKey, updateDiscoveredVal, resolveNameModal, closeNameModal, resolveManualStepContinue, triggerStepRetranslation, applyStepContextSettings, syncManualStepUIVisibility, syncManualStepModeLive, initPaneResizer, initAutoNumberInputs } from './ui.js';
 import { runParameterSweepBenchmark } from './benchmark.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
