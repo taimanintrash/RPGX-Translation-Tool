@@ -1,6 +1,6 @@
 import { state } from './main.js';
 import { saveUIStateToCache } from './database.js';
-import { defaultPresetManifest } from './translator.js';
+import { defaultPresetManifest, buildTieredContextWindow } from './translator.js';
 
 /**
  * Initializes mouse drag-and-drop mechanics for the floating debug modal window[cite: 7].
@@ -401,7 +401,7 @@ export function closeNameModal() {
  * Recomputes the context-preview dropdown from the stored full history + current step settings.
  * Called by: ui.js (promptUserForManualStep, input change listeners)
  */
-function refreshStepContextPreview(currentContextWindow) {
+async function refreshStepContextPreview(currentContextWindow) {
     const ctxLines = parseInt(document.getElementById("stepContextLinesInput")?.value) || state._stepMaxCtxDefault || 0;
     const rawLimit = parseInt(document.getElementById("stepRawLimitInput")?.value) || 0;
 
@@ -411,24 +411,44 @@ function refreshStepContextPreview(currentContextWindow) {
     const recentSourceBox = document.getElementById("stepRecentSummarySourceText");
 
     const history = state._stepFullHistory || [];
-    const summaryContext = state._stepSummaryContext || {};
+
+    // Recalculate the tiered summaries from the beginning of the full history, going
+    // step by step through the raw-tail window (same logic as flushBuffer). This ensures
+    // the manual override's summary preview reflects the actual production state rather
+    // than a stale snapshot.
+    const host = document.getElementById("aiServerHost")?.value.trim().replace(/\/+$/, "") || "";
+    const model = document.getElementById("aiModel")?.value || "";
+    let summaryState = {
+        archivalSummary: "",
+        recentSummary: "",
+        recentSummarySourceLines: [],
+        summarizedUpToIndex: 0
+    };
+
+    if (host && model && history.length > 0) {
+        // Replay the history through buildTieredContextWindow to reconstruct summaries.
+        for (let i = 0; i < history.length; i++) {
+            let partialHistory = history.slice(0, i + 1);
+            await buildTieredContextWindow(host, model, partialHistory, ctxLines, rawLimit, summaryState);
+        }
+    }
 
     if (archivalBox) {
-        archivalBox.value = summaryContext.archivalSummary || "";
+        archivalBox.value = summaryState.archivalSummary || "";
     }
     if (recentBox) {
-        recentBox.value = summaryContext.recentSummary || "";
+        recentBox.value = summaryState.recentSummary || "";
     }
     if (recentSourceBox) {
-        const sourceLines = summaryContext.recentSummarySourceLines || [];
-        recentSourceBox.value = sourceLines.map((line, i) => `[${i}] ${line}`).join("\n") || "";
+        recentSourceBox.value = (summaryState.recentSummarySourceLines || [])
+            .map((line, i) => `[${i}] ${line}`).join("\n") || "";
     }
     if (rawBox) {
         const activeRaw = history.slice(Math.max(0, history.length - rawLimit));
         rawBox.value = activeRaw.map((line, i) => `[${i}] ${line}`).join("\n") || "";
     }
 
-    console.log(`[Trace:UI] Context preview refreshed.`);
+    console.log(`[Trace:UI] Context preview refreshed (summaries recalculated from history).`);
 }
 
 /**
@@ -654,7 +674,7 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
         state._stepMaxCtxDefault = maxContextLinesDefault || 0;
 
         // Initial population + live refresh of the context preview.
-        refreshStepContextPreview(currentContextWindow);
+        refreshStepContextPreview(currentContextWindow).catch(e => console.warn('[Trace:UI] Preview refresh failed:', e));
         const ctxInput = document.getElementById("stepContextLinesInput");
         const rawInput = document.getElementById("stepRawLimitInput");
 
@@ -662,16 +682,23 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
         const handleContextLinesChange = (inputEl, oldVal) => {
             if (window.confirm("Changing context settings will recompute the active summaries and context window. Are you sure?")) {
                 inputEl.dataset.oldValue = inputEl.value;
-                refreshStepContextPreview();
+                refreshStepContextPreview().catch(e => console.warn('[Trace:UI] Preview refresh failed:', e));
             } else {
                 inputEl.value = inputEl.dataset.oldValue || oldVal;
             }
         };
-        // Raw-lines change is non-destructive: it only reshapes the raw tail preview,
-        // so update silently without a confirmation prompt.
+        // Raw-lines change only reshapes the raw tail display — no summary recalculation
+        // (that only happens on context-lines change). Update the raw box directly.
         const handleRawLinesChange = (inputEl) => {
             inputEl.dataset.oldValue = inputEl.value;
-            refreshStepContextPreview();
+            const rawLimit = parseInt(inputEl.value) || 0;
+            const rawBox = document.getElementById("stepRawContextText");
+            const history = state._stepFullHistory || [];
+            if (rawBox) {
+                const activeRaw = history.slice(Math.max(0, history.length - rawLimit));
+                rawBox.value = activeRaw.map((line, i) => `[${i}] ${line}`).join("\n") || "";
+            }
+            console.log(`[Trace:UI] Raw tail preview updated (no summary recalc).`);
         };
 
         if (ctxInput) {

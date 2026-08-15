@@ -64,9 +64,6 @@ export async function runParameterSweepBenchmark() {
                 summarizedUpToIndex: 0
             };
 
-            // Speaker-tag regex shared with the production strip/push logic.
-            const SPEAKER_TAG_RE = /^(?:\[\s*Speaker\s*:[^\]]*\]\s*)+/i;
-
             for (let line of lines) {
                 let trimmed = line.trim();
 
@@ -80,24 +77,14 @@ export async function runParameterSweepBenchmark() {
                 } else if (trimmed.startsWith("<") || trimmed === "") {
                     translatedLines.push(line);
                 } else {
-                    // Prefix the active speaker as a tagged context marker, mirroring production,
-                    // so the model knows who is speaking and keeps pronouns/gender consistent.
-                    let textWithSpeaker = activeSpeakerName
-                        ? `[Speaker: ${activeSpeakerName}] ${trimmed}`
-                        : trimmed;
-
                     let currentContextSlice = await buildTieredContextWindow(
                         host, model, history, cLine, rLimit, summaryState
                     );
-                    let res = await translateChunkWithContext(host, model, textWithSpeaker, currentContextSlice, 'jpEn');
-
-                    // Push to history WITH the speaker tag retained so subsequent lines (and the
-                    // tiered summary) retain speaker context, then strip the tag for the committed
-                    // output — identical to the production flushBuffer flow.
+                    // Speaker is passed as a parameter to translateChunkWithContext (injected into
+                    // the system prompt), not as an inline tag in the text.
+                    let res = await translateChunkWithContext(host, model, trimmed, currentContextSlice, 'jpEn', activeSpeakerName);
                     history.push(res);
-                    let committed = res.replace(SPEAKER_TAG_RE, "").trim();
-                    committed = committed.replace(/^Speaker:\s*[^:\n]+:?\s*/i, "").trim();
-                    translatedLines.push(committed);
+                    translatedLines.push(res);
                 }
             }
 
