@@ -1146,5 +1146,9 @@ export async function translateViaAiServer() {
         }
     } finally {
         state.currentAbortController = null;
+        // Source 1 is fully translated (or the run ended), so clear the manual
+        // override values. The next translation reads from .translate-config again.
+        state.appliedContextLines = null;
+        state.appliedRawLimit = null;
     }
 }
