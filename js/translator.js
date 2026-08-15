@@ -482,7 +482,7 @@ export async function assessTranslationQualityWithAI(host, model, translatedText
  * Translates a text chunk or chunk with prior history context using configured system parameters and handles retry logic[cite: 7].
  * Called by: benchmark.js and translator.js[cite: 7]
  */
-export async function translateChunkWithContext(host, model, chunkText, previousContext, presetType = 'jpEn') {
+export async function translateChunkWithContext(host, model, chunkText, previousContext, presetType = 'jpEn', speakerName = '') {
     console.log(`[Trace:Translate] translateChunkWithContext(preset="${presetType}", contextLines=${previousContext.length}) invoked.`);
     if (/^<[A-Z_]+>/.test(chunkText.trim()) && !chunkText.includes('"')) {
         console.log('[Trace:Translate] Passing control-tag line through unchanged.');
@@ -508,13 +508,9 @@ export async function translateChunkWithContext(host, model, chunkText, previous
             console.warn(`[Fallback] Max retries (${maxRetries}) reached for chunk: "${sanitized}". Activating retry preset fallback.`);
         }
 
-        // Extract any [Speaker: Name] marker from the input so it can be passed as
-        // separate context rather than inline. A 3B model treats an inline tag as
-        // content to translate/echo, corrupting the output.
-        const SPEAKER_TAG_RE = /^(?:\[\s*Speaker\s*:[^\]]*\]\s*)+/i;
-        let speakerTagMatch = sanitized.match(SPEAKER_TAG_RE);
-        let speakerName = speakerTagMatch ? speakerTagMatch[0].replace(/\[\s*Speaker\s*:\s*|\s*\]/gi, "").trim() : "";
-        let textToTranslate = sanitized.replace(SPEAKER_TAG_RE, "").trim();
+        // The speaker name is passed as a parameter (from resolveNamePlate) and injected
+        // into the system prompt. No inline [Speaker:] tag is added to the text.
+        let textToTranslate = sanitized;
 
         let promptText = `Task: Translate the visual novel text block.\n` +
             `Rules:\n` +
@@ -938,13 +934,7 @@ export async function translateViaAiServer() {
         });
 
         let activePresetKey = 'jpEn';
-        let translatedCombined = await translateChunkWithContext(host, model, combinedText, currentContextSlice, activePresetKey);
-
-        // Safety net: strip any [Speaker: ...] marker the model may have echoed, though the
-        // tag is now extracted from the input before prompting so it should not appear.
-        const SPEAKER_TAG_RE = /^(?:\[\s*Speaker\s*:[^\]]*\]\s*)+/i;
-        translatedCombined = translatedCombined.replace(SPEAKER_TAG_RE, "").trim();
-        translatedCombined = translatedCombined.replace(/^Speaker:\s*[^:\n]+:?\s*/i, "").trim();
+        let translatedCombined = await translateChunkWithContext(host, model, combinedText, currentContextSlice, activePresetKey, activeSpeakerName);
 
         if (state.manualStepByStepMode) {
             translatedLines[dialogueBuffer[0].index] = translatedCombined;
@@ -972,7 +962,7 @@ export async function translateViaAiServer() {
                         ? stepFormattedContext.slice(Math.max(0, stepFormattedContext.length - stepResult.newContextCount))
                         : [];
                     console.log(`[Trace:Translation] Re-translate step: contextLines=${stepResult.newContextCount}, rawLimit=${stepRawLimit}, windowSize=${updatedContextWindow.length}`);
-                    translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry');
+                    translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry', activeSpeakerName);
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
                 } else {
@@ -1010,14 +1000,7 @@ export async function translateViaAiServer() {
             }
         }
 
-        // Push the final translation to history WITH the speaker tag re-attached from the
-        // input so that subsequent lines (and the tiered summary) retain speaker context.
-        const inputSpeakerMatch = combinedText.match(SPEAKER_TAG_RE);
-        if (inputSpeakerMatch) {
-            history.push(`${inputSpeakerMatch[0].trim()} ${translatedCombined}`);
-        } else {
-            history.push(translatedCombined);
-        }
+        history.push(translatedCombined);
 
         let wrappedLines = wrapTextToLines(translatedCombined, 42);
 
@@ -1079,14 +1062,10 @@ export async function translateViaAiServer() {
                     textToSendToAi = `[Note: Contains stylized/stuttering expressions] ${trimmedLine}`;
                 }
 
-                let textWithSpeaker = textToSendToAi;
-                if (activeSpeakerName) {
-                    // Prepend the active speaker as a tagged context marker so the model knows who
-                    // is speaking. The marker is stripped from the final translated output in
-                    // flushBuffer() so it never reaches the committed translation.
-                    textWithSpeaker = `[Speaker: ${activeSpeakerName}] ${textToSendToAi}`;
-                }
-                dialogueBuffer.push({ index: translatedLines.length, text: textWithSpeaker });
+                // The speaker is injected into the system prompt inside translateChunkWithContext,
+                // so the dialogue text is passed clean — no inline [Speaker:] tag that the
+                // model might echo back.
+                dialogueBuffer.push({ index: translatedLines.length, text: textToSendToAi });
                 translatedLines.push("");
             }
             outputRight.value = translatedLines.filter(l => l !== "").join("\n");
