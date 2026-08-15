@@ -394,20 +394,23 @@ export async function summarizeOldContext(host, model, linesToSummarize) {
 }
 
 /**
- * Curated list of common Japanese words that frequently bleed untranslated into English
- * output as romaji (e.g. "nani", "baka", "sensei"). Matched as whole-word tokens so
- * substrings inside legitimate English words are not flagged. This is a deterministic
- * hard-gate: any match forces a retry on every attempt.
- * Extend this list as you observe new fragments the model leaves untranslated.
+ * Curated list of Japanese words that frequently bleed untranslated into English
+ * output as romaji when the model fails to translate (e.g. "nani", "baka",
+ * "matte"). Matched as whole-word tokens so substrings inside legitimate English
+ * words are not flagged. This is a deterministic hard-gate: any match forces a
+ * retry on every attempt.
+ *
+ * Intentionally EXCLUDES words commonly kept untranslated in English VN/anime
+ * localization: honorifics/titles (sensei, senpai, kouhai, onii-chan, onee-chan),
+ * loanwords (otaku, moe, kawaii, sugoi), and trope terms (ecchi, hentai, tsundere,
+ * yandere, kuudere). These are valid English usage in this context and must not
+ * trigger a hard retry. Extend this list only with true untranslated fragments.
  */
 const ROMAJI_FRAGMENT_WORDS = [
-    "nani", "baka", "aho", "sensei", "senpai", "kouhai",
-    "onii-chan", "oniichan", "onee-chan", "oneechan",
+    "nani", "baka", "aho", "urusai", "yarou", "temee", "kisama",
     "itadakimasu", "tadaima", "okaeri", "gomen", "gomenasai",
-    "arigatou", "arigato", "sayonara", "douzo", "hai", "iie",
-    "kawaii", "sugoi", "sugee", "urusai", "yarou", "temee", "kisama",
-    "ecchi", "hentai", "otaku", "tsundere", "yandere", "kuudere",
-    "moe", "yamete", "yamate", "chigau", "matte",
+    "arigatou", "arigato", "sayonara", "douzo", "iie",
+    "yamete", "yamate", "chigau", "matte",
     "doushite", "naze", "dare", "doko", "itsu", "nanji",
     "sumimasen", "moshi moshi", "moshimoshi"
 ];
