@@ -343,7 +343,7 @@ export function injectTranslationToRight() {
     if (!fileObj.data[key]) {
         fileObj.data[key] = { "SCRIPTS": { "PART1": { "TRANSLATIONS": [{ "LANGUAGE": "English", "TRANSLATOR": "Custom", "SCRIPT": [] }] } } };
     }
-    commitTextToRightFile(fileObj, key, document.getElementById("outputAreaLeft").value.split("\n"));
+    commitTextToRightFile(fileObj, key, document.getElementById("outputAreaRight").value.split("\n"));
 }
 
 /**
