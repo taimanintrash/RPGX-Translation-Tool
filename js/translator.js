@@ -563,6 +563,15 @@ export async function translateChunkWithContext(host, model, chunkText, previous
         const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(cleanedResult);
         const romajiFragment = isNamePlatePreset ? null : detectRomajiFragment(cleanedResult);
 
+        // Speaker-tag integrity: if the sanitized input carried a [Speaker: Name] marker, the
+        // translated output must preserve it (the model keeps the tag, not drops or translates
+        // it). A dropped tag means the model lost the speaker anchor. This is a hard-fail
+        // condition checked on every retry attempt; if all 5 retries fail to restore the tag,
+        // the existing fallback (operationPresets.retry) takes over.
+        const SPEAKER_TAG_RE = /^(?:\[\s*Speaker\s*:[^\]]*\]\s*)+/i;
+        const inputHasSpeakerTag = SPEAKER_TAG_RE.test(sanitized);
+        const outputLostSpeakerTag = inputHasSpeakerTag && !SPEAKER_TAG_RE.test(cleanedResult);
+
         // Context-leak detection: did any prior context line bleed into the output?
         let hasOldContext = false;
         let leakedContextLine = "";
@@ -596,6 +605,7 @@ export async function translateChunkWithContext(host, model, chunkText, previous
         if (hasJapanese) console.warn(`[Trace:Translate:Detect] Japanese characters still present in output -> will retry.`);
         if (romajiFragment) console.warn(`[Trace:Translate:Detect] Romaji fragment "${romajiFragment}" left in output -> will retry.`);
         if (hasOldContext) console.warn(`[Trace:Translate:Detect] Context leak detected -> output contains a prior context line: "${leakedContextLine.substring(0, 60)}..."`);
+        if (outputLostSpeakerTag) console.warn(`[Trace:Translate:Detect] [Speaker:] marker lost from output -> will retry.`);
 
         // Advisory AI-FAIL warning (attempt > validatorHardFailWindow): log but do not block.
         if (!isNamePlatePreset && !qualityPass && !validatorIsHardFail) {
@@ -604,7 +614,7 @@ export async function translateChunkWithContext(host, model, chunkText, previous
 
         // Hard-fail conditions: Japanese chars, romaji fragment, context leak, or an AI
         // FAIL within the early hard-fail window. Any of these forces a retry.
-        const failedHardCheck = hasJapanese || !!romajiFragment || hasOldContext;
+        const failedHardCheck = hasJapanese || !!romajiFragment || hasOldContext || outputLostSpeakerTag;
         const failedAiHardCheck = validatorIsHardFail && !qualityPass;
 
         if (!failedHardCheck && !failedAiHardCheck) {
@@ -615,7 +625,7 @@ export async function translateChunkWithContext(host, model, chunkText, previous
             }
             return cleanedResult;
         }
-        console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, romajiFragment=${romajiFragment ? `'${romajiFragment}'` : 'none'}, hasOldContext=${hasOldContext}, aiHardFail=${failedAiHardCheck}). Dropping oldest context and retrying.`);
+        console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, romajiFragment=${romajiFragment ? `'${romajiFragment}'` : 'none'}, hasOldContext=${hasOldContext}, outputLostSpeakerTag=${outputLostSpeakerTag}, aiHardFail=${failedAiHardCheck}). Dropping oldest context and retrying.`);
         if (currentContext.length > 0) currentContext.shift();
     }
 }
@@ -804,6 +814,43 @@ export async function buildTieredContextWindow(host, model, history, maxContextL
     return currentContextSlice;
 }
 
+/**
+ * Resolves a <NAME_PLATE> line into a translated name plate line and the active speaker name.
+ * Shared by the production pipeline (translateViaAiServer) and the benchmark sweep so both
+ * use the identical name-plate resolution path (namePlate preset, knownNamesMap caching).
+ *
+ * Returns { namePlateLine, speakerName } where speakerName is "Narrator" when the plate is
+ * empty (denoting narration) and the resolved name otherwise.
+ *
+ * Called by: translator.js (translateViaAiServer), benchmark.js (runParameterSweepBenchmark)
+ */
+export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept = false) {
+    let nameValue = rawNamePlateLine.replace("<NAME_PLATE>", "").trim();
+
+    if (nameValue && nameValue !== '""' && nameValue !== '') {
+        let cleanName = nameValue.replace(/^[\u300c\u300e"']|[\u300d\u300f"']$/g, '').trim();
+        let finalUserApprovedName = "";
+
+        if (state.knownNamesMap[cleanName]) {
+            finalUserApprovedName = state.knownNamesMap[cleanName];
+        } else {
+            let namePrompt = `Transliterate this character name. Return strictly the clean name text only:\n${cleanName}`;
+            let aiTranslatedName = await translateChunkWithContext(host, model, namePrompt, [], 'namePlate');
+            console.log(`[Trace:NamePlate] cleanName="${cleanName}" -> aiTranslatedName="${aiTranslatedName}"`);
+            // In benchmark mode (autoAccept) skip the interactive UI prompt and accept the AI result.
+            finalUserApprovedName = autoAccept ? aiTranslatedName : await promptUserForNameTranslation(cleanName, aiTranslatedName);
+            state.knownNamesMap[cleanName] = finalUserApprovedName;
+        }
+        return {
+            namePlateLine: `<NAME_PLATE>"${finalUserApprovedName}"`,
+            speakerName: finalUserApprovedName
+        };
+    } else {
+        // An empty name plate denotes narration in this visual novel format.
+        return { namePlateLine: "<NAME_PLATE>", speakerName: "Narrator" };
+    }
+}
+
 export async function translateViaAiServer() {
     console.log('[Trace:Translation] translateViaAiServer() invoked.');
     clearError();
@@ -846,6 +893,11 @@ export async function translateViaAiServer() {
     let recentSummarySourceLines = [];
     let summarizedUpToIndex = 0;
 
+    // Tracks the most recently resolved name-plate speaker so it can be passed to the
+    // model as [Speaker: Name] context on the following dialogue lines. Small models
+    // (Qwen2.5-3B) need the speaker adjacent to the text to keep pronoun/gender consistent.
+    let activeSpeakerName = "";
+
     async function flushBuffer() {
         if (dialogueBuffer.length === 0) return;
 
@@ -865,6 +917,15 @@ export async function translateViaAiServer() {
 
         let activePresetKey = 'jpEn';
         let translatedCombined = await translateChunkWithContext(host, model, combinedText, currentContextSlice, activePresetKey);
+
+        // Strip any [Speaker: ...] context marker the model may have echoed or translated back
+        // into the output, so only the clean translated dialogue is committed to the file.
+        // The tag-integrity check (output must preserve the tag when the input had one) is
+        // enforced inside translateChunkWithContext's retry loop as a hard-fail condition.
+        const SPEAKER_TAG_RE = /^(?:\[\s*Speaker\s*:[^\]]*\]\s*)+/i;
+        translatedCombined = translatedCombined.replace(SPEAKER_TAG_RE, "").trim();
+        // Also strip a loose "Speaker:" variant some models emit without brackets.
+        translatedCombined = translatedCombined.replace(/^Speaker:\s*[^:\n]+:?\s*/i, "").trim();
 
         if (state.manualStepByStepMode) {
             translatedLines[dialogueBuffer[0].index] = translatedCombined;
@@ -930,7 +991,18 @@ export async function translateViaAiServer() {
             }
         }
 
-        history.push(translatedCombined);
+        // Push the final translation to history WITH the speaker tag re-attached so that
+        // subsequent lines (and the tiered summary) retain speaker context. The committed
+        // output above has the tag stripped; we re-attach it here for history only.
+        const inputHadSpeakerTag = SPEAKER_TAG_RE.test(combinedText);
+        if (inputHadSpeakerTag) {
+            const tagMatch = combinedText.match(SPEAKER_TAG_RE);
+            const speakerTag = tagMatch ? tagMatch[0].trim() : "[Speaker: Narrator]";
+            history.push(`${speakerTag} ${translatedCombined}`);
+        } else {
+            history.push(translatedCombined);
+        }
+
         let wrappedLines = wrapTextToLines(translatedCombined, 42);
 
         for (let i = 0; i < dialogueBuffer.length; i++) {
@@ -956,25 +1028,9 @@ export async function translateViaAiServer() {
             if (trimmedLine.startsWith("<NAME_PLATE>")) {
                 console.log(`[Trace:Translation] NAME_PLATE encountered at line ${idx + 1}.`);
                 await flushBuffer();
-                let nameValue = trimmedLine.replace("<NAME_PLATE>", "").trim();
-
-                if (nameValue && nameValue !== '""' && nameValue !== '') {
-                    let cleanName = nameValue.replace(/^["'||||||「『]|["'|」』]$/g, '').trim();
-                    let finalUserApprovedName = "";
-
-                    if (state.knownNamesMap[cleanName]) {
-                        finalUserApprovedName = state.knownNamesMap[cleanName];
-                    } else {
-                        let namePrompt = `Transliterate this character name. Return strictly the clean name text only:\n${cleanName}`;
-                        let aiTranslatedName = await translateChunkWithContext(host, model, namePrompt, [], 'namePlate');
-                        console.log(`[Trace:Translation:NamePlate] cleanName="${cleanName}" -> aiTranslatedName="${aiTranslatedName}"`);
-                        finalUserApprovedName = await promptUserForNameTranslation(cleanName, aiTranslatedName);
-                        state.knownNamesMap[cleanName] = finalUserApprovedName;
-                    }
-                    translatedLines.push("<NAME_PLATE>\"" + finalUserApprovedName + "\"");
-                } else {
-                    translatedLines.push("<NAME_PLATE>");
-                }
+                let namePlateResult = await resolveNamePlate(host, model, trimmedLine);
+                translatedLines.push(namePlateResult.namePlateLine);
+                activeSpeakerName = namePlateResult.speakerName;
             }
             else if (trimmedLine.startsWith("<") || trimmedLine === "") {
                 await flushBuffer();
@@ -1007,7 +1063,14 @@ export async function translateViaAiServer() {
                     textToSendToAi = `[Note: Contains stylized/stuttering expressions] ${trimmedLine}`;
                 }
 
-                dialogueBuffer.push({ index: translatedLines.length, text: textToSendToAi });
+                let textWithSpeaker = textToSendToAi;
+                if (activeSpeakerName) {
+                    // Prepend the active speaker as a tagged context marker so the model knows who
+                    // is speaking. The marker is stripped from the final translated output in
+                    // flushBuffer() so it never reaches the committed translation.
+                    textWithSpeaker = `[Speaker: ${activeSpeakerName}] ${textToSendToAi}`;
+                }
+                dialogueBuffer.push({ index: translatedLines.length, text: textWithSpeaker });
                 translatedLines.push("");
             }
             outputRight.value = translatedLines.filter(l => l !== "").join("\n");
