@@ -521,20 +521,23 @@ export async function translateChunkWithContext(host, model, chunkText, previous
             `- Preserve original character tone and pronoun context.\n` +
             `- Output ONLY the translated string with no filler or preambles.\n\n`;
 
-        if (speakerName) {
-            promptText += `<speaker>${speakerName}</speaker>\n\n`;
-        }
-
         if (currentContext && currentContext.length > 0) {
             promptText += `<history>\n` + currentContext.join("\n") + `\n</history>\n\n`;
         }
 
         promptText += `<current_input>\n${textToTranslate}\n</current_input>\n\nTranslation:`;
 
+        // Inject the speaker into the system prompt (not the user message) so the 3B model
+        // treats it as context/instruction rather than content to echo back in the output.
+        let systemPrompt = activePresetConfig.systemPrompt;
+        if (speakerName) {
+            systemPrompt += ` The current speaker is ${speakerName}. Keep this character's pronouns and gender consistent. Do not include the speaker name or any speaker tags in the output.`;
+        }
+
         const payload = {
             model: model,
             messages: [
-                { role: "system", content: activePresetConfig.systemPrompt },
+                { role: "system", content: systemPrompt },
                 { role: "user", content: promptText }
             ],
             stream: false,
@@ -676,12 +679,19 @@ export async function generateStylizationMapWithAI() {
             let chunkText = sourceLines.slice(i * 50, (i + 1) * 50).join("\n");
             if (!chunkText.trim()) continue;
 
-            const promptText = `Analyze this visual novel text snippet to find repeated stutters, stylized character ticks, and punctuation anomalies.\n` +
+            const promptText = `Analyze this visual novel text snippet to find repeated stutters, stylized character ticks, Japanese punctuation, and sound effects.\n` +
                 `Return lines strictly formatted as pairs:\n` +
                 `"source_pattern":"replacement_string"\n` +
-                `No markdown formatting blocks or extra chatter. Example:\n` +
+                `No markdown formatting blocks or extra chatter.\n\n` +
+                `Guidelines:\n` +
+                `- Convert Japanese punctuation to English equivalents (e.g. 、 -> comma, 。 -> ., ー -> -).\n` +
+                `- Translate Japanese sound effects and onomatopoeia to English (e.g. あああ -> Aaaah, きゃあ -> Kyaa).\n` +
+                `- Map speech stutters and ticks to English (e.g. びりびり -> bzz-bzz).\n\n` +
+                `Example:\n` +
                 `"、":""\n` +
-                `"！？":"!"\n\n` +
+                `"！？":"!"\n` +
+                `"あああ":"Aaaah"\n` +
+                `"きゃあ":"Kyaa"\n\n` +
                 `Snippet:\n${chunkText.substring(0, 800)}\n\nOutput:`;
 
             const stylizationConfig = operationPresets.stylization || operationPresets.benchmark;
@@ -843,6 +853,16 @@ export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept
             finalUserApprovedName = autoAccept ? aiTranslatedName : await promptUserForNameTranslation(cleanName, aiTranslatedName);
             state.knownNamesMap[cleanName] = finalUserApprovedName;
         }
+
+        // Merge the resolved Japanese name -> English name into the stylization map so that
+        // occurrences of the character's name inside dialogue text are auto-replaced before
+        // translation (strip mode), just like stutters and ticks. This keeps names consistent
+        // across name plates and in-dialogue references without extra model calls.
+        if (cleanName && finalUserApprovedName && cleanName !== finalUserApprovedName) {
+            state.heavyStylizationMap[cleanName] = finalUserApprovedName;
+            console.log(`[Trace:NamePlate] Merged "${cleanName}" -> "${finalUserApprovedName}" into stylization map for in-dialogue auto-replacement.`);
+        }
+
         return {
             namePlateLine: `<NAME_PLATE>"${finalUserApprovedName}"`,
             speakerName: finalUserApprovedName
