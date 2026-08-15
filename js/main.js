@@ -33,7 +33,7 @@ import { initDraggableModal } from './ui.js';
 import { refreshApplicationState, renderComparisonViews } from './parser.js';
 import { loadFiles, removeFile, onSelectID, onSelectIDMobile, onCompareSelectionChange, saveEditsToMemory, injectTranslationToRight, downloadFile, updateBenchmarkSceneDropdown } from './parser.js';
 import { fetchAiModels, translateViaAiServer, stopTranslation, generateStylizationMapWithAI, loadSpecificPreset, loadDefaultPreset, loadAllDefaultPresets } from './translator.js';
-import { openDebugMenu, switchDebugPage, closeDebugMenu, closeDebugMenuWithoutSaving, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, copyStylizationMapToClipboard, toggleDiscoveredSelection, setAllDiscoveredSelection, updateDiscoveredKey, updateDiscoveredVal, resolveNameModal, closeNameModal, resolveManualStepContinue, triggerStepRetranslation, syncManualStepUIVisibility, syncManualStepModeLive, initPaneResizer } from './ui.js';
+import { openDebugMenu, switchDebugPage, closeDebugMenu, closeDebugMenuWithoutSaving, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, copyStylizationMapToClipboard, toggleDiscoveredSelection, setAllDiscoveredSelection, updateDiscoveredKey, updateDiscoveredVal, resolveNameModal, closeNameModal, resolveManualStepContinue, triggerStepRetranslation, syncManualStepUIVisibility, syncManualStepModeLive, initPaneResizer, initAutoNumberInputs } from './ui.js';
 import { runParameterSweepBenchmark } from './benchmark.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -93,6 +93,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         syncManualStepUIVisibility();
     }
     initPaneResizer();
+    initAutoNumberInputs();
+    // Auto-detect models from the AI server on page load
+    fetchAiModels().catch(() => { /* silently ignore if server is not running */ });
     console.log('[Trace:Init] Application boot complete.');
 });
 

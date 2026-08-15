@@ -1,18 +1,15 @@
-# Rate limits and background tracking communication files
-rate.txt
-agent_rate.txt
-.usage_tracker.log
-
 # OS-specific metadata
 .DS_Store
 Thumbs.db
 
-# Local-only VS Code agent / dev tooling (not for the shared repo)
-start-agent.sh
-package.json
-package-lock.json
-agentContextManager.js
-agent_handoff_prompt.md
-node_modules/
+# Dual-sync script (contains tokens — never commit)
+dual_sync.sh
+
+# IDE Codeing Agent config (local only)
+AGENTS.md
+
+# IDE / editor config
 .vscode/
-.github/
+
+# Node (in case dependencies are ever added)
+node_modules/

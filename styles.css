@@ -35,6 +35,7 @@
     --scrollbar-track: #aab2bf;
     --scrollbar-thumb: #6b7280;
     --scrollbar-thumb-hover: #4b5563;
+    --grab-bar-color: #708090;
 }
 
 [data-theme="dark"] {
@@ -64,13 +65,18 @@
     --warn-border: #7f1d1d;
     --error-bg: #2a1414;
     --error-text: #fca5a5;
-    --error-border: #b91c1c;
-    --info-blue-bg: #1e2d4a;
-    --info-blue-border: #1e3a5f;
+    --error-border: #991b1b;
+    --info-blue-bg: #1e3a8a;
+    --info-blue-border: #1d4ed8;
     --loading-color: #c4b5fd;
     --scrollbar-track: #0f172a;
     --scrollbar-thumb: #475569;
     --scrollbar-thumb-hover: #64748b;
+    --grab-bar-color: #ffffff;
+}
+
+* {
+    box-sizing: border-box;
 }
 
 body {
@@ -93,8 +99,47 @@ body {
     border-radius: 8px;
     box-shadow: 0 2px 5px var(--shadow-color);
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 15px;
+}
+
+.top-panel-group {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    order: 1;
+}
+
+.top-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-left: auto;
+    order: 2;
+}
+
+/* Debug + Dark Mode button cluster — no gap between them */
+.theme-btn-group {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+@media (max-height: 800px) {
+    .top-panel {
+        padding: 8px 15px;
+    }
+
+    .file-list-box {
+        order: 2 !important;
+        flex: 1 !important;
+    }
+
+    .top-panel-actions {
+        order: 3;
+    }
 }
 
 /* @component file-uploader-layout: Manages file input rows and dynamic loading controllers */
@@ -107,6 +152,7 @@ body {
 
 /* @component file-list-box: Container tracking active uploaded file chips and status labels */
 .file-list-box {
+    box-sizing: border-box;
     font-size: 13px;
     background: var(--bg-subtle);
     border: 1px solid var(--border-soft);
@@ -117,6 +163,10 @@ body {
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
+    flex: none;
+    width: 100%;
+    order: 3;
+    min-width: 200px;
 }
 
 /* @component file-tag-pill: Individual pill element showing loaded file names and removal actions */
@@ -142,19 +192,22 @@ body {
     line-height: 1;
 }
 
-.file-tag .remove-btn:hover { color: #dc2626; }
+.file-tag .remove-btn:hover {
+    color: #dc2626;
+}
 
 /* @component layout-container-core: Master split-pane wrapper holding the sidebar and main workspace editor */
 .container {
     display: flex;
     flex: 1;
-    gap: 15px;
+    gap: 4px;
     overflow: hidden;
 }
 
 /* @component sidebar-panel: Left column container housing script ID navigation lists */
 .sidebar {
     width: 290px;
+    min-width: 120px;
     display: flex;
     flex-direction: column;
     background: var(--bg-surface);
@@ -164,9 +217,29 @@ body {
     gap: 8px;
 }
 
+/* Draggable resize handle between sidebar and main content */
+.sidebar-resize-handle {
+    width: 14px;
+    cursor: col-resize;
+    background: transparent;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.sidebar-resize-handle::after {
+    content: '';
+    width: 3px;
+    height: 100%;
+    background: var(--grab-bar-color);
+}
+
 /* @component main-workspace-content: Right panel area managing comparison selectors, toolbars, and dual text editing panes */
 .main-content {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     background: var(--bg-surface);
@@ -187,6 +260,8 @@ body {
     border-radius: 6px;
     border: 1px solid var(--border-soft);
     flex-wrap: wrap;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .compare-selectors select {
@@ -214,14 +289,30 @@ body {
     gap: 6px;
     margin-left: auto;
     flex-wrap: wrap;
+    max-width: 100%;
 }
+
+/* Sub-groups inside translate-config, visually separated */
+.config-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 
 @media (max-width: 1000px) {
-    .sidebar { display: none !important; }
-    .mobile-script-select { display: block !important; }
+    .sidebar,
+    .sidebar-resize-handle {
+        display: none !important;
+    }
+
+    .mobile-script-select {
+        display: block !important;
+    }
 }
 
-.translate-config input, .translate-config select {
+.translate-config input,
+.translate-config select {
     padding: 5px;
     font-size: 12px;
     border: 1px solid var(--border-strong);
@@ -230,25 +321,69 @@ body {
     color: var(--text-primary);
 }
 
+/* Auto-sizing number input: flat min-width floor + dynamic calc width from JS */
+.auto-number-input {
+    min-width: 6px;
+    width: calc(1ch + 6px);
+    text-align: center;
+    padding: 2px 3px;
+    -moz-appearance: textfield;
+    /* Firefox: hide spinner */
+}
+
+/* Chrome/Safari/Edge: hide spinner arrows */
+.auto-number-input::-webkit-inner-spin-button,
+.auto-number-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
 .panes-wrapper {
     display: flex;
     flex: 1;
     gap: 0;
     overflow: hidden;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 /* Draggable vertical resize handle between source panes */
 .pane-resize-handle {
-    width: 6px;
+    width: 10px;
     cursor: col-resize;
-    background: var(--border-soft);
-    border-radius: 3px;
+    background: transparent;
     transition: background 0.15s;
     flex-shrink: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
-.pane-resize-handle:hover,
-.pane-resize-handle.active {
-    background: #3b82f6;
+
+.pane-resize-handle::after {
+    content: '';
+    width: 3px;
+    height: 100%;
+    background: var(--grab-bar-color);
+}
+
+/* Horizontal resize handle between context sections */
+.ctx-resize-handle {
+    height: 8px;
+    cursor: row-resize;
+    background: transparent;
+    transition: background 0.15s;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.ctx-resize-handle::after {
+    content: '';
+    width: 100%;
+    height: 3px;
+    background: var(--grab-bar-color);
 }
 
 /* @component editor-pane-single: Individual column configuration for script output panes */
@@ -270,7 +405,11 @@ body {
     margin-bottom: 6px;
 }
 
-h3, h4 { margin: 0; color: var(--text-heading); }
+h3,
+h4 {
+    margin: 0;
+    color: var(--text-heading);
+}
 
 select#scriptSelect {
     width: 100%;
@@ -286,8 +425,13 @@ select#scriptSelect {
 }
 
 /* Status colors flip with the theme: black in light, white in dark */
-#scriptSelect option.status-complete { color: var(--status-complete); }
-#scriptSelect option.status-incomplete { color: var(--status-incomplete); }
+#scriptSelect option.status-complete {
+    color: var(--status-complete);
+}
+
+#scriptSelect option.status-incomplete {
+    color: var(--status-incomplete);
+}
 
 textarea {
     width: 100%;
@@ -318,7 +462,10 @@ button.action-btn {
     cursor: pointer;
     font-size: 12px;
 }
-button.action-btn:hover { background: #1d4ed8; }
+
+button.action-btn:hover {
+    background: #1d4ed8;
+}
 
 button.success-btn {
     background: #16a34a;
@@ -329,7 +476,10 @@ button.success-btn {
     cursor: pointer;
     font-size: 12px;
 }
-button.success-btn:hover { background: #15803d; }
+
+button.success-btn:hover {
+    background: #15803d;
+}
 
 button.translate-btn {
     background: #8b5cf6;
@@ -340,7 +490,10 @@ button.translate-btn {
     cursor: pointer;
     font-size: 12px;
 }
-button.translate-btn:hover { background: #7c3aed; }
+
+button.translate-btn:hover {
+    background: #7c3aed;
+}
 
 button.clipboard-btn {
     background: #0ea5e9;
@@ -352,7 +505,10 @@ button.clipboard-btn {
     font-size: 12px;
     font-weight: bold;
 }
-button.clipboard-btn:hover { background: #0284c7; }
+
+button.clipboard-btn:hover {
+    background: #0284c7;
+}
 
 button.stop-btn {
     background: #dc2626;
@@ -364,7 +520,10 @@ button.stop-btn {
     font-size: 12px;
     display: none;
 }
-button.stop-btn:hover { background: #b91c1c; }
+
+button.stop-btn:hover {
+    background: #b91c1c;
+}
 
 button.debug-btn {
     background: #475569;
@@ -375,9 +534,16 @@ button.debug-btn {
     cursor: pointer;
     font-size: 12px;
 }
-button.debug-btn:hover { background: #334155; }
 
-.pane-actions { display: flex; gap: 5px; align-items: center; }
+button.debug-btn:hover {
+    background: #334155;
+}
+
+.pane-actions {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
 
 /* @component notification-banner-box: Warning messages, loading progress bars, and error displays */
 .warning-box {
@@ -432,7 +598,10 @@ button.debug-btn:hover { background: #334155; }
 /* @component modal-dialog-layer: Floating overlay screens for interactive name plates and debug configurations */
 .modal-overlay {
     position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     background: var(--overlay-bg);
     display: none;
     justify-content: center;
@@ -475,7 +644,11 @@ button.debug-btn:hover { background: #334155; }
     user-select: none;
 }
 
-.modal-header h3 { margin: 0; color: var(--text-dark); font-size: 15px; }
+.modal-header h3 {
+    margin: 0;
+    color: var(--text-dark);
+    font-size: 15px;
+}
 
 .modal-close-x {
     background: none;
@@ -487,7 +660,10 @@ button.debug-btn:hover { background: #334155; }
     padding: 0;
     line-height: 1;
 }
-.modal-close-x:hover { color: var(--text-darkest); }
+
+.modal-close-x:hover {
+    color: var(--text-darkest);
+}
 
 .debug-page {
     display: flex;
@@ -505,7 +681,9 @@ button.debug-btn:hover { background: #334155; }
     font-size: 13px;
 }
 
-.modal-field input, .modal-field select, .modal-field textarea {
+.modal-field input,
+.modal-field select,
+.modal-field textarea {
     padding: 8px;
     font-size: 13px;
     border: 1px solid var(--border-strong);
@@ -544,26 +722,76 @@ button.debug-btn:hover { background: #334155; }
 /* ===== Dark-mode overrides for inline-styled elements =====
    Many elements use inline style="" with hard-coded light colors.
    These rules use higher specificity / !important to recolor them in dark mode. */
-[data-theme="dark"] .modal-field[style*="background: #f8fafc"] { background: var(--bg-subtle) !important; border-color: var(--border-strong) !important; }
-[data-theme="dark"] .modal-field[style*="background: #f1f5f9"] { background: var(--bg-subtle-2) !important; }
-[data-theme="dark"] .modal-field[style*="background: #f8fafc"] span[style*="color: #64748b"] { color: var(--text-muted) !important; }
-[data-theme="dark"] .modal-field[style*="background: #f8fafc"] em { color: var(--text-muted) !important; }
-[data-theme="dark"] .modal-field span[style*="color: #64748b"] { color: var(--text-muted) !important; }
-[data-theme="dark"] .modal-field em { color: var(--text-muted) !important; }
+[data-theme="dark"] .modal-field[style*="background: #f8fafc"] {
+    background: var(--bg-subtle) !important;
+    border-color: var(--border-strong) !important;
+}
+
+[data-theme="dark"] .modal-field[style*="background: #f1f5f9"] {
+    background: var(--bg-subtle-2) !important;
+}
+
+[data-theme="dark"] .modal-field[style*="background: #f8fafc"] span[style*="color: #64748b"] {
+    color: var(--text-muted) !important;
+}
+
+[data-theme="dark"] .modal-field[style*="background: #f8fafc"] em {
+    color: var(--text-muted) !important;
+}
+
+[data-theme="dark"] .modal-field span[style*="color: #64748b"] {
+    color: var(--text-muted) !important;
+}
+
+[data-theme="dark"] .modal-field em {
+    color: var(--text-muted) !important;
+}
 
 
 /* Discovered mappings review rows */
-[data-theme="dark"] #discoveredMappingsContainer em { color: var(--text-muted) !important; }
-[data-theme="dark"] #discoveredMappingsContainer div[style*="background: white"] { background: var(--bg-input) !important; border-color: var(--border-soft) !important; color: var(--text-primary) !important; }
-[data-theme="dark"] #discoveredMappingsContainer div[style*="background: #f8fafc"] { background: var(--bg-subtle) !important; border-color: var(--border-strong) !important; }
-[data-theme="dark"] #discoveredMappingsContainer input[type="text"] { background: var(--bg-input) !important; color: var(--text-primary) !important; border-color: var(--border-strong) !important; }
-[data-theme="dark"] #discoveredMappingsContainer span { color: var(--text-muted) !important; }
+[data-theme="dark"] #discoveredMappingsContainer em {
+    color: var(--text-muted) !important;
+}
+
+[data-theme="dark"] #discoveredMappingsContainer div[style*="background: white"] {
+    background: var(--bg-input) !important;
+    border-color: var(--border-soft) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] #discoveredMappingsContainer div[style*="background: #f8fafc"] {
+    background: var(--bg-subtle) !important;
+    border-color: var(--border-strong) !important;
+}
+
+[data-theme="dark"] #discoveredMappingsContainer input[type="text"] {
+    background: var(--bg-input) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-strong) !important;
+}
+
+[data-theme="dark"] #discoveredMappingsContainer span {
+    color: var(--text-muted) !important;
+}
 
 /* Parameter sweep / benchmark panel */
-[data-theme="dark"] #benchmarkReportOutput { background: var(--bg-input) !important; color: var(--text-primary) !important; }
-[data-theme="dark"] div[style*="background: #f8fafc"][style*="border: 1px solid #e2e8f0"] { background: var(--bg-subtle) !important; border-color: var(--border-soft) !important; }
-[data-theme="dark"] div[style*="color:#1e293b"] { color: var(--text-heading) !important; }
-[data-theme="dark"] span[style*="color: #64748b"] { color: var(--text-muted) !important; }
+[data-theme="dark"] #benchmarkReportOutput {
+    background: var(--bg-input) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] div[style*="background: #f8fafc"][style*="border: 1px solid #e2e8f0"] {
+    background: var(--bg-subtle) !important;
+    border-color: var(--border-soft) !important;
+}
+
+[data-theme="dark"] div[style*="color:#1e293b"] {
+    color: var(--text-heading) !important;
+}
+
+[data-theme="dark"] span[style*="color: #64748b"] {
+    color: var(--text-muted) !important;
+}
 
 /* Name plate modal inputs follow modal-field rules already */
 
@@ -578,7 +806,10 @@ button.debug-btn:hover { background: #334155; }
     font-size: 12px;
     margin-left: auto;
 }
-.theme-toggle-btn:hover { background: #334155; }
+
+.theme-toggle-btn:hover {
+    background: #334155;
+}
 
 /* ===== Theme-aware scrollbars ===== */
 /* WebKit (Chrome, Edge, Safari) */
@@ -586,18 +817,22 @@ button.debug-btn:hover { background: #334155; }
     width: 12px;
     height: 12px;
 }
+
 *::-webkit-scrollbar-track {
     background: var(--scrollbar-track);
     border-radius: 6px;
 }
+
 *::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
     border-radius: 6px;
     border: 2px solid var(--scrollbar-track);
 }
+
 *::-webkit-scrollbar-thumb:hover {
     background: var(--scrollbar-thumb-hover);
 }
+
 *::-webkit-scrollbar-corner {
     background: var(--scrollbar-track);
 }
@@ -623,16 +858,19 @@ button.debug-btn:hover { background: #334155; }
     min-height: 0;
     overflow: hidden;
 }
+
 .manual-step-title {
     font-size: 12px;
     font-weight: bold;
     color: var(--text-heading);
 }
+
 .manual-step-label {
     font-size: 11px;
     font-weight: bold;
     color: var(--text-secondary);
 }
+
 .manual-step-input {
     width: 48px;
     padding: 3px;
@@ -642,6 +880,7 @@ button.debug-btn:hover { background: #334155; }
     background: var(--bg-input);
     color: var(--text-primary);
 }
+
 .manual-step-btn {
     padding: 4px 10px;
     font-size: 11px;
@@ -659,12 +898,14 @@ button.debug-btn:hover { background: #334155; }
     padding: 6px 10px;
     border-radius: 6px;
 }
+
 .manual-step-source-row {
     display: flex;
     flex-direction: column;
     gap: 2px;
     width: 100%;
 }
+
 .manual-step-context-grid {
     display: flex;
     flex-direction: column;
@@ -674,6 +915,7 @@ button.debug-btn:hover { background: #334155; }
     flex: 1;
     min-height: 0;
 }
+
 .manual-step-grid-row {
     display: flex;
     flex-direction: column;
@@ -682,6 +924,7 @@ button.debug-btn:hover { background: #334155; }
     flex: 1;
     min-height: 0;
 }
+
 .manual-step-split-row {
     display: flex;
     gap: 6px;
@@ -689,6 +932,7 @@ button.debug-btn:hover { background: #334155; }
     flex: 2;
     min-height: 0;
 }
+
 .manual-step-split-col {
     display: flex;
     flex-direction: column;
@@ -696,6 +940,7 @@ button.debug-btn:hover { background: #334155; }
     flex: 1;
     width: 50%;
 }
+
 .manual-step-context-text {
     width: 100%;
     box-sizing: border-box;
@@ -711,6 +956,7 @@ button.debug-btn:hover { background: #334155; }
     flex: 1;
     min-height: 0;
 }
+
 .manual-step-source-text {
     width: 100%;
     box-sizing: border-box;
@@ -725,6 +971,7 @@ button.debug-btn:hover { background: #334155; }
     resize: none;
     overflow: hidden;
 }
+
 .manual-step-context-select {
     width: 100%;
     box-sizing: border-box;
@@ -735,4 +982,27 @@ button.debug-btn:hover { background: #334155; }
     border-radius: 4px;
     background: var(--bg-input);
     color: var(--text-primary);
+}
+
+/* Aligned horizontal footer bar inside mainContent below the editor panes */
+.main-footer-actions {
+    display: flex;
+    width: 100%;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+
+/* Each footer column mirrors its source pane width */
+.footer-column-actions {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    box-sizing: border-box;
+}
+
+/* Mirrors the pane-resize-handle width so columns stay aligned during resize */
+.footer-pane-spacer {
+    width: 10px;
+    flex-shrink: 0;
 }
