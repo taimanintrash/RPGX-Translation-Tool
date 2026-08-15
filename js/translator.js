@@ -392,6 +392,43 @@ export async function summarizeOldContext(host, model, linesToSummarize) {
 }
 
 /**
+ * Curated list of common Japanese words that frequently bleed untranslated into English
+ * output as romaji (e.g. "nani", "baka", "sensei"). Matched as whole-word tokens so
+ * substrings inside legitimate English words are not flagged. This is a deterministic
+ * hard-gate: any match forces a retry on every attempt.
+ * Extend this list as you observe new fragments the model leaves untranslated.
+ */
+const ROMAJI_FRAGMENT_WORDS = [
+    "nani", "baka", "aho", "sensei", "senpai", "kouhai",
+    "onii-chan", "oniichan", "onee-chan", "oneechan",
+    "itadakimasu", "tadaima", "okaeri", "gomen", "gomenasai",
+    "arigatou", "arigato", "sayonara", "douzo", "hai", "iie",
+    "kawaii", "sugoi", "sugee", "urusai", "yarou", "temee", "kisama",
+    "ecchi", "hentai", "otaku", "tsundere", "yandere", "kuudere",
+    "moe", "yamete", "yamate", "chigau", "matte",
+    "doushite", "naze", "dare", "doko", "itsu", "nanji",
+    "sumimasen", "moshi moshi", "moshimoshi"
+];
+
+/**
+ * Detects leftover Japanese romaji fragments in an otherwise-English translation.
+ * Returns the first matched fragment, or null if none found.
+ * Called by: translator.js (translateChunkWithContext)
+ */
+export function detectRomajiFragment(translatedText) {
+    if (!translatedText) return null;
+    // Normalize: lowercase, collapse whitespace so multi-word entries ("onii-chan") match.
+    const normalized = translatedText.toLowerCase();
+    for (const word of ROMAJI_FRAGMENT_WORDS) {
+        const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        // Word-boundary match; tolerate trailing punctuation like "nani?" or "baka!"
+        const re = new RegExp("(?:^|[^a-z-])" + escaped + "(?:[^a-z-]|$)");
+        if (re.test(normalized)) return word;
+    }
+    return null;
+}
+
+/**
  * Assesses the quality of a Japanese-to-English translation using a stringent QA prompt.
  * Called by: translator.js (translateChunkWithContext)
  */
@@ -509,15 +546,17 @@ export async function translateChunkWithContext(host, model, chunkText, previous
         }
 
         // --- jp->en validation checks ---
-        const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(cleanedResult);
-
-        // The AI validator is advisory for small models (e.g. Qwen2.5-3B) that cannot
-        // reliably emit clean PASS/FAIL tokens. The deterministic Japanese + context-leak
-        // checks below are the primary gate. Skip the validator entirely for namePlate
-        // chunks: a single transliterated token has no localization quality to grade beyond
-        // the Japanese-character check, and the extra round-trip only wastes time/retries.
+        // Three deterministic + one advisory check gate acceptance:
+        //   1. hasJapanese          (regex)   -> hard fail every attempt
+        //   2. hasRomajiFragment    (word list)-> hard fail every attempt
+        //   3. hasOldContext        (substring)-> hard fail every attempt
+        //   4. AI validator         (LLM call)-> hard fail on attempts 1-3 only,
+        //                                        advisory (log warning) on attempts 4+,
+        //                                        so a flaky small-model verdict cannot
+        //                                        burn all 5 retries on a good translation.
         const isNamePlatePreset = presetType === 'namePlate';
-        const qualityPass = isNamePlatePreset ? true : await assessTranslationQualityWithAI(host, model, cleanedResult);
+        const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(cleanedResult);
+        const romajiFragment = isNamePlatePreset ? null : detectRomajiFragment(cleanedResult);
 
         // Context-leak detection: did any prior context line bleed into the output?
         let hasOldContext = false;
@@ -536,23 +575,42 @@ export async function translateChunkWithContext(host, model, chunkText, previous
             }
         }
 
-        console.log(`[Trace:Translate:Detect] hasJapanese=${hasJapanese}, qualityPass=${qualityPass} (validator=${!isNamePlatePreset}), hasOldContext=${hasOldContext}, contextLines=${currentContext.length}`);
-        if (hasJapanese) console.warn(`[Trace:Translate:Detect] Japanese characters still present in output -> will retry.`);
-        if (hasOldContext) console.warn(`[Trace:Translate:Detect] Context leak detected -> output contains a prior context line: "${leakedContextLine.substring(0, 60)}..."`);
-        if (!qualityPass) console.warn(`[Trace:Translate:Detect] AI validation failed -> poor localization or fragments detected.`);
+        // AI validator: run for non-namePlate chunks. On attempts 1-3 a clean FAIL is a
+        // hard retry trigger; from attempt 4 onward it degrades to advisory (warning only)
+        // so a 3B model that cannot reliably emit PASS/FAIL cannot stall the loop.
+        const validatorHardFailWindow = 3;
+        const validatorIsHardFail = !isNamePlatePreset && attempts <= validatorHardFailWindow;
+        let qualityPass = true;
+        let validatorVerdict = "skipped";
+        if (!isNamePlatePreset) {
+            qualityPass = await assessTranslationQualityWithAI(host, model, cleanedResult);
+            validatorVerdict = qualityPass ? "PASS" : "FAIL";
+        }
 
-        // Accept when the deterministic checks pass. The advisory validator alone cannot
-        // block acceptance of a Japanese-free, leak-free output, because small models flip
-        // it to FAIL spuriously on perfectly good translations (e.g. "Menchi").
-        if (!hasJapanese && !hasOldContext) {
-            if (!qualityPass) {
+        console.log(`[Trace:Translate:Detect] attempt=${attempts}/${maxRetries} hasJapanese=${hasJapanese}, romajiFragment=${romajiFragment ? `'${romajiFragment}'` : 'none'}, hasOldContext=${hasOldContext}, aiValidator=${validatorVerdict} (${validatorIsHardFail ? 'hard-fail' : 'advisory'}), contextLines=${currentContext.length}`);
+        if (hasJapanese) console.warn(`[Trace:Translate:Detect] Japanese characters still present in output -> will retry.`);
+        if (romajiFragment) console.warn(`[Trace:Translate:Detect] Romaji fragment "${romajiFragment}" left in output -> will retry.`);
+        if (hasOldContext) console.warn(`[Trace:Translate:Detect] Context leak detected -> output contains a prior context line: "${leakedContextLine.substring(0, 60)}..."`);
+
+        // Advisory AI-FAIL warning (attempt > validatorHardFailWindow): log but do not block.
+        if (!isNamePlatePreset && !qualityPass && !validatorIsHardFail) {
+            console.warn(`[Trace:Translate:Detect] AI validator returned FAIL on attempt ${attempts} (beyond hard-fail window of ${validatorHardFailWindow}); treating as advisory only.`);
+        }
+
+        // Hard-fail conditions: Japanese chars, romaji fragment, context leak, or an AI
+        // FAIL within the early hard-fail window. Any of these forces a retry.
+        const failedHardCheck = hasJapanese || !!romajiFragment || hasOldContext;
+        const failedAiHardCheck = validatorIsHardFail && !qualityPass;
+
+        if (!failedHardCheck && !failedAiHardCheck) {
+            if (!isNamePlatePreset && !qualityPass) {
                 console.log(`[Trace:Translate:Pass] Accepting translation despite advisory AI FAIL (deterministic checks passed; validator advisory only).`);
             } else {
-                console.log(`[Trace:Translate:Pass] Output passed all checks (no Japanese, no context leak, passed AI validation). Accepting translation.`);
+                console.log(`[Trace:Translate:Pass] Output passed all checks (no Japanese, no romaji fragment, no context leak, AI validation ${validatorVerdict}). Accepting translation.`);
             }
             return cleanedResult;
         }
-        console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, hasOldContext=${hasOldContext}, qualityPass=${qualityPass}). Dropping oldest context and retrying.`);
+        console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, romajiFragment=${romajiFragment ? `'${romajiFragment}'` : 'none'}, hasOldContext=${hasOldContext}, aiHardFail=${failedAiHardCheck}). Dropping oldest context and retrying.`);
         if (currentContext.length > 0) currentContext.shift();
     }
 }
