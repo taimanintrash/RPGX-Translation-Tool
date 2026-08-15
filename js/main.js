@@ -9,6 +9,11 @@ export const state = {
     manualStepByStepMode: false,
     knownNamesMap: {},
     manualStepResolver: null,
+    // Applied manual-override values. When set (not null), the main translation
+    // pipeline uses these instead of the .translate-config inputs, without writing
+    // back to the UI inputs themselves.
+    appliedContextLines: null,
+    appliedRawLimit: null,
     heavyStylizationMap: {
         "、": "",
         "！？": "!",
@@ -169,6 +174,7 @@ window.resolveNameModal = resolveNameModal;
 window.closeNameModal = closeNameModal;
 window.resolveManualStepContinue = resolveManualStepContinue;
 window.triggerStepRetranslation = triggerStepRetranslation;
+window.applyStepContextSettings = applyStepContextSettings;
 window.syncManualStepUIVisibility = syncManualStepUIVisibility;
 window.syncManualStepModeLive = syncManualStepModeLive;
 window.runParameterSweepBenchmark = runParameterSweepBenchmark;

@@ -787,28 +787,57 @@ export function stopTranslation() {
 export async function buildTieredContextWindow(host, model, history, maxContextLines, rawLimitThreshold, summaryState) {
     let formattedContextForPrompt = [];
 
+    // Three-tier context window:
+    //   [Archival Summary] [Recent Summary] [Raw Tail]
+    //
+    // The window is bounded by two settings:
+    //   - rawLimitThreshold (Raw Lines): size of the raw tail (verbatim recent lines)
+    //   - maxContextLines (Summary Lines): size of the recent summary window (lines between
+    //     the raw tail and the summary window start)
+    //
+    // A line scrolls through the tiers as history grows:
+    //   1. Enters the raw tail (verbatim).
+    //   2. Exits the raw tail -> enters the recent summary window (gets summarized).
+    //   3. Exits the recent summary window -> the recent summary block is flushed into
+    //      the archival summary (compressed macro story state).
+
     // Tier 1: Raw Tail (the most recent rawLimitThreshold confirmed lines from history)
     const rawTailStart = Math.max(0, history.length - rawLimitThreshold);
     const rawTail = history.slice(rawTailStart);
 
-    // Tier 2: Rolling Recent Summary
-    // Incorporate newly confirmed lines that have exited the raw tail window
-    if (rawTailStart > summaryState.summarizedUpToIndex) {
-        const newlyExitedLines = history.slice(summaryState.summarizedUpToIndex, rawTailStart);
+    // Tier 2: Recent Summary window — lines between the raw tail and the summary window start.
+    // The summary window covers `maxContextLines` lines before the raw tail.
+    // Lines that exit this window are flushed to archival (Tier 3).
+    const summaryWindowEnd = rawTailStart; // exclusive (raw tail starts here)
+    const summaryWindowStart = Math.max(0, summaryWindowEnd - maxContextLines);
+
+    // Lines that newly entered the recent summary window (exited the raw tail)
+    if (summaryWindowEnd > summaryState.summarizedUpToIndex) {
+        const newlyExitedLines = history.slice(summaryState.summarizedUpToIndex, summaryWindowEnd);
         if (newlyExitedLines.length > 0) {
             summaryState.recentSummary = await updateRecentSummary(host, model, summaryState.recentSummary, newlyExitedLines);
             summaryState.recentSummarySourceLines.push(...newlyExitedLines);
-            summaryState.summarizedUpToIndex = rawTailStart;
-
-            // Tier 3: Archival Summary (Macro story state compression)
-            // When recentSummary accumulates substantial context (~50 words or >250 chars), compress it into archival
-            const wordCount = summaryState.recentSummary.trim().split(/\s+/).filter(Boolean).length;
-            if (wordCount >= 50 || summaryState.recentSummary.length >= 250) {
-                summaryState.archivalSummary = await updateArchivalSummary(host, model, summaryState.archivalSummary, summaryState.recentSummary);
-                summaryState.recentSummary = ""; // Reset rolling recent summary for the next scene segment
-                summaryState.recentSummarySourceLines = [];
-            }
+            summaryState.summarizedUpToIndex = summaryWindowEnd;
         }
+    }
+
+    // Tier 3: Archival Summary — triggered when lines exit the recent summary window
+    // (i.e., the summary has accumulated more than maxContextLines source lines, and the
+    // oldest ones have scrolled past the window). Flush the recent summary into archival.
+    if (maxContextLines > 0 && summaryState.recentSummarySourceLines.length > maxContextLines) {
+        // Lines that scrolled past the summary window get flushed to archival
+        const overflowCount = summaryState.recentSummarySourceLines.length - maxContextLines;
+        const flushedLines = summaryState.recentSummarySourceLines.splice(0, overflowCount);
+        // Re-summarize the recent summary from the remaining window lines
+        const remainingLines = summaryState.recentSummarySourceLines;
+        summaryState.archivalSummary = await updateArchivalSummary(host, model, summaryState.archivalSummary, summaryState.recentSummary);
+        // Reset recent summary to cover only the remaining window lines
+        if (remainingLines.length > 0) {
+            summaryState.recentSummary = await updateRecentSummary(host, model, "", remainingLines);
+        } else {
+            summaryState.recentSummary = "";
+        }
+        console.log(`[Trace:Summary:Archival] Flushed ${overflowCount} line(s) from recent summary to archival. Remaining in window: ${remainingLines.length}.`);
     }
 
     // Build hierarchical prompt context
@@ -816,8 +845,9 @@ export async function buildTieredContextWindow(host, model, history, maxContextL
     if (summaryState.recentSummary) formattedContextForPrompt.push(`[Recent Scene: ${summaryState.recentSummary}]`);
     formattedContextForPrompt.push(...rawTail);
 
-    let sliceStart = Math.max(0, formattedContextForPrompt.length - maxContextLines);
-    let currentContextSlice = maxContextLines > 0 ? formattedContextForPrompt.slice(sliceStart) : [];
+    // Cap the total context passed to the model
+    let sliceStart = Math.max(0, formattedContextForPrompt.length - (maxContextLines + rawLimitThreshold));
+    let currentContextSlice = (maxContextLines + rawLimitThreshold) > 0 ? formattedContextForPrompt.slice(sliceStart) : [];
 
     return currentContextSlice;
 }
@@ -874,8 +904,15 @@ export async function translateViaAiServer() {
     clearError();
     const host = document.getElementById("aiServerHost").value.trim().replace(/\/+$/, "");
     const model = document.getElementById("aiModel").value;
-    const maxContextLines = parseInt(document.getElementById("contextLinesCount").value) || 0;
-    const rawLimitThreshold = parseInt(document.getElementById("rawContextLimit").value) || 0;
+    // Use the manual-override values applied via the Apply button when present;
+    // otherwise fall back to the main .translate-config inputs. This overrides
+    // the pipeline values without writing back to the UI inputs.
+    const maxContextLines = (state.appliedContextLines !== null && !isNaN(state.appliedContextLines))
+        ? state.appliedContextLines
+        : (parseInt(document.getElementById("contextLinesCount").value) || 0);
+    const rawLimitThreshold = (state.appliedRawLimit !== null && !isNaN(state.appliedRawLimit))
+        ? state.appliedRawLimit
+        : (parseInt(document.getElementById("rawContextLimit").value) || 0);
 
     const selectElement = document.getElementById("scriptSelect");
     const selectRight = document.getElementById("fileSelectRight");
@@ -951,17 +988,20 @@ export async function translateViaAiServer() {
                     maxContextLines
                 );
                 if (stepResult.action === "retranslate") {
-                    const stepRawLimit = stepResult.rawLimit ?? stepResult.newContextCount;
-                    const stepRawTail = history.slice(Math.max(0, history.length - stepRawLimit));
-                    let stepFormattedContext = [];
-                    if (archivalSummary) stepFormattedContext.push(`[Story Context: ${archivalSummary}]`);
-                    if (recentSummary) stepFormattedContext.push(`[Recent Scene: ${recentSummary}]`);
-                    stepFormattedContext.push(...stepRawTail);
-
-                    let updatedContextWindow = (maxContextLines > 0 && stepResult.newContextCount > 0)
-                        ? stepFormattedContext.slice(Math.max(0, stepFormattedContext.length - stepResult.newContextCount))
-                        : [];
-                    console.log(`[Trace:Translation] Re-translate step: contextLines=${stepResult.newContextCount}, rawLimit=${stepRawLimit}, windowSize=${updatedContextWindow.length}`);
+                    const stepCtxLines = stepResult.newContextCount || maxContextLines;
+                    const stepRawLimit = stepResult.rawLimit ?? rawLimitThreshold;
+                    // Rebuild the context window using the updated settings via buildTieredContextWindow,
+                    // so the retranslate uses the same tiered summary pipeline as the main translation.
+                    let updatedContextWindow = await buildTieredContextWindow(host, model, history, stepCtxLines, stepRawLimit, {
+                        get archivalSummary() { return archivalSummary; },
+                        set archivalSummary(v) { archivalSummary = v; },
+                        get recentSummary() { return recentSummary; },
+                        set recentSummary(v) { recentSummary = v; },
+                        get recentSummarySourceLines() { return recentSummarySourceLines; },
+                        get summarizedUpToIndex() { return summarizedUpToIndex; },
+                        set summarizedUpToIndex(v) { summarizedUpToIndex = v; }
+                    });
+                    console.log(`[Trace:Translation] Re-translate step: contextLines=${stepCtxLines}, rawLimit=${stepRawLimit}, windowSize=${updatedContextWindow.length}`);
                     translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry', activeSpeakerName);
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
@@ -1106,5 +1146,9 @@ export async function translateViaAiServer() {
         }
     } finally {
         state.currentAbortController = null;
+        // Source 1 is fully translated (or the run ended), so clear the manual
+        // override values. The next translation reads from .translate-config again.
+        state.appliedContextLines = null;
+        state.appliedRawLimit = null;
     }
 }
