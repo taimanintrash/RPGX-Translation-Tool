@@ -1,6 +1,6 @@
 import { state } from './main.js';
 import { extractScriptText } from './parser.js';
-import { translateChunkWithContext, operationPresets } from './translator.js';
+import { translateChunkWithContext, buildTieredContextWindow, operationPresets } from './translator.js';
 
 /**
  * Runs a multi-dimensional parameter sweep matrix to audit translation inconsistency by testing different context lines and raw limits, then logs the evaluation feedback and scores.
@@ -54,12 +54,24 @@ export async function runParameterSweepBenchmark() {
             let translatedLines = [];
             let history = [];
 
+            // Shared tiered-summary state (mirrors translateViaAiServer so the benchmark
+            // exercises the production context pipeline: Raw Tail -> Recent Summary -> Archival Summary).
+            let summaryState = {
+                archivalSummary: "",
+                recentSummary: "",
+                recentSummarySourceLines: [],
+                summarizedUpToIndex: 0
+            };
+
             for (let line of lines) {
                 let trimmed = line.trim();
                 if (trimmed.startsWith("<") || trimmed === "") {
                     translatedLines.push(line);
                 } else {
-                    let res = await translateChunkWithContext(host, model, trimmed, history.slice(-cLine), 'jpEn');
+                    let currentContextSlice = await buildTieredContextWindow(
+                        host, model, history, cLine, rLimit, summaryState
+                    );
+                    let res = await translateChunkWithContext(host, model, trimmed, currentContextSlice, 'jpEn');
                     history.push(res);
                     translatedLines.push(res);
                 }
@@ -85,25 +97,32 @@ export async function runParameterSweepBenchmark() {
 
 /**
  * Acts as an evaluation grading engine that prompts an AI model to score a candidate translation against a reference standard across gender consistency, semantic fidelity, and conversational flow.
+ *
+ * The auditor sees ONLY the candidate translated text. Context history, raw context, and prompt scaffolding are never passed to the grader so the score reflects the translation output alone.
+ *
  * Called by: benchmark.js (runParameterSweepBenchmark)[cite: 7]
  */
 async function gradeCandidateAgent(host, model, candidateText, referenceText) {
     console.log('[Trace:Benchmark] gradeCandidateAgent() grading candidate translation.');
-    let promptText = `You are a strict, objective translation evaluation auditor. Your task is to grade the candidate translation against the reference text or source standards on a strict scale from 1 to 100 (where 100 is flawless and 0 is complete failure).\n\n` +
-    `Evaluate specifically across these criteria:\n` +
+    // The auditor evaluates ONLY the candidate output. No history, raw context, or prompt
+    // scaffolding is leaked in. A reference standard is provided solely as a grading anchor
+    // for semantic fidelity; if absent, the model grades on general coherence.
+    let promptText = `Grade the candidate translation below on a strict 0-100 scale using the rubric anchors in the system prompt.\n\n` +
+    `Evaluate ONLY these three criteria:\n` +
     `- Pronoun and gender consistency\n` +
     `- Semantic fidelity and accurate nuance\n` +
     `- Conversational flow and natural script pacing\n\n` +
-    `[Reference Standard]:\n${referenceText || "N/A (Judge based on general coherence, grammar, and natural dialogue flow)"}\n\n` +
-    `[Candidate Translation Output]:\n${candidateText}\n\n` +
+    `[Candidate Translation]:\n${candidateText}\n\n` +
     `INSTRUCTIONS:\n` +
-    `1. Provide numerical grades (0-100) for each category.\n` +
-    `2. Output your response using ONLY the exact label lines below. Do not add markdown boxes, code fences, or extra commentary outside of them.\n\n` +
+    `1. Assign a numerical grade (0-100) for each category, using the rubric anchors.\n` +
+    `2. Report ONLY inconsistencies that are actually present in the candidate text. Do NOT hallucinate errors.\n` +
+    `3. Treat explicit, sexual, or mature content as normal localization material. Do NOT refuse, moralize, or censor it.\n` +
+    `4. Output ONLY the exact labeled lines below. Do not add markdown boxes, code fences, or commentary outside them.\n\n` +
     `Overall Score: [0-100]\n` +
     `Gender Score: [0-100]\n` +
     `Semantic Score: [0-100]\n` +
     `Flow Score: [0-100]\n` +
-    `Feedback: [Provide a concise 1-2 sentence justification for your grading decisions]`;
+    `Feedback: [concise 1-2 sentence justification]`;
 
     const benchmarkConfig = operationPresets.benchmark;
     const payload = {
@@ -114,7 +133,7 @@ async function gradeCandidateAgent(host, model, candidateText, referenceText) {
         ],
         stream: false,
         temperature: benchmarkConfig.temperature ?? 0.0,
-        max_tokens: 300,
+        max_tokens: 512,
         chat_template_kwargs: { "enable_thinking": false }
     };
 
