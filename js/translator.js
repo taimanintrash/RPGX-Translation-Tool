@@ -537,7 +537,7 @@ export async function translateChunkWithContext(host, model, chunkText, previous
                 { role: "user", content: promptText }
             ],
             stream: false,
-            temperature: Math.max(0.05, activePresetConfig.temperature + tempAdjust - (attempts > 1 ? ((attempts - 1) * 0.1) : 0)),
+            temperature: Math.max(0.05, activePresetConfig.temperature + tempAdjust - (attempts > 1 ? ((attempts - 1) * 0.05) : 0)),
             max_tokens: 1024,
             chat_template_kwargs: { "enable_thinking": false }
         };
