@@ -10,6 +10,9 @@ export const operationPresets = {
     retry: { temperature: 0.2, systemPrompt: "The previous translation attempt failed validation. Carefully re-translate keeping tags and markers exact." },
     namePlate: { temperature: 0.1, systemPrompt: "You are a specialized proper noun and character name localization engine. Output transliterated name cleanly." },
     stylization: { temperature: 0.2, systemPrompt: "You are a specialized stylization mapper. Analyze the provided game script and generate a JSON mapping of character names and unique speech patterns to standardized stylization keys." },
+    stylizationPunctuation: { temperature: 0.0, systemPrompt: "You are a Japanese punctuation normalization engine. Map Japanese punctuation marks and multi-character punctuation sequences to their English equivalents. Output only valid JSON pairs. Include both single characters and multi-character sequences like ellipses and dash repeats." },
+    stylizationSounds: { temperature: 0.2, systemPrompt: "You are a Japanese onomatopoeia and sound effect translator for visual novel localization. Map Japanese sound effects and onomatopoeia to natural English equivalents. Each pattern must be 3 or more kana. Never output single kana, grammar particles, or dialogue." },
+    stylizationTicks: { temperature: 0.2, systemPrompt: "You are a Japanese speech stutter and tick normalization engine for visual novel localization. Map repeated-kana stutters, gemination ticks, and character speech patterns to their English equivalents. Patterns must be repeated kana clusters or tick+punctuation combos. Translate ticks to English, never remove them (no empty replacements unless the pattern is pure gemination punctuation)." },
     recentSummary: { temperature: 0.2, systemPrompt: "You are a concise narrative context tracking engine for game translation. Maintain a tightly focused rolling recap of active character dynamics, tone, and immediate scene events without conversational filler." },
     archivalSummary: { temperature: 0.15, systemPrompt: "You are an expert story archivist compressing narrative history into a single high-level macro state sentence. Preserve primary character identities, relationships, and overarching goals while omitting resolved micro-dialogue." },
     validator: { temperature: 0.1, systemPrompt: "You are a stringent quality assurance AI evaluating Japanese-to-English translations. Analyze the provided text for untranslated Japanese fragments, romaji placeholders, and poor localization mixing. Return 'PASS' if the translation is fully and naturally localized into English. Return 'FAIL' if any fragments or poor mixing are detected." }
@@ -26,6 +29,9 @@ export const defaultPresetManifest = [
     { file: 'default_presets/retry_translation.json', operationKey: 'retry', label: 'Retry Translation' },
     { file: 'default_presets/name_plate_unique.json', operationKey: 'namePlate', label: 'Name Plate Unique' },
     { file: 'default_presets/stylization_mapping.json', operationKey: 'stylization', label: 'Stylization Mapping' },
+    { file: 'default_presets/stylization_punctuation.json', operationKey: 'stylizationPunctuation', label: 'Stylization Punctuation' },
+    { file: 'default_presets/stylization_sounds.json', operationKey: 'stylizationSounds', label: 'Stylization Sounds' },
+    { file: 'default_presets/stylization_ticks.json', operationKey: 'stylizationTicks', label: 'Stylization Ticks' },
     { file: 'default_presets/recent_summary.json', operationKey: 'recentSummary', label: 'Recent Scene Summary' },
     { file: 'default_presets/archival_summary.json', operationKey: 'archivalSummary', label: 'Archival Story State' },
     { file: 'default_presets/translation_validator.json', operationKey: 'validator', label: 'Translation Validator' }
@@ -668,90 +674,136 @@ export async function generateStylizationMapWithAI() {
 
     if (loadingStatus) {
         loadingStatus.style.display = "flex";
-        loadingStatus.innerHTML = "Generating stylization mapping... (Analyzing text chunks)";
+        loadingStatus.innerHTML = "Generating stylization mapping... (Starting 3-phase analysis)";
     }
     if (stopBtn) stopBtn.style.display = "inline-block";
     if (progressBar) {
         progressBar.style.display = "block";
-        progressBar.value = 10;
+        progressBar.value = 5;
     }
 
     let sourceLines = sourceText.split("\n");
     let totalChunks = Math.min(sourceLines.length, 5);
-    let rawCombinedOutput = "";
+    let discoveredArray = [];
+    let seenKeys = new Set();
+
+    // The three phases. Each has its own focused prompt + preset so the model handles
+    // one category at a time instead of mixing punctuation rules, sound translation,
+    // and tick normalization in a single pass.
+    const phases = [
+        {
+            name: "Punctuation",
+            presetKey: "stylizationPunctuation",
+            prompt: (chunk) => `Find ONLY Japanese punctuation marks and multi-character punctuation sequences in this text.\n` +
+                `Map each to its English equivalent. Include single chars AND multi-char sequences (e.g. ellipses, dash repeats, combined marks).\n` +
+                `Return lines as "source":"replacement". No markdown blocks.\n\n` +
+                `Examples:\n` +
+                `"\u3001":""\n` +
+                `"\u3002":"."\n` +
+                `"\uff01":"!"\n` +
+                `"\uff1f":"?"\n` +
+                `"\u30fc":"-"\n` +
+                `"\u2026":"..."\n` +
+                `"\u2015\u2015":"\u2014"\n` +
+                `"\uff01\uff1f":"!"\n\n` +
+                `NEVER output kana that are not punctuation. NEVER output words, sentences, sounds, or dialogue.\n` +
+                `Empty replacements are allowed ONLY for punctuation being stripped (e.g. \u3001).\n\n` +
+                `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
+        },
+        {
+            name: "Sounds",
+            presetKey: "stylizationSounds",
+            prompt: (chunk) => `Find ONLY Japanese sound effects and onomatopoeia in this text.\n` +
+                `Translate each to a natural English equivalent.\n` +
+                `Return lines as "source":"replacement". No markdown blocks.\n\n` +
+                `Examples:\n` +
+                `"\u3042\u3042\u3042":"Aaaah"\n` +
+                `"\u304d\u3083\u3042":"Kyaa"\n` +
+                `"\u3075\u3075":"Hehe"\n` +
+                `"\u3050\u306c\u306c":"Grrr"\n` +
+                `"\u3073\u308a\u3073\u308a":"bzz-bzz"\n` +
+                `"\u3069\u304d\u3069\u304d":"thump-thump"\n\n` +
+                `Each pattern MUST be 3 or more kana. NEVER output single kana, 2-char fragments, grammar particles, sentences, or dialogue.\n` +
+                `NEVER output an empty replacement \u2014 every sound maps to an English word.\n\n` +
+                `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
+        },
+        {
+            name: "Ticks",
+            presetKey: "stylizationTicks",
+            prompt: (chunk) => `Find ONLY Japanese speech stutters, repeated-kana ticks, and gemination tick+punctuation combos in this text.\n` +
+                `Translate each to its English equivalent.\n` +
+                `Return lines as "source":"replacement". No markdown blocks.\n\n` +
+                `Examples:\n` +
+                `"\u30c3\uff01":"!"\n` +
+                `"\u30c3\uff01\uff1f":"!"\n` +
+                `"\u3073\u308a\u3073\u308a":"bzz-bzz"\n` +
+                `"\u3069\u304d\u3069\u304d":"thump-thump"\n\n` +
+                `TRANSLATE ticks to English \u2014 NEVER remove them. Do NOT output empty replacements unless the pattern is pure gemination punctuation (\u3063 alone).\n` +
+                `Each pattern must be 2+ characters. NEVER output single kana, grammar particles, full sentences, or dialogue fragments.\n` +
+                `NEVER output a pattern containing a sentence-ending mark as part of a longer phrase.\n\n` +
+                `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
+        }
+    ];
 
     try {
-        for (let i = 0; i < totalChunks; i++) {
-            if (state.currentAbortController.signal.aborted) throw new Error("Generation cancelled by user.");
+        let phaseIndex = 0;
+        for (const phase of phases) {
+            phaseIndex++;
+            if (loadingStatus) loadingStatus.innerHTML = `Generating stylization mapping... (Phase ${phaseIndex}/3: ${phase.name})`;
+            const phaseConfig = operationPresets[phase.presetKey] || operationPresets.stylization || operationPresets.benchmark;
 
-            let progressPercent = Math.round(((i + 1) / totalChunks) * 80);
-            if (loadingStatus) loadingStatus.innerHTML = `Generating stylization mapping... (Analyzing text block ${i + 1} of ${totalChunks})`;
-            if (progressBar) progressBar.value = progressPercent;
+            for (let i = 0; i < totalChunks; i++) {
+                if (state.currentAbortController.signal.aborted) throw new Error("Generation cancelled by user.");
 
-            let chunkText = sourceLines.slice(i * 50, (i + 1) * 50).join("\n");
-            if (!chunkText.trim()) continue;
+                let progressPercent = Math.round(((phaseIndex - 1) * totalChunks + (i + 1)) / (phases.length * totalChunks) * 95);
+                if (loadingStatus) loadingStatus.innerHTML = `Generating stylization mapping... (Phase ${phaseIndex}/3: ${phase.name} - block ${i + 1} of ${totalChunks})`;
+                if (progressBar) progressBar.value = progressPercent;
 
-            const promptText = `Analyze this visual novel text snippet to find repeated stutters, stylized character ticks, Japanese punctuation, and sound effects.\n` +
-                `Return lines strictly formatted as pairs:\n` +
-                `"source_pattern":"replacement_string"\n` +
-                `No markdown formatting blocks or extra chatter.\n\n` +
-                `Guidelines:\n` +
-                `- Convert Japanese punctuation to English equivalents (e.g. 、 -> comma, 。 -> ., ー -> -).\n` +
-                `- Translate Japanese sound effects and onomatopoeia to English (e.g. あああ -> Aaaah, きゃあ -> Kyaa).\n` +
-                `- Map speech stutters and ticks to English (e.g. びりびり -> bzz-bzz).\n\n` +
-                `Example:\n` +
-                `"、":""\n` +
-                `"！？":"!"\n` +
-                `"あああ":"Aaaah"\n` +
-                `"きゃあ":"Kyaa"\n\n` +
-                `Snippet:\n${chunkText.substring(0, 800)}\n\nOutput:`;
+                let chunkText = sourceLines.slice(i * 50, (i + 1) * 50).join("\n");
+                if (!chunkText.trim()) continue;
 
-            const stylizationConfig = operationPresets.stylization || operationPresets.benchmark;
-            const payload = {
-                model: model,
-                messages: [
-                    { role: "system", content: stylizationConfig.systemPrompt },
-                    { role: "user", content: promptText }
-                ],
-                stream: false,
-                temperature: stylizationConfig.temperature ?? 0.0,
-                max_tokens: 256
-            };
+                const promptText = phase.prompt(chunkText);
+                const payload = {
+                    model: model,
+                    messages: [
+                        { role: "system", content: phaseConfig.systemPrompt },
+                        { role: "user", content: promptText }
+                    ],
+                    stream: false,
+                    temperature: phaseConfig.temperature ?? 0.0,
+                    max_tokens: 256
+                };
 
-            const res = await fetch(`${host}/v1/chat/completions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                signal: state.currentAbortController.signal
-            });
+                const res = await fetch(`${host}/v1/chat/completions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: state.currentAbortController.signal
+                });
 
-            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-            const data = await res.json();
-            let content = data.choices?.[0]?.message?.content || "";
-            rawCombinedOutput += "\n" + content;
+                if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+                const data = await res.json();
+                let content = (data.choices?.[0]?.message?.content || "").replace(/```/g, "").trim();
+
+                let lines = content.split("\n");
+                for (let line of lines) {
+                    let match = line.match(/"([^"]+)"\s*:\s*"([^"]*)"/);
+                    if (match) {
+                        let k = match[1];
+                        let v = match[2];
+                        if (!seenKeys.has(k)) {
+                            seenKeys.add(k);
+                            discoveredArray.push({ key: k, value: v, selected: false });
+                        }
+                    }
+                }
+            }
         }
 
         if (loadingStatus) loadingStatus.innerHTML = "Finalizing discovered mapping list...";
         if (progressBar) progressBar.value = 95;
 
-        rawCombinedOutput = rawCombinedOutput.replace(/```/g, "").trim();
-        let lines = rawCombinedOutput.split("\n");
-        let discoveredArray = [];
-        let seenKeys = new Set();
-
-        for (let line of lines) {
-            let match = line.match(/"([^"]+)"\s*:\s*"([^"]*)"/);
-            if (match) {
-                let k = match[1];
-                let v = match[2];
-                if (!seenKeys.has(k)) {
-                    seenKeys.add(k);
-                    discoveredArray.push({ key: k, value: v, selected: false });
-                }
-            }
-        }
-
-        console.log(`[Trace:Stylization] Discovered ${discoveredArray.length} unique mapping candidate(s).`);
+        console.log(`[Trace:Stylization] Discovered ${discoveredArray.length} unique mapping candidate(s) across 3 phases.`);
         if (discoveredArray.length > 0) {
             state.pendingDiscoveredMappings = discoveredArray;
             renderDiscoveredMappingsUI();
