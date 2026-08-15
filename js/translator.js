@@ -801,9 +801,16 @@ export async function buildTieredContextWindow(host, model, history, maxContextL
             summaryState.summarizedUpToIndex = rawTailStart;
 
             // Tier 3: Archival Summary (Macro story state compression)
-            // When recentSummary accumulates substantial context (~50 words or >250 chars), compress it into archival
+            // When recentSummary accumulates enough context, compress it into archival.
+            // The trigger threshold respects maxContextLines (the "Summary Lines" setting):
+            //   - If maxContextLines > 0: trigger after that many source lines are summarized
+            //   - If maxContextLines = 0 (default): fall back to the original 50-word / 250-char heuristic
+            const summaryLineCount = summaryState.recentSummarySourceLines.length;
             const wordCount = summaryState.recentSummary.trim().split(/\s+/).filter(Boolean).length;
-            if (wordCount >= 50 || summaryState.recentSummary.length >= 250) {
+            const archivalTrigger = maxContextLines > 0
+                ? summaryLineCount >= maxContextLines
+                : (wordCount >= 50 || summaryState.recentSummary.length >= 250);
+            if (archivalTrigger) {
                 summaryState.archivalSummary = await updateArchivalSummary(host, model, summaryState.archivalSummary, summaryState.recentSummary);
                 summaryState.recentSummary = ""; // Reset rolling recent summary for the next scene segment
                 summaryState.recentSummarySourceLines = [];
