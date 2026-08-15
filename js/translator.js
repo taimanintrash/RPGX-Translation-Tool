@@ -996,9 +996,20 @@ export async function translateViaAiServer() {
                 if (stepResult.action === "retranslate") {
                     const stepCtxLines = stepResult.newContextCount || maxContextLines;
                     const stepRawLimit = stepResult.rawLimit ?? rawLimitThreshold;
-                    // Apply any manual edits to the archival/recent summary boxes to the
-                    // internal summary variables before rebuilding the context window, so the
-                    // retranslate uses the user-edited summaries.
+                    // Reuse the summary state computed by Apply (applyStepContextSettings) when
+                    // present so retranslate does NOT trigger a fresh recalc. Copy the applied
+                    // summaries into the live translation variables; summarizedUpToIndex is already
+                    // advanced, so buildTieredContextWindow reassembles the window without
+                    // re-summarizing. Then layer any manual summary-box edits on top.
+                    const applied = state._stepAppliedSummaryState;
+                    if (applied) {
+                        archivalSummary = applied.archivalSummary || "";
+                        recentSummary = applied.recentSummary || "";
+                        recentSummarySourceLines = Array.isArray(applied.recentSummarySourceLines)
+                            ? applied.recentSummarySourceLines.slice()
+                            : [];
+                        summarizedUpToIndex = applied.summarizedUpToIndex || 0;
+                    }
                     const edits = stepResult.manualSummaryEdits;
                     if (edits) {
                         if (typeof edits.archivalSummary === "string") archivalSummary = edits.archivalSummary;

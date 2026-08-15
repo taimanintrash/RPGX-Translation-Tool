@@ -449,6 +449,7 @@ async function refreshStepContextPreview(currentContextWindow) {
     }
 
     console.log(`[Trace:UI] Context preview refreshed (summaries recalculated from history).`);
+    return summaryState;
 }
 
 /**
@@ -763,7 +764,7 @@ export function resolveManualStepContinue() {
  * Resolves the manual step prompt indicating that a re-translation pass is required[cite: 7].
  * Called by: HTML event handler / main.js[cite: 7]
  */
-export function applyStepContextSettings() {
+export async function applyStepContextSettings() {
     console.log('[Trace:UI] applyStepContextSettings() invoked.');
     // Store the manual override values in shared state so the main translation
     // pipeline reads them at translation time, without writing back to the
@@ -774,9 +775,13 @@ export function applyStepContextSettings() {
     state.appliedRawLimit = rawLimit;
     console.log(`[Trace:UI] Applied override values -> contextLines=${contextCount}, rawLimit=${rawLimit}`);
     // Recalculate summaries from history with the current manual override settings,
-    // then update the preview. This updates the summary state in-place before the
-    // next retranslate uses it.
-    refreshStepContextPreview().catch(e => console.warn('[Trace:UI] Apply context settings failed:', e));
+    // then update the preview. Store the resulting summary state so retranslate reuses
+    // it instead of triggering a fresh recalc.
+    try {
+        state._stepAppliedSummaryState = await refreshStepContextPreview();
+    } catch (e) {
+        console.warn('[Trace:UI] Apply context settings failed:', e);
+    }
 }
 
 export async function triggerStepRetranslation() {
