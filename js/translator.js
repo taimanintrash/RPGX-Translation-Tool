@@ -846,6 +846,11 @@ export async function translateViaAiServer() {
     let recentSummarySourceLines = [];
     let summarizedUpToIndex = 0;
 
+    // Tracks the most recently resolved name-plate speaker so it can be passed to the
+    // model as [Speaker: Name] context on the following dialogue lines. Small models
+    // (Qwen2.5-3B) need the speaker adjacent to the text to keep pronoun/gender consistent.
+    let activeSpeakerName = "";
+
     async function flushBuffer() {
         if (dialogueBuffer.length === 0) return;
 
@@ -865,6 +870,12 @@ export async function translateViaAiServer() {
 
         let activePresetKey = 'jpEn';
         let translatedCombined = await translateChunkWithContext(host, model, combinedText, currentContextSlice, activePresetKey);
+
+        // Strip any [Speaker: ...] context marker the model may have echoed or translated back
+        // into the output, so only the clean translated dialogue is committed.
+        translatedCombined = translatedCombined.replace(/^(?:\[Speaker:[^\]]*\]\s*)+/i, "").trim();
+        // Also strip a loose "Speaker:" variant some models emit without brackets.
+        translatedCombined = translatedCombined.replace(/^Speaker:\s*[^:\n]+:?\s*/i, "").trim();
 
         if (state.manualStepByStepMode) {
             translatedLines[dialogueBuffer[0].index] = translatedCombined;
@@ -972,8 +983,10 @@ export async function translateViaAiServer() {
                         state.knownNamesMap[cleanName] = finalUserApprovedName;
                     }
                     translatedLines.push("<NAME_PLATE>\"" + finalUserApprovedName + "\"");
+                    activeSpeakerName = finalUserApprovedName;
                 } else {
                     translatedLines.push("<NAME_PLATE>");
+                    activeSpeakerName = "";
                 }
             }
             else if (trimmedLine.startsWith("<") || trimmedLine === "") {
@@ -1007,7 +1020,14 @@ export async function translateViaAiServer() {
                     textToSendToAi = `[Note: Contains stylized/stuttering expressions] ${trimmedLine}`;
                 }
 
-                dialogueBuffer.push({ index: translatedLines.length, text: textToSendToAi });
+                let textWithSpeaker = textToSendToAi;
+                if (activeSpeakerName) {
+                    // Prepend the active speaker as a tagged context marker so the model knows who
+                    // is speaking. The marker is stripped from the final translated output in
+                    // flushBuffer() so it never reaches the committed translation.
+                    textWithSpeaker = `[Speaker: ${activeSpeakerName}] ${textToSendToAi}`;
+                }
+                dialogueBuffer.push({ index: translatedLines.length, text: textWithSpeaker });
                 translatedLines.push("");
             }
             outputRight.value = translatedLines.filter(l => l !== "").join("\n");
