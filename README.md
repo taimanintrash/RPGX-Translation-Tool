@@ -1,6 +1,6 @@
-# RPG Script & Scene Data Viewer, Editor & Translation Suite
+# RPG Script & Scene Data Viewer, Editor & Dedicated JP-to-EN Translation Suite
 
-A lightweight, single-file HTML5 web tool built for visual novel localizers, script editors, and AI translation researchers. It allows you to parse, compare, edit, and translate complex game script files locally using OpenAI-compatible local AI servers like **LM Studio**. This tool is specifically engineered and optimized for small local LLMs, and is currently being actively tested and tuned with **Qwen-3B-Instruct**.
+A lightweight, single-file HTML5 web tool built for visual novel localizers, script editors, and AI translation. It is a dedicated Japanese-to-English translation tool. It allows you to parse, compare, edit, and translate complex game script files locally using OpenAI-compatible local AI servers like **LM Studio**. This tool is specifically engineered and optimized for small local LLMs, and is currently being actively tested and tuned with **Qwen-3B-Instruct**. Note: To modify prompts or validation criteria, edit the JSON preset configuration files in the `default_presets/` directory.
 
 ---
 
@@ -21,7 +21,7 @@ A lightweight, single-file HTML5 web tool built for visual novel localizers, scr
 * **Stylization & Text Masking:**
   * Strips or delineates Japanese visual novel speech patterns (e.g., ！？, ――, stutters) to prevent small LLMs from getting confused.
   * **AI Mapping Generator:** Automatically analyzes source scripts and suggests JSON key-value replacement rules.
-* **Dynamic Preset System:** Auto-loads 6 pre-configured presets from `defalt_presets/` (Main, Benchmark, Japanese-to-English, Retry Translation, Name Plate Unique, Stylization Mapping).
+* **Dynamic Preset System:** Auto-loads 6 pre-configured prompt presets from `default_presets/` (Main, Benchmark, Japanese-to-English, Retry Translation, Name Plate Unique, Stylization Mapping).
 * **Modern Theming & Dark Mode:**
   * Full dark mode support (`[data-theme="dark"]`) with theme-aware scrollbars and low-glare, eye-strain-reducing palette tuning.
   * Clean UI typography with all emoji-only controls replaced by intuitive text and symbols.
@@ -55,7 +55,7 @@ No build tools, Node.js packages, or web servers are required to host the tool i
 
 ### Step 2: Launch the Web Application (Local HTTP Server)
 
-The tool must be served over HTTP (not opened directly as a `file://` URL) so the browser can fetch the shipped default presets in `defalt_presets/` and avoid browser file-access restrictions. Run any static file server from the repository root.
+The tool must be served over HTTP (not opened directly as a `file://` URL) so the browser can fetch the shipped default presets in `default_presets/` and avoid browser file-access restrictions. Run any static file server from the repository root.
 
 **Option A - From a cloned repository:**
 1. Clone the repo: `git clone https://github.com/antAmaine/RPGX-Translation-Tool.git`
@@ -81,7 +81,7 @@ Once the page is open:
 2. Select your loaded model from the dropdown.
 
 ### Step 3: Load Script Files
-1. Click **Choose Files** in the top panel and upload your script files (`.json` or `.js`).
+1. Click **Choose Files** in the top panel and upload your script files (`.json` or `.js`) Found in data/scripts/data in the veiwer's folder.
 2. Select a **Script ID** from the sidebar to display source text in the left pane.
 
 ### Step 4: Translate & Edit

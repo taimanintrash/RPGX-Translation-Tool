@@ -73,7 +73,7 @@ export function clearError() {
 }
 
 /**
- * Dynamically renders one custom-upload row per available default preset file in `defalt_presets/`.
+ * Dynamically renders one custom-upload row per available default preset file in `default_presets/`.
  * The defaults themselves are already loaded into memory on startup; these controls let a user
  * upload a custom JSON to override any operation tier in memory. The number of rows scales with
  * the entries in `defaultPresetManifest`.
@@ -86,7 +86,7 @@ export function renderDistinctPresetControls() {
     container.innerHTML = "";
 
     if (!defaultPresetManifest || defaultPresetManifest.length === 0) {
-        container.innerHTML = '<em style="color: #64748b; font-size: 11px; grid-column: span 2;">No default preset files found in defalt_presets/.</em>';
+        container.innerHTML = '<em style="color: #64748b; font-size: 11px; grid-column: span 2;">No default preset files found in default_presets/.</em>';
         return;
     }
 
@@ -159,13 +159,13 @@ export function updateDebugPageDisplay() {
         page2.style.display = "none";
         prevBtn.style.display = "none";
         nextBtn.style.display = "inline-block";
-        title.textContent = "Translation & Stylization (Page 1 / 2)";
+        title.textContent = "Translation & Stylization";
     } else {
         page1.style.display = "none";
         page2.style.display = "flex";
         prevBtn.style.display = "inline-block";
         nextBtn.style.display = "none";
-        title.textContent = "Inconsistency-Focused Benchmark Suite (Page 2 / 2)";
+        title.textContent = "Inconsistency-Focused Benchmark Suite";
     }
 }
 
@@ -402,8 +402,8 @@ export function closeNameModal() {
  * Called by: ui.js (promptUserForManualStep, input change listeners)
  */
 function refreshStepContextPreview(currentContextWindow) {
-    const ctxLines = parseInt(document.getElementById("stepContextLinesInput")?.value) || state._stepMaxCtxDefault || 6;
-    const rawLimit = parseInt(document.getElementById("stepRawLimitInput")?.value) || 2;
+    const ctxLines = parseInt(document.getElementById("stepContextLinesInput")?.value) || state._stepMaxCtxDefault || 0;
+    const rawLimit = parseInt(document.getElementById("stepRawLimitInput")?.value) || 0;
 
     const archivalBox = document.getElementById("stepArchivalSummaryText");
     const recentBox = document.getElementById("stepRecentSummaryText");
@@ -651,7 +651,7 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
             state._stepSummaryContext = summaryContext || {};
             state._stepMilestones = [];
         }
-        state._stepMaxCtxDefault = maxContextLinesDefault || 6;
+        state._stepMaxCtxDefault = maxContextLinesDefault || 0;
 
         // Initial population + live refresh of the context preview.
         refreshStepContextPreview(currentContextWindow);
@@ -703,8 +703,8 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export function resolveManualStepContinue() {
-    const contextCount = parseInt(document.getElementById("stepContextLinesInput").value) || 6;
-    const rawLimit = parseInt(document.getElementById("stepRawLimitInput").value) || 2;
+    const contextCount = parseInt(document.getElementById("stepContextLinesInput").value) || 0;
+    const rawLimit = parseInt(document.getElementById("stepRawLimitInput").value) || 0;
     if (state.manualStepResolver) {
         state.manualStepResolver("continue", contextCount, rawLimit);
         state.manualStepResolver = null;
@@ -716,8 +716,8 @@ export function resolveManualStepContinue() {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 export async function triggerStepRetranslation() {
-    const contextCount = parseInt(document.getElementById("stepContextLinesInput").value) || 6;
-    const rawLimit = parseInt(document.getElementById("stepRawLimitInput").value) || 2;
+    const contextCount = parseInt(document.getElementById("stepContextLinesInput").value) || 0;
+    const rawLimit = parseInt(document.getElementById("stepRawLimitInput").value) || 0;
     if (state.manualStepResolver) {
         state.manualStepResolver("retranslate", contextCount, rawLimit);
         state.manualStepResolver = null;
@@ -731,7 +731,7 @@ export async function triggerStepRetranslation() {
 export function initAutoNumberInputs() {
     function resize(el) {
         const len = String(el.value).length || 1;
-        el.style.width = 'calc(' + len + 'ch + 12px)';
+        el.style.width = 'calc(' + len + 'ch + 16px)';
     }
     document.querySelectorAll('.auto-number-input').forEach(el => {
         resize(el);

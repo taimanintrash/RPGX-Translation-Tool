@@ -10,7 +10,6 @@ export async function runParameterSweepBenchmark() {
     console.log('[Trace:Benchmark] runParameterSweepBenchmark() invoked.');
     const host = document.getElementById("aiServerHost").value.trim().replace(/\/+$/, "");
     const model = document.getElementById("aiModel").value;
-    const targetLang = document.getElementById("targetLanguage").value;
     const sourceText = document.getElementById("outputAreaLeft").value;
 
     const refFileIdx = document.getElementById("benchmarkRefFileSelect").value;
@@ -50,7 +49,7 @@ export async function runParameterSweepBenchmark() {
                 if (trimmed.startsWith("<") || trimmed === "") {
                     translatedLines.push(line);
                 } else {
-                    let res = await translateChunkWithContext(host, model, targetLang, trimmed, history.slice(-cLine));
+                    let res = await translateChunkWithContext(host, model, trimmed, history.slice(-cLine), 'jpEn');
                     history.push(res);
                     translatedLines.push(res);
                 }

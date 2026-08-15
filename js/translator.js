@@ -11,23 +11,24 @@ export const operationPresets = {
     namePlate: { temperature: 0.1, systemPrompt: "You are a specialized proper noun and character name localization engine. Output transliterated name cleanly." },
     stylization: { temperature: 0.2, systemPrompt: "You are a specialized stylization mapper. Analyze the provided game script and generate a JSON mapping of character names and unique speech patterns to standardized stylization keys." },
     recentSummary: { temperature: 0.2, systemPrompt: "You are a concise narrative context tracking engine for game translation. Maintain a tightly focused rolling recap of active character dynamics, tone, and immediate scene events without conversational filler." },
-    archivalSummary: { temperature: 0.15, systemPrompt: "You are an expert story archivist compressing narrative history into a single high-level macro state sentence. Preserve primary character identities, relationships, and overarching goals while omitting resolved micro-dialogue." }
+    archivalSummary: { temperature: 0.15, systemPrompt: "You are an expert story archivist compressing narrative history into a single high-level macro state sentence. Preserve primary character identities, relationships, and overarching goals while omitting resolved micro-dialogue." },
+    validator: { temperature: 0.1, systemPrompt: "You are a stringent quality assurance AI evaluating Japanese-to-English translations. Analyze the provided text for untranslated Japanese fragments, romaji placeholders, and poor localization mixing. Return 'PASS' if the translation is fully and naturally localized into English. Return 'FAIL' if any fragments or poor mixing are detected." }
 };
 
 /**
- * Manifest of default preset JSON files shipped in the `defalt_presets/` directory.
+ * Manifest of default preset JSON files shipped in the `default_presets/` directory.
  * Each entry maps a preset file to the operation key it overrides (matching `operationPresets`).
- * Add a new file to `defalt_presets/` and append an entry here to make it appear as a loadable default.
+ * Add a new file to `default_presets/` and append an entry here to make it appear as a loadable default.
  */
 export const defaultPresetManifest = [
-    { file: 'defalt_presets/defalt_presets.json', operationKey: 'main', label: 'Main Translation' },
-    { file: 'defalt_presets/benchmark_prompt.json', operationKey: 'benchmark', label: 'Benchmark Prompt' },
-    { file: 'defalt_presets/japanese_to_english.json', operationKey: 'jpEn', label: 'Japanese to English' },
-    { file: 'defalt_presets/retry_translation.json', operationKey: 'retry', label: 'Retry Translation' },
-    { file: 'defalt_presets/name_plate_unique.json', operationKey: 'namePlate', label: 'Name Plate Unique' },
-    { file: 'defalt_presets/stylization_mapping.json', operationKey: 'stylization', label: 'Stylization Mapping' },
-    { file: 'defalt_presets/recent_summary.json', operationKey: 'recentSummary', label: 'Recent Scene Summary (Tier 2)' },
-    { file: 'defalt_presets/archival_summary.json', operationKey: 'archivalSummary', label: 'Archival Story State (Tier 3)' }
+    { file: 'default_presets/benchmark_prompt.json', operationKey: 'benchmark', label: 'Benchmark Prompt' },
+    { file: 'default_presets/japanese_to_english.json', operationKey: 'jpEn', label: 'Japanese to English' },
+    { file: 'default_presets/retry_translation.json', operationKey: 'retry', label: 'Retry Translation' },
+    { file: 'default_presets/name_plate_unique.json', operationKey: 'namePlate', label: 'Name Plate Unique' },
+    { file: 'default_presets/stylization_mapping.json', operationKey: 'stylization', label: 'Stylization Mapping' },
+    { file: 'default_presets/recent_summary.json', operationKey: 'recentSummary', label: 'Recent Scene Summary' },
+    { file: 'default_presets/archival_summary.json', operationKey: 'archivalSummary', label: 'Archival Story State' },
+    { file: 'default_presets/translation_validator.json', operationKey: 'validator', label: 'Translation Validator' }
 ];
 
 /**
@@ -76,7 +77,7 @@ export function loadSpecificPreset(operationKey, event) {
     if (!file) { console.warn('[Trace:Preset] No file selected, aborting.'); return; }
 
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
         try {
             mapPresetJson(operationKey, JSON.parse(e.target.result), file.name);
             console.log(`[Trace:Preset] Custom preset applied to "${operationKey}" from "${file.name}".`);
@@ -90,7 +91,7 @@ export function loadSpecificPreset(operationKey, event) {
 }
 
 /**
- * Fetches a shipped default preset JSON from the `defalt_presets/` directory and applies it to the matching operation.
+ * Fetches a shipped default preset JSON from the `default_presets/` directory and applies it to the matching operation.
  * Called by: HTML event handler / main.js (dynamic default preset buttons)[cite: 7]
  */
 export async function loadDefaultPreset(operationKey) {
@@ -112,7 +113,7 @@ export async function loadDefaultPreset(operationKey) {
 }
 
 /**
- * Loads every shipped default preset from `defalt_presets/` into `operationPresets` so the translation
+ * Loads every shipped default preset from `default_presets/` into `operationPresets` so the translation
  * prompts have their default configuration available in memory without any user action.
  * Called by: main.js (DOMContentLoaded)[cite: 7]
  */
@@ -127,7 +128,7 @@ export async function loadAllDefaultPresets() {
     );
     const failed = results.filter(r => r.status === 'rejected');
     if (failed.length === defaultPresetManifest.length) {
-        console.warn('[Default Presets] Could not load any default presets from defalt_presets/. The app must be served over HTTP (e.g. via start-agent.sh).');
+        console.warn('[Default Presets] Could not load any default presets from default_presets/. The app must be served over HTTP (e.g. via start-agent.sh).');
     } else if (failed.length > 0) {
         console.warn(`[Default Presets] ${failed.length}/${defaultPresetManifest.length} default preset(s) failed to load.`);
     } else {
@@ -241,8 +242,8 @@ export function cleanModelOutput(rawText) {
     cleaned = cleaned.replace(/^(Translation:|Translated text:|English:)\s*/i, '');
     cleaned = cleaned.trim().replace(/^["'|||「『]|["'|」』]$/g, '');
     const lines = cleaned.split("\n")
-                         .map(l => l.trim())
-                         .filter(l => l.length > 0 && !l.toLowerCase().includes("translate the following"));
+        .map(l => l.trim())
+        .filter(l => l.length > 0 && !l.toLowerCase().includes("translate the following"));
     return lines.length > 0 ? lines[0] : "";
 }
 
@@ -256,8 +257,8 @@ export function cleanSummaryOutput(rawText) {
     cleaned = cleaned.replace(/^(Summary:|Story Summary:|Updated Story Summary:|Recap:|Updated Recap:|Scene Recap:)\s*/i, '');
     cleaned = cleaned.trim().replace(/^["']|["']$/g, '');
     const lines = cleaned.split("\n")
-                         .map(l => l.trim())
-                         .filter(l => l.length > 0 && !l.toLowerCase().startsWith("task:") && !l.toLowerCase().startsWith("rules:"));
+        .map(l => l.trim())
+        .filter(l => l.length > 0 && !l.toLowerCase().startsWith("task:") && !l.toLowerCase().startsWith("rules:"));
     return lines.join(" ");
 }
 
@@ -266,24 +267,24 @@ export function cleanSummaryOutput(rawText) {
  * Focuses on active characters, emotional tone, and immediate narrative developments.
  * Called by: translator.js (translateViaAiServer)
  */
-export async function updateRecentSummary(host, model, targetLang, currentRecentSummary, newLines) {
+export async function updateRecentSummary(host, model, currentRecentSummary, newLines) {
     console.log(`[Trace:Summary:Recent] Updating recent summary with ${newLines.length} line(s).`);
     const newLinesText = newLines.join("\n");
     let promptText = "";
 
     if (!currentRecentSummary || !currentRecentSummary.trim()) {
-        promptText = `Task: Summarize the following dialogue into 1-2 concise sentences in ${targetLang}.\n` +
-                     `Focus on: active character names, their tone/relationship, and the current action or discussion topic.\n` +
-                     `Rules: Output ONLY the concise summary text. No preamble, commentary, or quotes.\n\n` +
-                     `Dialogue:\n${newLinesText}\n\n` +
-                     `Summary:`;
+        promptText = `Task: Summarize the following dialogue into 1-2 concise sentences.\n` +
+            `Focus on: active character names, their tone/relationship, and the current action or discussion topic.\n` +
+            `Rules: Output ONLY the concise summary text. No preamble, commentary, or quotes.\n\n` +
+            `Dialogue:\n${newLinesText}\n\n` +
+            `Summary:`;
     } else {
-        promptText = `Task: Update the ongoing scene recap with the new dialogue lines in ${targetLang}.\n` +
-                     `Focus on: active character names, their tone/relationship, and the current action or discussion topic.\n` +
-                     `Rules: Keep the updated recap under 2-3 sentences total. Output ONLY the updated recap. No preamble, commentary, or quotes.\n\n` +
-                     `Current Recap:\n${currentRecentSummary}\n\n` +
-                     `New Dialogue:\n${newLinesText}\n\n` +
-                     `Updated Recap:`;
+        promptText = `Task: Update the ongoing scene recap with the new dialogue lines.\n` +
+            `Focus on: active character names, their tone/relationship, and the current action or discussion topic.\n` +
+            `Rules: Keep the updated recap under 2-3 sentences total. Output ONLY the updated recap. No preamble, commentary, or quotes.\n\n` +
+            `Current Recap:\n${currentRecentSummary}\n\n` +
+            `New Dialogue:\n${newLinesText}\n\n` +
+            `Updated Recap:`;
     }
 
     const recentConfig = operationPresets.recentSummary || {
@@ -327,23 +328,23 @@ export async function updateRecentSummary(host, model, targetLang, currentRecent
  * If an archival summary already exists, it updates itself to preserve macro story state and key relationships.
  * Called by: translator.js (translateViaAiServer)
  */
-export async function updateArchivalSummary(host, model, targetLang, currentArchivalSummary, recentSummaryToArchive) {
+export async function updateArchivalSummary(host, model, currentArchivalSummary, recentSummaryToArchive) {
     console.log(`[Trace:Summary:Archival] Compressing scene recap into archival summary.`);
     let promptText = "";
 
     if (!currentArchivalSummary || !currentArchivalSummary.trim()) {
-        promptText = `Task: Compress the following scene recap into ONE concise sentence in ${targetLang}.\n` +
-                     `Preserve: primary character names, core relationships, and the overall story situation.\n` +
-                     `Rules: Output exactly ONE sentence. No preamble, quotes, or conversational filler.\n\n` +
-                     `Scene Recap:\n${recentSummaryToArchive}\n\n` +
-                     `Story Summary:`;
+        promptText = `Task: Compress the following scene recap into ONE concise sentence.\n` +
+            `Preserve: primary character names, core relationships, and the overall story situation.\n` +
+            `Rules: Output exactly ONE sentence. No preamble, quotes, or conversational filler.\n\n` +
+            `Scene Recap:\n${recentSummaryToArchive}\n\n` +
+            `Story Summary:`;
     } else {
-        promptText = `Task: Update the long-term story recap with the latest scene developments in ${targetLang}.\n` +
-                     `Preserve: primary character names, core relationships, and macro plot state. Discard finished minor dialogue.\n` +
-                     `Rules: Output exactly ONE comprehensive sentence. No preamble, quotes, or conversational filler.\n\n` +
-                     `Previous Story Summary:\n${currentArchivalSummary}\n\n` +
-                     `Recent Developments:\n${recentSummaryToArchive}\n\n` +
-                     `Updated Story Summary:`;
+        promptText = `Task: Update the long-term story recap with the latest scene developments.\n` +
+            `Preserve: primary character names, core relationships, and macro plot state. Discard finished minor dialogue.\n` +
+            `Rules: Output exactly ONE comprehensive sentence. No preamble, quotes, or conversational filler.\n\n` +
+            `Previous Story Summary:\n${currentArchivalSummary}\n\n` +
+            `Recent Developments:\n${recentSummaryToArchive}\n\n` +
+            `Updated Story Summary:`;
     }
 
     const archivalConfig = operationPresets.archivalSummary || {
@@ -386,15 +387,52 @@ export async function updateArchivalSummary(host, model, targetLang, currentArch
  * Summarizes older dialogue context lines into a single sentence (kept for backwards compatibility).
  * Called by: translator.js
  */
-export async function summarizeOldContext(host, model, targetLang, linesToSummarize) {
-    return await updateRecentSummary(host, model, targetLang, "", linesToSummarize);
+export async function summarizeOldContext(host, model, linesToSummarize) {
+    return await updateRecentSummary(host, model, "", linesToSummarize);
+}
+
+/**
+ * Assesses the quality of a Japanese-to-English translation using a stringent QA prompt.
+ * Called by: translator.js (translateChunkWithContext)
+ */
+export async function assessTranslationQualityWithAI(host, model, translatedText) {
+    const config = operationPresets.validator || { temperature: 0.1, systemPrompt: "You are a stringent quality assurance AI evaluating Japanese-to-English translations. Analyze the provided text for untranslated Japanese fragments, romaji placeholders, and poor localization mixing. Return 'PASS' if the translation is fully and naturally localized into English. Return 'FAIL' if any fragments or poor mixing are detected." };
+    const promptText = `Evaluate the following translation:\n\n${translatedText}\n\nResult:`;
+    
+    const payload = {
+        model: model,
+        messages: [
+            { role: "system", content: config.systemPrompt },
+            { role: "user", content: promptText }
+        ],
+        stream: false,
+        temperature: config.temperature,
+        max_tokens: 64,
+        chat_template_kwargs: { "enable_thinking": false }
+    };
+    
+    try {
+        const res = await fetch(`${host}/v1/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: state.currentAbortController ? state.currentAbortController.signal : undefined
+        });
+        if (!res.ok) return true; // Fail open
+        const data = await res.json();
+        const content = data.choices?.[0]?.message?.content || "";
+        return !content.toUpperCase().includes('FAIL');
+    } catch (e) {
+        console.warn("[Trace:Validator] Error evaluating translation quality:", e);
+        return true;
+    }
 }
 
 /**
  * Translates a text chunk or chunk with prior history context using configured system parameters and handles retry logic[cite: 7].
  * Called by: benchmark.js and translator.js[cite: 7]
  */
-export async function translateChunkWithContext(host, model, targetLang, chunkText, previousContext, presetType = 'main') {
+export async function translateChunkWithContext(host, model, chunkText, previousContext, presetType = 'jpEn') {
     console.log(`[Trace:Translate] translateChunkWithContext(preset="${presetType}", contextLines=${previousContext.length}) invoked.`);
     if (/^<[A-Z_]+>/.test(chunkText.trim()) && !chunkText.includes('"')) {
         console.log('[Trace:Translate] Passing control-tag line through unchanged.');
@@ -413,17 +451,17 @@ export async function translateChunkWithContext(host, model, targetLang, chunkTe
     while (attempts <= maxRetries) {
         attempts++;
         let isFallbackRun = (attempts > maxRetries);
-        
+
         if (isFallbackRun) {
             currentContext = [];
             activePresetConfig = operationPresets.retry;
             console.warn(`[Fallback] Max retries (${maxRetries}) reached for chunk: "${sanitized}". Activating retry preset fallback.`);
         }
 
-        let promptText = `Task: Translate the Japanese visual novel text block into fluent ${targetLang}.\n` +
-                         `Rules:\n` +
-                         `- Preserve original character tone and pronoun context.\n` +
-                         `- Output ONLY the translated string with no filler or preambles.\n\n`;
+        let promptText = `Task: Translate the visual novel text block.\n` +
+            `Rules:\n` +
+            `- Preserve original character tone and pronoun context.\n` +
+            `- Output ONLY the translated string with no filler or preambles.\n\n`;
 
         if (currentContext && currentContext.length > 0) {
             promptText += `<history>\n` + currentContext.join("\n") + `\n</history>\n\n`;
@@ -438,7 +476,7 @@ export async function translateChunkWithContext(host, model, targetLang, chunkTe
                 { role: "user", content: promptText }
             ],
             stream: false,
-            temperature: activePresetConfig.temperature + (attempts > 1 ? (attempts * 0.1) : 0), 
+            temperature: activePresetConfig.temperature + (attempts > 1 ? (attempts * 0.1) : 0),
             max_tokens: 1024,
             chat_template_kwargs: { "enable_thinking": false }
         };
@@ -464,16 +502,16 @@ export async function translateChunkWithContext(host, model, targetLang, chunkTe
 
         // --- jp->en validation checks ---
         const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(cleanedResult);
-        // Detect leftover romaji fragments (common untranslated jp words) that signal the jp->en prompt didn't fully translate.
-        const romajiFragments = /\b(nani|boku|ore|watashi|konnichiwa|sugoi|kawaii|baka|senpai|sensei|sayonara|arigatou|doko|dare|naze|shinjirarenai|yatta|ganbatte)\b/i.test(cleanedResult);
-        console.log(`[Trace:Translate:Detect] hasJapanese=${hasJapanese}, romajiFragments=${romajiFragments}, contextLines=${currentContext.length}`);
+        const qualityPass = await assessTranslationQualityWithAI(host, model, cleanedResult);
+        
+        console.log(`[Trace:Translate:Detect] hasJapanese=${hasJapanese}, qualityPass=${qualityPass}, contextLines=${currentContext.length}`);
         if (hasJapanese) console.warn(`[Trace:Translate:Detect] Japanese characters still present in output -> will retry.`);
-        if (romajiFragments) console.warn(`[Trace:Translate:Detect] Romaji fragment detected in output -> jp->en prompt may not have fully translated.`);
+        if (!qualityPass) console.warn(`[Trace:Translate:Detect] AI validation failed -> poor localization or fragments detected.`);
 
         // Context-leak detection: did any prior context line bleed into the output?
         let hasOldContext = false;
         let leakedContextLine = "";
-        
+
         for (let ctxLine of currentContext) {
             let cleanCtx = ctxLine.trim();
             if (cleanCtx.length > 15) {
@@ -488,11 +526,11 @@ export async function translateChunkWithContext(host, model, targetLang, chunkTe
         }
         if (hasOldContext) console.warn(`[Trace:Translate:Detect] Context leak detected -> output contains a prior context line: "${leakedContextLine.substring(0, 60)}..."`);
 
-        if (!hasJapanese && !hasOldContext && !romajiFragments) {
-            console.log(`[Trace:Translate:Pass] Output passed all checks (no Japanese, no romaji, no context leak). Accepting translation.`);
-            return cleanedResult; 
+        if (!hasJapanese && !hasOldContext && qualityPass) {
+            console.log(`[Trace:Translate:Pass] Output passed all checks (no Japanese, no context leak, passed AI validation). Accepting translation.`);
+            return cleanedResult;
         }
-        console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, hasOldContext=${hasOldContext}, romajiFragments=${romajiFragments}). Dropping oldest context and retrying.`);
+        console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, hasOldContext=${hasOldContext}, qualityPass=${qualityPass}). Dropping oldest context and retrying.`);
         if (currentContext.length > 0) currentContext.shift();
     }
 }
@@ -636,9 +674,8 @@ export async function translateViaAiServer() {
     clearError();
     const host = document.getElementById("aiServerHost").value.trim().replace(/\/+$/, "");
     const model = document.getElementById("aiModel").value;
-    const targetLang = document.getElementById("targetLanguage").value;
-    const maxContextLines = parseInt(document.getElementById("contextLinesCount").value) || 6;
-    const rawLimitThreshold = parseInt(document.getElementById("rawContextLimit").value) || 2;
+    const maxContextLines = parseInt(document.getElementById("contextLinesCount").value) || 0;
+    const rawLimitThreshold = parseInt(document.getElementById("rawContextLimit").value) || 0;
 
     const selectElement = document.getElementById("scriptSelect");
     const selectRight = document.getElementById("fileSelectRight");
@@ -689,7 +726,7 @@ export async function translateViaAiServer() {
         if (rawTailStart > summarizedUpToIndex) {
             const newlyExitedLines = history.slice(summarizedUpToIndex, rawTailStart);
             if (newlyExitedLines.length > 0) {
-                recentSummary = await updateRecentSummary(host, model, targetLang, recentSummary, newlyExitedLines);
+                recentSummary = await updateRecentSummary(host, model, recentSummary, newlyExitedLines);
                 recentSummarySourceLines.push(...newlyExitedLines);
                 summarizedUpToIndex = rawTailStart;
 
@@ -697,7 +734,7 @@ export async function translateViaAiServer() {
                 // When recentSummary accumulates substantial context (~50 words or >250 chars), compress it into archival
                 const wordCount = recentSummary.trim().split(/\s+/).filter(Boolean).length;
                 if (wordCount >= 50 || recentSummary.length >= 250) {
-                    archivalSummary = await updateArchivalSummary(host, model, targetLang, archivalSummary, recentSummary);
+                    archivalSummary = await updateArchivalSummary(host, model, archivalSummary, recentSummary);
                     recentSummary = ""; // Reset rolling recent summary for the next scene segment
                     recentSummarySourceLines = [];
                 }
@@ -712,15 +749,15 @@ export async function translateViaAiServer() {
         let sliceStart = Math.max(0, formattedContextForPrompt.length - maxContextLines);
         let currentContextSlice = maxContextLines > 0 ? formattedContextForPrompt.slice(sliceStart) : [];
 
-        let activePresetKey = (targetLang.toLowerCase() === 'english') ? 'jpEn' : 'main';
-        let translatedCombined = await translateChunkWithContext(host, model, targetLang, combinedText, currentContextSlice, activePresetKey);
+        let activePresetKey = 'jpEn';
+        let translatedCombined = await translateChunkWithContext(host, model, combinedText, currentContextSlice, activePresetKey);
 
         if (state.manualStepByStepMode) {
             translatedLines[dialogueBuffer[0].index] = translatedCombined;
             outputRight.value = translatedLines.filter(l => l !== "").join("\n");
 
             let stepResult, keepTranslatingStep = true;
-            
+
             while (keepTranslatingStep) {
                 stepResult = await promptUserForManualStep(
                     combinedText,
@@ -741,7 +778,7 @@ export async function translateViaAiServer() {
                         ? stepFormattedContext.slice(Math.max(0, stepFormattedContext.length - stepResult.newContextCount))
                         : [];
                     console.log(`[Trace:Translation] Re-translate step: contextLines=${stepResult.newContextCount}, rawLimit=${stepRawLimit}, windowSize=${updatedContextWindow.length}`);
-                    translatedCombined = await translateChunkWithContext(host, model, targetLang, combinedText, updatedContextWindow, 'retry');
+                    translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry');
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
                 } else {
@@ -765,7 +802,7 @@ export async function translateViaAiServer() {
     try {
         let totalLines = lines.length;
         let effectiveLimit = (state.debugMaxLinesLimit > 0 && state.debugMaxLinesLimit < totalLines) ? state.debugMaxLinesLimit : totalLines;
-        console.log(`[Trace:Translation] Starting loop: ${effectiveLimit}/${totalLines} lines, preset=${(targetLang.toLowerCase() === 'english') ? 'jpEn' : 'main'}, mode=${state.stylizationMode}, manualStep=${state.manualStepByStepMode}`);
+        console.log(`[Trace:Translation] Starting loop: ${effectiveLimit}/${totalLines} lines, preset='jpEn', mode=${state.stylizationMode}, manualStep=${state.manualStepByStepMode}`);
 
         for (let idx = 0; idx < effectiveLimit; idx++) {
             if (state.currentAbortController.signal.aborted) throw new Error("Translation cancelled by user.");
@@ -787,8 +824,8 @@ export async function translateViaAiServer() {
                     if (state.knownNamesMap[cleanName]) {
                         finalUserApprovedName = state.knownNamesMap[cleanName];
                     } else {
-                        let namePrompt = `Transliterate this character name into ${targetLang}. Return strictly the clean name text only:\n${cleanName}`;
-                        let aiTranslatedName = await translateChunkWithContext(host, model, targetLang, namePrompt, [], 'namePlate');
+                        let namePrompt = `Transliterate this character name. Return strictly the clean name text only:\n${cleanName}`;
+                        let aiTranslatedName = await translateChunkWithContext(host, model, namePrompt, [], 'namePlate');
                         console.log(`[Trace:Translation:NamePlate] cleanName="${cleanName}" -> aiTranslatedName="${aiTranslatedName}"`);
                         finalUserApprovedName = await promptUserForNameTranslation(cleanName, aiTranslatedName);
                         state.knownNamesMap[cleanName] = finalUserApprovedName;

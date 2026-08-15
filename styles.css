@@ -110,6 +110,7 @@ body {
     color: transparent;
     width: 105px;
 }
+
 #fileInput::file-selector-button {
     color: var(--text-primary);
 }
@@ -173,7 +174,8 @@ body {
     gap: 8px;
     align-items: center;
     flex: none;
-    width: 100%; /* forces onto a second line */
+    width: 100%;
+    /* forces onto a second line */
     order: 3;
     min-width: 0;
 }
@@ -275,7 +277,7 @@ body {
 
 .compare-selectors select {
     flex: 1;
-    min-width: 140px;
+    min-width: 100px;
     padding: 6px;
     border: 1px solid var(--border-strong);
     border-radius: 4px;
@@ -295,9 +297,11 @@ body {
 .translate-config {
     display: flex;
     align-items: center;
-    gap: 15px; /* give it some breathing room */
+    gap: 15px;
+    /* give it some breathing room */
     flex-wrap: wrap;
-    width: 100%; /* Take full width on next line to prevent premature wrapping */
+    width: 100%;
+    /* Take full width on next line to prevent premature wrapping */
 }
 
 /* Sub-groups inside translate-config, visually separated */
@@ -307,8 +311,7 @@ body {
     gap: 6px;
 }
 
-
-@media (max-width: 1000px) {
+@media (max-width: 1020px) {
     .top-panel {
         flex-wrap: nowrap !important;
         overflow-x: auto;
@@ -348,8 +351,8 @@ body {
 
     .compare-selectors select {
         flex: none !important;
-        min-width: 0 !important;
-        width: auto !important;
+        min-width: 0;
+        width: auto;
     }
 
     #aiServerHost {
@@ -372,7 +375,7 @@ body {
         padding: 0 !important;
         margin: 0 !important;
     }
-    
+
     #fileInput::file-selector-button {
         font-size: 10px !important;
         padding: 3px 6px !important;
@@ -382,10 +385,16 @@ body {
 
 @media (max-width: 1200px) {
     #aiModel {
-        max-width: 150px;
+        width: 100px !important;
         text-overflow: ellipsis;
         overflow: hidden;
         white-space: nowrap;
+    }
+}
+
+@media (max-width: 500px) {
+    .mobile-script-select {
+        width: 60px !important;
     }
 }
 
@@ -400,16 +409,15 @@ body {
 }
 
 .mobile-script-select,
-#aiModel,
-#targetLanguage {
-    width: auto !important;
+#aiModel {
+    width: auto;
     max-width: 100%;
 }
 
 /* Auto-sizing number input: flat min-width floor + dynamic calc width from JS */
 .auto-number-input {
     min-width: 6px;
-    width: calc(1ch + 6px);
+    width: calc(1ch + 16px);
     text-align: center;
     padding: 2px 3px;
     -moz-appearance: textfield;

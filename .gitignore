@@ -2,7 +2,7 @@
 .DS_Store
 Thumbs.db
 
-# Dual-sync script (contains tokens — never commit)
+# Dual-sync script(Sycing to 2 repos - contains tokens — never commit)
 dual_sync.sh
 
 # IDE Codeing Agent config (local only)
