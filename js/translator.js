@@ -990,6 +990,14 @@ export async function translateViaAiServer() {
                 if (stepResult.action === "retranslate") {
                     const stepCtxLines = stepResult.newContextCount || maxContextLines;
                     const stepRawLimit = stepResult.rawLimit ?? rawLimitThreshold;
+                    // Apply any manual edits to the archival/recent summary boxes to the
+                    // internal summary variables before rebuilding the context window, so the
+                    // retranslate uses the user-edited summaries.
+                    const edits = stepResult.manualSummaryEdits;
+                    if (edits) {
+                        if (typeof edits.archivalSummary === "string") archivalSummary = edits.archivalSummary;
+                        if (typeof edits.recentSummary === "string") recentSummary = edits.recentSummary;
+                    }
                     // Rebuild the context window using the updated settings via buildTieredContextWindow,
                     // so the retranslate uses the same tiered summary pipeline as the main translation.
                     let updatedContextWindow = await buildTieredContextWindow(host, model, history, stepCtxLines, stepRawLimit, {
@@ -1006,6 +1014,13 @@ export async function translateViaAiServer() {
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
                 } else {
+                    // Apply any manual edits to the archival/recent summary boxes to the
+                    // internal summary variables so the next chunk carries them forward.
+                    const edits = stepResult.manualSummaryEdits;
+                    if (edits) {
+                        if (typeof edits.archivalSummary === "string") archivalSummary = edits.archivalSummary;
+                        if (typeof edits.recentSummary === "string") recentSummary = edits.recentSummary;
+                    }
                     // The user edits the translation directly in the outputRight textarea,
                     // so read their edited text back from there. A single translatedLines
                     // entry may span multiple display lines (multi-line narration), so we

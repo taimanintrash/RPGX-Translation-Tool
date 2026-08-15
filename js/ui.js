@@ -709,12 +709,12 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
         const outputRight = document.getElementById("outputAreaRight");
         if (outputRight) outputRight.classList.add("editable");
 
-        state.manualStepResolver = (action, newContextCount, rawLimit) => {
+        state.manualStepResolver = (action, newContextCount, rawLimit, manualSummaryEdits) => {
             if (titleEl) titleEl.textContent = "Manual Step Override Active";
             if (!state.manualStepByStepMode && toolbar) {
                 toolbar.style.display = "none";
             }
-            resolve({ action, newContextCount, rawLimit });
+            resolve({ action, newContextCount, rawLimit, manualSummaryEdits });
         };
 
         if (state.currentAbortController) {
@@ -735,8 +735,11 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
 export function resolveManualStepContinue() {
     const contextCount = parseInt(document.getElementById("stepContextLinesInput").value) || 0;
     const rawLimit = parseInt(document.getElementById("stepRawLimitInput").value) || 0;
+    // Capture any manual edits to the archival/recent summary boxes so they update
+    // the internal summary variables when the step resolves.
+    const manualSummaryEdits = readManualSummaryEdits();
     if (state.manualStepResolver) {
-        state.manualStepResolver("continue", contextCount, rawLimit);
+        state.manualStepResolver("continue", contextCount, rawLimit, manualSummaryEdits);
         state.manualStepResolver = null;
     }
 }
@@ -764,10 +767,28 @@ export function applyStepContextSettings() {
 export async function triggerStepRetranslation() {
     const contextCount = parseInt(document.getElementById("stepContextLinesInput").value) || 0;
     const rawLimit = parseInt(document.getElementById("stepRawLimitInput").value) || 0;
+    // Capture any manual edits to the archival/recent summary boxes so they update
+    // the internal summary variables before the retranslate rebuilds the context window.
+    const manualSummaryEdits = readManualSummaryEdits();
     if (state.manualStepResolver) {
-        state.manualStepResolver("retranslate", contextCount, rawLimit);
+        state.manualStepResolver("retranslate", contextCount, rawLimit, manualSummaryEdits);
         state.manualStepResolver = null;
     }
+}
+
+/**
+ * Reads the current (possibly user-edited) archival and recent summary boxes.
+ * Returns null when neither box exists so callers can skip writing anything back.
+ * Called by: resolveManualStepContinue, triggerStepRetranslation
+ */
+function readManualSummaryEdits() {
+    const archivalBox = document.getElementById("stepArchivalSummaryText");
+    const recentBox = document.getElementById("stepRecentSummaryText");
+    if (!archivalBox && !recentBox) return null;
+    return {
+        archivalSummary: archivalBox ? archivalBox.value : undefined,
+        recentSummary: recentBox ? recentBox.value : undefined
+    };
 }
 
 /**
