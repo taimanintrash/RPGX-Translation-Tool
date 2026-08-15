@@ -355,6 +355,14 @@
                         </div>
                     </div>
 
+                    <!-- Custom text to translate (overrides Source 1 when populated) -->
+                    <div class="modal-field" style="flex: 1; display: flex; flex-direction: column;">
+                        <label style="font-size:11px;"><strong>Text to Translate (optional — overrides Source 1):</strong></label>
+                        <textarea id="benchmarkTextInput"
+                            style="background: #f8fafc; font-size: 12px; min-height: 80px; resize: vertical; font-family: monospace;"
+                            placeholder="Paste custom text here to benchmark it directly. Leave empty to use Source 1 output."></textarea>
+                    </div>
+
                     <button class="translate-btn" style="align-self: flex-start;"
                         onclick="runParameterSweepBenchmark()">Run Benchmark</button>
                 </div>
