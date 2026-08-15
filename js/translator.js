@@ -754,6 +754,56 @@ export function stopTranslation() {
  * Manages the core sequential translation loop across lines, handling buffers, name plates, stylized pattern matching, context windows, and manual step checkpoints[cite: 7].
  * Called by: HTML event handler / main.js[cite: 7]
  */
+/**
+ * Builds the tiered context window (Raw Tail -> Recent Summary -> Archival Summary) shared by the
+ * production translation pipeline and the benchmark sweep, so both grade the model under
+ * identical context conditions. Mutates and returns the summaryState object in place.
+ *
+ * Tier 1 (Raw Tail): the most recent `rawLimitThreshold` confirmed lines from history.
+ * Tier 2 (Recent Summary): a rolling recap of lines that fell out of the raw tail.
+ * Tier 3 (Archival Summary): a compressed macro story state when the recent summary overflows.
+ * The final window is capped to `maxContextLines` entries (summary lines + raw tail combined).
+ *
+ * Called by: translator.js (translateViaAiServer), benchmark.js (runParameterSweepBenchmark)
+ */
+export async function buildTieredContextWindow(host, model, history, maxContextLines, rawLimitThreshold, summaryState) {
+    let formattedContextForPrompt = [];
+
+    // Tier 1: Raw Tail (the most recent rawLimitThreshold confirmed lines from history)
+    const rawTailStart = Math.max(0, history.length - rawLimitThreshold);
+    const rawTail = history.slice(rawTailStart);
+
+    // Tier 2: Rolling Recent Summary
+    // Incorporate newly confirmed lines that have exited the raw tail window
+    if (rawTailStart > summaryState.summarizedUpToIndex) {
+        const newlyExitedLines = history.slice(summaryState.summarizedUpToIndex, rawTailStart);
+        if (newlyExitedLines.length > 0) {
+            summaryState.recentSummary = await updateRecentSummary(host, model, summaryState.recentSummary, newlyExitedLines);
+            summaryState.recentSummarySourceLines.push(...newlyExitedLines);
+            summaryState.summarizedUpToIndex = rawTailStart;
+
+            // Tier 3: Archival Summary (Macro story state compression)
+            // When recentSummary accumulates substantial context (~50 words or >250 chars), compress it into archival
+            const wordCount = summaryState.recentSummary.trim().split(/\s+/).filter(Boolean).length;
+            if (wordCount >= 50 || summaryState.recentSummary.length >= 250) {
+                summaryState.archivalSummary = await updateArchivalSummary(host, model, summaryState.archivalSummary, summaryState.recentSummary);
+                summaryState.recentSummary = ""; // Reset rolling recent summary for the next scene segment
+                summaryState.recentSummarySourceLines = [];
+            }
+        }
+    }
+
+    // Build hierarchical prompt context
+    if (summaryState.archivalSummary) formattedContextForPrompt.push(`[Story Context: ${summaryState.archivalSummary}]`);
+    if (summaryState.recentSummary) formattedContextForPrompt.push(`[Recent Scene: ${summaryState.recentSummary}]`);
+    formattedContextForPrompt.push(...rawTail);
+
+    let sliceStart = Math.max(0, formattedContextForPrompt.length - maxContextLines);
+    let currentContextSlice = maxContextLines > 0 ? formattedContextForPrompt.slice(sliceStart) : [];
+
+    return currentContextSlice;
+}
+
 export async function translateViaAiServer() {
     console.log('[Trace:Translation] translateViaAiServer() invoked.');
     clearError();
@@ -800,39 +850,18 @@ export async function translateViaAiServer() {
         if (dialogueBuffer.length === 0) return;
 
         let combinedText = dialogueBuffer.map(item => item.text).join(" ");
-        let formattedContextForPrompt = [];
 
-        // Tier 1: Raw Tail (the most recent rawLimitThreshold confirmed lines from history)
-        const rawTailStart = Math.max(0, history.length - rawLimitThreshold);
-        const rawTail = history.slice(rawTailStart);
-
-        // Tier 2: Rolling Recent Summary
-        // Incorporate newly confirmed lines that have exited the raw tail window
-        if (rawTailStart > summarizedUpToIndex) {
-            const newlyExitedLines = history.slice(summarizedUpToIndex, rawTailStart);
-            if (newlyExitedLines.length > 0) {
-                recentSummary = await updateRecentSummary(host, model, recentSummary, newlyExitedLines);
-                recentSummarySourceLines.push(...newlyExitedLines);
-                summarizedUpToIndex = rawTailStart;
-
-                // Tier 3: Archival Summary (Macro story state compression)
-                // When recentSummary accumulates substantial context (~50 words or >250 chars), compress it into archival
-                const wordCount = recentSummary.trim().split(/\s+/).filter(Boolean).length;
-                if (wordCount >= 50 || recentSummary.length >= 250) {
-                    archivalSummary = await updateArchivalSummary(host, model, archivalSummary, recentSummary);
-                    recentSummary = ""; // Reset rolling recent summary for the next scene segment
-                    recentSummarySourceLines = [];
-                }
-            }
-        }
-
-        // Build hierarchical prompt context
-        if (archivalSummary) formattedContextForPrompt.push(`[Story Context: ${archivalSummary}]`);
-        if (recentSummary) formattedContextForPrompt.push(`[Recent Scene: ${recentSummary}]`);
-        formattedContextForPrompt.push(...rawTail);
-
-        let sliceStart = Math.max(0, formattedContextForPrompt.length - maxContextLines);
-        let currentContextSlice = maxContextLines > 0 ? formattedContextForPrompt.slice(sliceStart) : [];
+        // Tiered context window (Raw Tail -> Recent Summary -> Archival Summary) is built by the
+        // shared helper so the production pipeline and benchmark sweep grade under identical conditions.
+        let currentContextSlice = await buildTieredContextWindow(host, model, history, maxContextLines, rawLimitThreshold, {
+            get archivalSummary() { return archivalSummary; },
+            set archivalSummary(v) { archivalSummary = v; },
+            get recentSummary() { return recentSummary; },
+            set recentSummary(v) { recentSummary = v; },
+            get recentSummarySourceLines() { return recentSummarySourceLines; },
+            get summarizedUpToIndex() { return summarizedUpToIndex; },
+            set summarizedUpToIndex(v) { summarizedUpToIndex = v; }
+        });
 
         let activePresetKey = 'jpEn';
         let translatedCombined = await translateChunkWithContext(host, model, combinedText, currentContextSlice, activePresetKey);
