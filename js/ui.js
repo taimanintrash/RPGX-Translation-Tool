@@ -658,7 +658,8 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
         const ctxInput = document.getElementById("stepContextLinesInput");
         const rawInput = document.getElementById("stepRawLimitInput");
 
-        const handleContextSettingChange = (inputEl, oldVal) => {
+        // Context-lines change is a destructive recompute: confirm before applying.
+        const handleContextLinesChange = (inputEl, oldVal) => {
             if (window.confirm("Changing context settings will recompute the active summaries and context window. Are you sure?")) {
                 inputEl.dataset.oldValue = inputEl.value;
                 refreshStepContextPreview();
@@ -666,14 +667,20 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
                 inputEl.value = inputEl.dataset.oldValue || oldVal;
             }
         };
+        // Raw-lines change is non-destructive: it only reshapes the raw tail preview,
+        // so update silently without a confirmation prompt.
+        const handleRawLinesChange = (inputEl) => {
+            inputEl.dataset.oldValue = inputEl.value;
+            refreshStepContextPreview();
+        };
 
         if (ctxInput) {
             ctxInput.dataset.oldValue = ctxInput.value;
-            ctxInput.onchange = () => handleContextSettingChange(ctxInput, ctxInput.dataset.oldValue);
+            ctxInput.onchange = () => handleContextLinesChange(ctxInput, ctxInput.dataset.oldValue);
         }
         if (rawInput) {
             rawInput.dataset.oldValue = rawInput.value;
-            rawInput.onchange = () => handleContextSettingChange(rawInput, rawInput.dataset.oldValue);
+            rawInput.onchange = () => handleRawLinesChange(rawInput);
         }
 
         const outputRight = document.getElementById("outputAreaRight");
