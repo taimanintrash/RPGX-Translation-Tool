@@ -986,7 +986,10 @@ export async function translateViaAiServer() {
                     activeSpeakerName = finalUserApprovedName;
                 } else {
                     translatedLines.push("<NAME_PLATE>");
-                    activeSpeakerName = "";
+                    // An empty name plate denotes narration in this visual novel format;
+                    // tag it so the model keeps third-person narrative voice rather than
+                    // drifting into first-person dialogue pronouns.
+                    activeSpeakerName = "Narrator";
                 }
             }
             else if (trimmedLine.startsWith("<") || trimmedLine === "") {
