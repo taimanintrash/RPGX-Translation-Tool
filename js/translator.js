@@ -580,19 +580,30 @@ export async function translateChunkWithContext(host, model, chunkText, previous
 
         for (let ctxLine of currentContext) {
             // Strip the [Speaker: Name] prefix history entries carry so the leak check
-            // compares the actual translation text. Without this, a context line like
-            // "[Speaker: Rinko] Stupidly asking..." never matched an output of
-            // "Stupidly asking..." because the prefix pushed the snippet past the
-            // matching text.
+            // compares the actual translation text.
             let cleanCtx = ctxLine.trim().replace(/^\[Speaker: [^\]]+\]\s*/, "");
             if (cleanCtx.length > 15) {
-                let sampleSize = Math.min(cleanCtx.length, 25);
-                let contextSnippet = cleanCtx.substring(0, sampleSize);
-                if (cleanedResult.includes(contextSnippet) || cleanedResult.includes(cleanCtx)) {
+                if (cleanedResult.includes(cleanCtx)) {
                     hasOldContext = true;
                     leakedContextLine = cleanCtx;
                     break;
                 }
+                // Sliding window: scan overlapping substrings of the context line rather
+                // than only the first 25 chars, so a leak copying the middle/end of a
+                // prior line is caught (e.g. an output that reproduces everything after
+                // a leading "B-But..."). Use a window large enough to avoid false positives
+                // on common short phrases.
+                const windowSize = 30;
+                const step = 5;
+                for (let w = 0; w + windowSize <= cleanCtx.length; w += step) {
+                    let snippet = cleanCtx.substring(w, w + windowSize);
+                    if (cleanedResult.includes(snippet)) {
+                        hasOldContext = true;
+                        leakedContextLine = cleanCtx;
+                        break;
+                    }
+                }
+                if (hasOldContext) break;
             }
         }
 
