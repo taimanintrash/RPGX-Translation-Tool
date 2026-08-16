@@ -327,6 +327,14 @@ export function commitApprovedMappingsToMap() {
     try {
         let currentMap = JSON.parse(document.getElementById("stylizationMapEditor").value);
         selectedItems.forEach(item => {
+            // Add Selected only writes to the regular mapping fields. The reserved
+            // __priorityOverride__ key holds an object managed separately, so a
+            // discovered item whose key is the reserved token is skipped to avoid
+            // overwriting it with a plain string value.
+            if (item.key.trim() === "__priorityOverride__") {
+                console.log('[Trace:UI] Skipping discovered item with reserved __priorityOverride__ key.');
+                return;
+            }
             if (item.key.trim() !== "" && item.value !== "" && item.value !== null && item.value !== undefined) {
                 currentMap[item.key] = item.value;
             } else {
