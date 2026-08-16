@@ -693,6 +693,27 @@ function isValidMappingPair(key, value) {
     }
     // Hard cap: keys longer than 8 chars are dialogue, not ticks.
     if (k.length > 8) return false;
+    // Reject keys containing Japanese quotation brackets (\u300c, \u300d, \u300e,
+    // \u300f, \u3010, \u3011) \u2014 the model wraps patterns in brackets, which
+    // won\u2019t match the source text (brackets are dialogue markers, not content).
+    if (/[\u300c\u300d\u300e\u300f\u3010\u3011]/.test(k)) return false;
+    // Reject keys that are pure ASCII/English \u2014 the model echoes its own prior
+    // output back as a key (e.g. "Aa", "Na", "Ha-ha"). Keys must contain Japanese
+    // characters (kana, kanji, or Japanese punctuation).
+    if (!/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\u3000-\u303F\uFF00-\uFFEF]/.test(k)) return false;
+    // Reject keys containing a mix of kanji + hiragana that form a word/sentence
+    // (e.g. \u51e6\u5973\u3092\u5931\u3046, \u59cb\u3081\u308b\u305e, \u3044\u3044\u7b54\u3048\u3060).
+    // These are dialogue fragments, not stylization patterns. Any kanji with 2+
+    // consecutive hiragana, or alternating kanji-hiragana (inflected verbs), is a word.
+    // NOTE: katakana is NOT counted here \u2014 katakana + kanji compounds like
+    // \u30a2\u30b5\u30ae\u6821\u9577 (Asagi Principal) are legitimate name+title mappings
+    // that appear inline in dialogue and are not handled by name-plate resolution.
+    if (/[\u4E00-\u9FAF]/.test(k) && /[\u3040-\u309F]{2,}/.test(k)) return false;
+    // Also reject alternating kanji-hiragana patterns (e.g. \u51e6\u5973\u3092\u5931\u3046)
+    // where hiragana is interspersed between kanji \u2014 these are inflected words/sentences.
+    const kanjiCount = (k.match(/[\u4E00-\u9FAF]/g) || []).length;
+    const hiraganaCount = (k.match(/[\u3040-\u309F]/g) || []).length;
+    if (kanjiCount >= 1 && hiraganaCount >= 2) return false;
     return true;
 }
 
