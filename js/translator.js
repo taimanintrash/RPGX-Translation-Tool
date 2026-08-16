@@ -778,29 +778,24 @@ export async function generateStylizationMapWithAI() {
     let discoveredArray = [];
     let seenKeys = new Set();
 
-    // The phases run in logical order so each phase sees text cleaned by prior phases.
-    // Punctuation (normalize marks) -> Sounds (translate onomatopoeia) ->
-    // Ticks (normalize stutters).
-    // Discovered mappings from prior phases are applied to the chunk text before
-    // passing it to the next phase, so later phases don't re-discover fragments.
+    // Each phase analyzes the original clean dialogue text independently.
+    // Order: Ticks (most detail-oriented) -> Sounds -> Punctuation (broadest).
+    // Dedup via seenKeys prevents the same pattern appearing twice across phases.
     const phases = [
         {
-            name: "Punctuation",
-            presetKey: "stylizationPunctuation",
-            prompt: (chunk) => `Find ONLY Japanese punctuation marks and multi-character punctuation sequences in this text.\n` +
-                `Map each to its English equivalent. Include single chars AND multi-char sequences (e.g. ellipses, dash repeats, combined marks).\n` +
+            name: "Ticks",
+            presetKey: "stylizationTicks",
+            prompt: (chunk) => `Find ONLY Japanese speech stutters, repeated-kana ticks, and gemination tick+punctuation combos in this text.\n` +
+                `Translate each to its English equivalent.\n` +
                 `Return lines as "source":"replacement". No markdown blocks.\n\n` +
                 `Examples:\n` +
-                `"\u3001":""\n` +
-                `"\u3002":"."\n` +
-                `"\uff01":"!"\n` +
-                `"\uff1f":"?"\n` +
-                `"\u30fc":"-"\n` +
-                `"\u2026":"..."\n` +
-                `"\u2015\u2015":"\u2014"\n` +
-                `"\uff01\uff1f":"!"\n\n` +
-                `NEVER output kana that are not punctuation. NEVER output words, sentences, sounds, or dialogue.\n` +
-                `Empty replacements are allowed ONLY for punctuation being stripped (e.g. \u3001).\n\n` +
+                `"\u30c3\uff01":"!"\n` +
+                `"\u30c3\uff01\uff1f":"!"\n` +
+                `"\u3073\u308a\u3073\u308a":"bzz-bzz"\n` +
+                `"\u3069\u304d\u3069\u304d":"thump-thump"\n\n` +
+                `TRANSLATE ticks to English \u2014 NEVER remove them. Do NOT output empty replacements unless the pattern is pure gemination punctuation (\u3063 alone).\n` +
+                `Each pattern must be 2+ characters. NEVER output single kana, grammar particles, full sentences, or dialogue fragments.\n` +
+                `NEVER output a pattern containing a sentence-ending mark as part of a longer phrase.\n\n` +
                 `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
         },
         {
@@ -821,21 +816,24 @@ export async function generateStylizationMapWithAI() {
                 `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
         },
         {
-            name: "Ticks",
-            presetKey: "stylizationTicks",
-            prompt: (chunk) => `Find ONLY Japanese speech stutters, repeated-kana ticks, and gemination tick+punctuation combos in this text.\n` +
-                `Translate each to its English equivalent.\n` +
+            name: "Punctuation",
+            presetKey: "stylizationPunctuation",
+            prompt: (chunk) => `Find ONLY Japanese punctuation marks and multi-character punctuation sequences in this text.\n` +
+                `Map each to its English equivalent. Include single chars AND multi-char sequences (e.g. ellipses, dash repeats, combined marks).\n` +
                 `Return lines as "source":"replacement". No markdown blocks.\n\n` +
                 `Examples:\n` +
-                `"\u30c3\uff01":"!"\n` +
-                `"\u30c3\uff01\uff1f":"!"\n` +
-                `"\u3073\u308a\u3073\u308a":"bzz-bzz"\n` +
-                `"\u3069\u304d\u3069\u304d":"thump-thump"\n\n` +
-                `TRANSLATE ticks to English \u2014 NEVER remove them. Do NOT output empty replacements unless the pattern is pure gemination punctuation (\u3063 alone).\n` +
-                `Each pattern must be 2+ characters. NEVER output single kana, grammar particles, full sentences, or dialogue fragments.\n` +
-                `NEVER output a pattern containing a sentence-ending mark as part of a longer phrase.\n\n` +
+                `"\u3001":""\n` +
+                `"\u3002":"."\n` +
+                `"\uff01":"!"\n` +
+                `"\uff1f":"?"\n` +
+                `"\u30fc":"-"\n` +
+                `"\u2026":"..."\n` +
+                `"\u2015\u2015":"\u2014"\n` +
+                `"\uff01\uff1f":"!"\n\n` +
+                `NEVER output kana that are not punctuation. NEVER output words, sentences, sounds, or dialogue.\n` +
+                `Empty replacements are allowed ONLY for punctuation being stripped (e.g. \u3001).\n\n` +
                 `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
-        },
+        }
     ];
 
     try {
@@ -855,13 +853,6 @@ export async function generateStylizationMapWithAI() {
                 let chunkText = dialogueLines.slice(i * 50, (i + 1) * 50).join("\n");
                 // Strip embedded newlines so the phase prompt text is a single coherent string.
                 chunkText = chunkText.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
-                // Apply mappings discovered by prior phases so this phase sees cleaned
-                // text (e.g. particle-words already translated, punctuation normalized).
-                for (let { key, value } of discoveredArray) {
-                    if (chunkText.includes(key)) {
-                        chunkText = chunkText.split(key).join(value || "");
-                    }
-                }
                 if (!chunkText.trim()) continue;
 
                 const promptText = phase.prompt(chunkText);
