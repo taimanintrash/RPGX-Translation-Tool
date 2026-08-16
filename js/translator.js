@@ -13,6 +13,7 @@ export const operationPresets = {
     stylizationPunctuation: { temperature: 0.0, systemPrompt: "You are a Japanese punctuation normalization engine. Map Japanese punctuation marks and multi-character punctuation sequences to their English equivalents. Output only valid JSON pairs. Include both single characters and multi-character sequences like ellipses and dash repeats." },
     stylizationSounds: { temperature: 0.2, systemPrompt: "You are a Japanese onomatopoeia and sound effect translator for visual novel localization. Map Japanese sound effects and onomatopoeia to natural English equivalents. Each pattern must be 3 or more kana. Never output single kana, grammar particles, or dialogue." },
     stylizationTicks: { temperature: 0.2, systemPrompt: "You are a Japanese speech stutter and tick normalization engine for visual novel localization. Map repeated-kana stutters, gemination ticks, and character speech patterns to their English equivalents. Patterns must be repeated kana clusters or tick+punctuation combos. Translate ticks to English, never remove them (no empty replacements unless the pattern is pure gemination punctuation)." },
+    stylizationParticles: { temperature: 0.2, systemPrompt: "You are a Japanese-to-English pre-translation engine for visual novel localization. Your task is to find Japanese words containing grammar particles (\u306f, \u304c, \u3092, \u306b, \u3067, \u3068, \u306e, \u3082, \u304b, \u3093) that would be corrupted if the particle were stripped individually. Translate the WHOLE word+particle to English so it can be replaced wholesale before the main translation." },
     recentSummary: { temperature: 0.2, systemPrompt: "You are a concise narrative context tracking engine for game translation. Maintain a tightly focused rolling recap of active character dynamics, tone, and immediate scene events without conversational filler." },
     archivalSummary: { temperature: 0.15, systemPrompt: "You are an expert story archivist compressing narrative history into a single high-level macro state sentence. Preserve primary character identities, relationships, and overarching goals while omitting resolved micro-dialogue." },
     validator: { temperature: 0.1, systemPrompt: "You are a stringent quality assurance AI evaluating Japanese-to-English translations. Analyze the provided text for untranslated Japanese fragments, romaji placeholders, and poor localization mixing. Return 'PASS' if the translation is fully and naturally localized into English. Return 'FAIL' if any fragments or poor mixing are detected." }
@@ -32,6 +33,7 @@ export const defaultPresetManifest = [
     { file: 'default_presets/stylization_punctuation.json', operationKey: 'stylizationPunctuation', label: 'Stylization Punctuation' },
     { file: 'default_presets/stylization_sounds.json', operationKey: 'stylizationSounds', label: 'Stylization Sounds' },
     { file: 'default_presets/stylization_ticks.json', operationKey: 'stylizationTicks', label: 'Stylization Ticks' },
+    { file: 'default_presets/stylization_particles.json', operationKey: 'stylizationParticles', label: 'Stylization Particles' },
     { file: 'default_presets/recent_summary.json', operationKey: 'recentSummary', label: 'Recent Scene Summary' },
     { file: 'default_presets/archival_summary.json', operationKey: 'archivalSummary', label: 'Archival Story State' },
     { file: 'default_presets/translation_validator.json', operationKey: 'validator', label: 'Translation Validator' }
@@ -759,7 +761,7 @@ export async function generateStylizationMapWithAI() {
 
     if (loadingStatus) {
         loadingStatus.style.display = "flex";
-        loadingStatus.innerHTML = "Generating stylization mapping... (Starting 3-phase analysis)";
+        loadingStatus.innerHTML = "Generating stylization mapping... (Starting 4-phase analysis)";
     }
     if (stopBtn) stopBtn.style.display = "inline-block";
     if (progressBar) {
@@ -833,6 +835,27 @@ export async function generateStylizationMapWithAI() {
                 `Each pattern must be 2+ characters. NEVER output single kana, grammar particles, full sentences, or dialogue fragments.\n` +
                 `NEVER output a pattern containing a sentence-ending mark as part of a longer phrase.\n\n` +
                 `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
+        },
+        {
+            name: "Particles",
+            presetKey: "stylizationParticles",
+            prompt: (chunk) => `Find Japanese words in this text that contain grammar particles (\u306f, \u304c, \u3092, \u306b, \u3067, \u3068, \u306e, \u3082, \u304b, \u3093) and would be corrupted if the particle were stripped individually.\n` +
+                `Translate the WHOLE word (including its particle) to English so it can be pre-replaced before the main translation.\n` +
+                `Return lines as "source_word":"english_translation". No markdown blocks.\n\n` +
+                `Examples:\n` +
+                `"\u3053\u308c\u306f":"this"\n` +
+                `"\u79c1\u306f":"I"\n` +
+                `"\u3042\u306a\u305f\u306f":"you"\n` +
+                `"\u305d\u308c\u306f":"that"\n` +
+                `"\u5f7c\u5973\u306f":"she"\n\n` +
+                `Rules:\n` +
+                `- Only output words that contain a grammar particle (\u306f, \u304c, \u3092, \u306b, \u3067, \u3068, \u306e, \u3082, \u304b, \u3093).\n` +
+                `- Translate the whole word+particle to natural English, not just the particle.\n` +
+                `- NEVER output a bare particle alone (\u306f, \u304c, etc.) \u2014 always include the word it attaches to.\n` +
+                `- NEVER output full sentences or dialogue lines.\n` +
+                `- NEVER output an empty replacement.\n` +
+                `- Keep keys short (single words, not phrases).\n\n` +
+                `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
         }
     ];
 
@@ -840,7 +863,7 @@ export async function generateStylizationMapWithAI() {
         let phaseIndex = 0;
         for (const phase of phases) {
             phaseIndex++;
-            if (loadingStatus) loadingStatus.innerHTML = `Generating stylization mapping... (Phase ${phaseIndex}/3: ${phase.name})`;
+            if (loadingStatus) loadingStatus.innerHTML = `Generating stylization mapping... (Phase ${phaseIndex}/4: ${phase.name})`;
             const phaseConfig = operationPresets[phase.presetKey] || operationPresets.stylization || operationPresets.benchmark;
 
             for (let i = 0; i < totalChunks; i++) {
