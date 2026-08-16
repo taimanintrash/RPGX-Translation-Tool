@@ -15,7 +15,9 @@ export const state = {
     appliedContextLines: null,
     appliedRawLimit: null,
     heavyStylizationMap: {
-        "、": "",
+        "__priorityOverride__": {
+            "、": "-"
+        },
         "！？": "!",
         "ッ！？": "!",
         "ッ！": "!",

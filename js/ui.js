@@ -295,12 +295,24 @@ export function updateDiscoveredVal(index, newVal) {
  * @returns {Object} A new object with the same entries in the desired order.
  */
 function orderStylizationMap(map) {
+    const PRIORITY_KEY = "__priorityOverride__";
     const isNameEntry = (val) => typeof val === 'string' && /^「.*」$/.test(val);
+    const isEmpty = (val) => val === "" || val === null || val === undefined;
     const entries = Object.entries(map);
     const byKeyLengthDesc = (a, b) => b[0].length - a[0].length;
-    const names = entries.filter(([_, v]) => isNameEntry(v)).sort(byKeyLengthDesc);
-    const others = entries.filter(([_, v]) => !isNameEntry(v)).sort(byKeyLengthDesc);
-    return Object.fromEntries([...names, ...others]);
+    // The priority override must always come first in the saved JSON so it is
+    // applied before every other entry. It is excluded from the name/other
+    // grouping and kept verbatim (its value is itself an object).
+    const priority = entries.filter(([k]) => k === PRIORITY_KEY);
+    const rest = entries
+        .filter(([k]) => k !== PRIORITY_KEY)
+        // Empty-value mappings are useless (they replace text with nothing) and
+        // are dropped on save. The priority override above handles intentional
+        // character stripping via explicit "-" entries instead.
+        .filter(([_, v]) => !isEmpty(v));
+    const names = rest.filter(([_, v]) => isNameEntry(v)).sort(byKeyLengthDesc);
+    const others = rest.filter(([_, v]) => !isNameEntry(v)).sort(byKeyLengthDesc);
+    return Object.fromEntries([...priority, ...names, ...others]);
 }
 
 /**
@@ -314,7 +326,13 @@ export function commitApprovedMappingsToMap() {
 
     try {
         let currentMap = JSON.parse(document.getElementById("stylizationMapEditor").value);
-        selectedItems.forEach(item => { if (item.key.trim() !== "") currentMap[item.key] = item.value; });
+        selectedItems.forEach(item => {
+            if (item.key.trim() !== "" && item.value !== "" && item.value !== null && item.value !== undefined) {
+                currentMap[item.key] = item.value;
+            } else {
+                console.log(`[Trace:UI] Skipping useless empty mapping: "${item.key}" -> "${item.value}"`);
+            }
+        });
         state.heavyStylizationMap = orderStylizationMap(currentMap);
         document.getElementById("stylizationMapEditor").value = JSON.stringify(state.heavyStylizationMap, null, 4);
 

@@ -765,6 +765,31 @@ function parseMappingOutput(content) {
  * Analyzes source text blocks to discover character stutters, ticks, and punctuation anomalies, formatting them into a stylization mapping list[cite: 7].
  * Called by: HTML event handler / main.js[cite: 7]
  */
+/**
+ * Reserved key in the heavyStylizationMap JSON holding entries that are applied to
+ * the source text FIRST, before the 3-phase generation analysis and before the
+ * normal strip-phase replacement loop. Lets the user force an early substitution
+ * (e.g. 、 -> -) so downstream phases never see the original character.
+ * @param {string} text - Source text to transform.
+ * @param {Object} map - The heavy stylization map (may contain __priorityOverride__).
+ * @returns {string} The text with priority entries applied (longest key first).
+ */
+export function applyPriorityOverride(text, map) {
+    if (!map || typeof map !== 'object') return text;
+    const override = map.__priorityOverride__;
+    if (!override || typeof override !== 'object') return text;
+    // Apply longest keys first so longer patterns win over their substrings.
+    const entries = Object.entries(override).sort((a, b) => b[0].length - a[0].length);
+    let out = text;
+    for (const [pattern, replacement] of entries) {
+        if (pattern && out.includes(pattern)) {
+            // global replace; priority override is meant to rewrite every occurrence.
+            out = out.split(pattern).join(replacement);
+        }
+    }
+    return out;
+}
+
 export async function generateStylizationMapWithAI() {
     console.log('[Trace:Stylization] generateStylizationMapWithAI() invoked.');
     clearError();
@@ -797,6 +822,11 @@ export async function generateStylizationMapWithAI() {
     let dialogueLines = sourceLines
         .map(l => l.trim())
         .filter(l => l && !l.startsWith("<"));
+    // Apply the priority override FIRST so the generation phases never see the
+    // original characters (e.g. 、 rewritten to - before tick/sound analysis).
+    if (state.heavyStylizationMap && state.heavyStylizationMap.__priorityOverride__) {
+        dialogueLines = dialogueLines.map(l => applyPriorityOverride(l, state.heavyStylizationMap));
+    }
     let totalChunks = Math.min(dialogueLines.length, 5);
     let discoveredArray = [];
     let seenKeys = new Set();
@@ -1308,9 +1338,15 @@ export async function translateViaAiServer() {
 
                 if (state.stylizationMode === "strip") {
                     let extractedStylizations = [];
-                    let cleanedTextForAi = trimmedLine;
+                    // Apply the priority override FIRST so the rest of the map and the
+                    // model never see the original characters (e.g. 、 -> -). This runs
+                    // before the normal replacement loop and is not tracked as an
+                    // extracted stylization since it is a pure pre-pass rewrite.
+                    let cleanedTextForAi = applyPriorityOverride(trimmedLine, state.heavyStylizationMap);
 
                     for (const [pattern, replacement] of Object.entries(state.heavyStylizationMap)) {
+                        // The priority override is applied above as a pre-pass; skip it here.
+                        if (pattern === "__priorityOverride__") continue;
                         if (cleanedTextForAi.includes(pattern)) {
                             extractedStylizations.push(pattern);
                             // Name values are stored wrapped in corner brackets so they stay
