@@ -43,7 +43,7 @@ export async function loadFilesFromCache() {
             req.onsuccess = () => resolve(req.result || null);
             req.onerror = () => resolve(null);
         });
-    } catch (e) { return null; }
+    } catch (e) { console.warn('[Cache] Failed to load cached file registry from IndexedDB:', e); return null; }
 }
 
 /**
@@ -86,5 +86,5 @@ export async function loadUIStateFromCache() {
             req.onsuccess = () => resolve(req.result || null);
             req.onerror = () => resolve(null);
         });
-    } catch (e) { return null; }
+    } catch (e) { console.warn('[Cache] Failed to load cached UI state from IndexedDB:', e); return null; }
 }
