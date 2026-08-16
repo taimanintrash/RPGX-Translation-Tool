@@ -74,7 +74,7 @@ export function parseContentToJSON(content, fileName) {
     try {
         const match = content.match(/\{[\s\S]*\}/);
         if (match) return JSON.parse(match[0]);
-    } catch (e2) {}
+    } catch (e2) { console.warn(`[Trace:Files] Regex JSON extraction also failed for "${fileName}".`); }
     return null;
 }
 
@@ -227,8 +227,9 @@ export function onSelectID() { renderComparisonViews(); saveUIStateToCache(); }
 /**
  * Event handler triggered when a new script ID is selected from the mobile dropdown.
  * Syncs the main select element and triggers the standard update.
+ * Called by: main.js (window.onSelectIDMobile wiring for HTML onchange)
  */
-export function onSelectIDMobile() { 
+export function onSelectIDMobile() {  
     const mobileSelect = document.getElementById("scriptSelectMobile");
     const mainSelect = document.getElementById("scriptSelect");
     if (mobileSelect && mainSelect) {
@@ -274,7 +275,7 @@ export function extractScriptText(dataObj, key) {
         if (item.SCRIPTS?.PART1?.TRANSLATIONS) return item.SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"].join("\n");
         if (item.SCRIPTS?.PART1?.SCRIPT) return item.SCRIPTS.PART1["SCRIPT"].join("\n");
         if (Array.isArray(item)) return item.join("\n");
-    } catch (e) {}
+    } catch (e) { console.warn('[Trace:Files] extractScriptText structured extraction failed, falling back to stringification.'); }
 
     if (Array.isArray(item)) return item.join("\n");
     return JSON.stringify(item, null, 2);

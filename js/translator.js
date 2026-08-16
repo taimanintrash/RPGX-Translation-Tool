@@ -1,670 +1,25 @@
+// translator.js
+// Translation pipeline: stylization (strip phase + priority override + generation),
+// name-plate resolution, and the main sequential translation loop. Also re-exports
+// every symbol from translator-presets.js and translator-llm.js so existing imports
+// from ./translator.js (main.js, benchmark.js, ui.js) keep resolving unchanged.
+
 import { state } from './main.js';
 import { showError, clearError, promptUserForNameTranslation, promptUserForManualStep, renderDiscoveredMappingsUI, setCurrentSourceLine, hideCurrentSourceLine } from './ui.js';
 import { commitTextToRightFile } from './parser.js';
+import { operationPresets } from './translator-presets.js';
+import { translateChunkWithContext, buildTieredContextWindow, wrapTextToLines } from './translator-llm.js';
 
-// Dictionary mapping distinct presets to individual operation parameters
-export const operationPresets = {
-    main: { temperature: 0.3, systemPrompt: "You are a professional video game localization AI. Translate cleanly and accurately." },
-    benchmark: { temperature: 0.1, systemPrompt: "You are an expert AI quality assurance auditor reviewing script translation consistency." },
-    jpEn: { temperature: 0.35, systemPrompt: "You are a specialized Japanese-to-English game localizer adapting natural nuance and character voice." },
-    retry: { temperature: 0.2, systemPrompt: "The previous translation attempt failed validation. Carefully re-translate keeping tags and markers exact." },
-    namePlate: { temperature: 0.1, systemPrompt: "You are a specialized proper noun and character name localization engine. Output transliterated name cleanly." },
-    stylization: { temperature: 0.2, systemPrompt: "You are a specialized stylization mapper. Analyze the provided game script and generate a JSON mapping of character names and unique speech patterns to standardized stylization keys." },
-    stylizationPunctuation: { temperature: 0.0, systemPrompt: "You are a Japanese punctuation normalization engine. Map Japanese punctuation marks and multi-character punctuation sequences to their English equivalents. Output only valid JSON pairs. Include both single characters and multi-character sequences like ellipses and dash repeats." },
-    stylizationSounds: { temperature: 0.2, systemPrompt: "You are a Japanese onomatopoeia and sound effect translator for visual novel localization. Map Japanese sound effects and onomatopoeia to natural English equivalents. Each pattern must be 3 or more kana. Never output single kana, grammar particles, or dialogue." },
-    stylizationTicks: { temperature: 0.2, systemPrompt: "You are a Japanese speech stutter and tick normalization engine for visual novel localization. Map repeated-kana stutters, gemination ticks, and character speech patterns to their English equivalents. Patterns must be repeated kana clusters or tick+punctuation combos. Translate ticks to English, never remove them (no empty replacements unless the pattern is pure gemination punctuation)." },
-    recentSummary: { temperature: 0.2, systemPrompt: "You are a concise narrative context tracking engine for game translation. Maintain a tightly focused rolling recap of active character dynamics, tone, and immediate scene events without conversational filler." },
-    archivalSummary: { temperature: 0.15, systemPrompt: "You are an expert story archivist compressing narrative history into a single high-level macro state sentence. Preserve primary character identities, relationships, and overarching goals while omitting resolved micro-dialogue." },
-    validator: { temperature: 0.1, systemPrompt: "You are a stringent quality assurance AI evaluating Japanese-to-English translations. Analyze the provided text for untranslated Japanese fragments, romaji placeholders, and poor localization mixing. Return 'PASS' if the translation is fully and naturally localized into English. Return 'FAIL' if any fragments or poor mixing are detected." }
-};
+// Re-export preset/manifest symbols so imports from ./translator.js resolve unchanged.
+export { operationPresets, defaultPresetManifest, loadSpecificPreset, loadDefaultPreset, loadAllDefaultPresets } from './translator-presets.js';
+// Re-export LLM HTTP helper symbols so imports from ./translator.js resolve unchanged.
+export { fetchAiModels, wrapTextToLines, cleanModelOutput, cleanSummaryOutput, updateRecentSummary, updateArchivalSummary, summarizeOldContext, detectRomajiFragment, assessTranslationQualityWithAI, translateChunkWithContext, buildTieredContextWindow } from './translator-llm.js';
 
-/**
- * Manifest of default preset JSON files shipped in the `default_presets/` directory.
- * Each entry maps a preset file to the operation key it overrides (matching `operationPresets`).
- * Add a new file to `default_presets/` and append an entry here to make it appear as a loadable default.
- */
-export const defaultPresetManifest = [
-    { file: 'default_presets/benchmark_prompt.json', operationKey: 'benchmark', label: 'Benchmark Prompt' },
-    { file: 'default_presets/japanese_to_english.json', operationKey: 'jpEn', label: 'Japanese to English' },
-    { file: 'default_presets/retry_translation.json', operationKey: 'retry', label: 'Retry Translation' },
-    { file: 'default_presets/name_plate_unique.json', operationKey: 'namePlate', label: 'Name Plate Unique' },
-    { file: 'default_presets/stylization_mapping.json', operationKey: 'stylization', label: 'Stylization Mapping' },
-    { file: 'default_presets/stylization_punctuation.json', operationKey: 'stylizationPunctuation', label: 'Stylization Punctuation' },
-    { file: 'default_presets/stylization_sounds.json', operationKey: 'stylizationSounds', label: 'Stylization Sounds' },
-    { file: 'default_presets/stylization_ticks.json', operationKey: 'stylizationTicks', label: 'Stylization Ticks' },
-    { file: 'default_presets/recent_summary.json', operationKey: 'recentSummary', label: 'Recent Scene Summary' },
-    { file: 'default_presets/archival_summary.json', operationKey: 'archivalSummary', label: 'Archival Story State' },
-    { file: 'default_presets/translation_validator.json', operationKey: 'validator', label: 'Translation Validator' }
-];
-
-/**
- * Maps a parsed preset JSON object onto an operation-specific configuration object.
- * Shared by both the manual file upload and the default preset loader paths.
- */
-function mapPresetJsonQuiet(operationKey, presetJson, sourceName) {
-    let mappedConfig = {
-        temperature: presetJson.temperature ?? operationPresets[operationKey].temperature,
-        systemPrompt: presetJson.systemPrompt || presetJson.name || operationPresets[operationKey].systemPrompt
-    };
-    if (presetJson.operation && presetJson.operation.fields) {
-        presetJson.operation.fields.forEach(field => {
-            if (field.key === "llm.prediction.temperature") mappedConfig.temperature = field.value;
-            if (field.key === "llm.prediction.systemPrompt" && field.value) mappedConfig.systemPrompt = field.value;
-        });
-    }
-    operationPresets[operationKey] = mappedConfig;
-    console.log(`[Default Presets] ${operationKey.toUpperCase()} <- "${presetJson.name || sourceName}"`);
-}
-
-function mapPresetJson(operationKey, presetJson, sourceName) {
-    let mappedConfig = {
-        temperature: presetJson.temperature ?? operationPresets[operationKey].temperature,
-        systemPrompt: presetJson.systemPrompt || presetJson.name || operationPresets[operationKey].systemPrompt
-    };
-
-    if (presetJson.operation && presetJson.operation.fields) {
-        presetJson.operation.fields.forEach(field => {
-            if (field.key === "llm.prediction.temperature") mappedConfig.temperature = field.value;
-            if (field.key === "llm.prediction.systemPrompt" && field.value) mappedConfig.systemPrompt = field.value;
-        });
-    }
-
-    operationPresets[operationKey] = mappedConfig;
-    showError(`Preset for [${operationKey.toUpperCase()}] successfully loaded from "${presetJson.name || sourceName}"!`);
-}
-
-/**
- * Loads and maps preset configurations from an uploaded JSON file for a specified operation type[cite: 7].
- * Called by: HTML event handler / main.js[cite: 7]
- */
-export function loadSpecificPreset(operationKey, event) {
-    console.log(`[Trace:Preset] loadSpecificPreset(operationKey="${operationKey}") invoked.`);
-    const file = event.target.files[0];
-    if (!file) { console.warn('[Trace:Preset] No file selected, aborting.'); return; }
-
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        try {
-            mapPresetJson(operationKey, JSON.parse(e.target.result), file.name);
-            console.log(`[Trace:Preset] Custom preset applied to "${operationKey}" from "${file.name}".`);
-        } catch (err) {
-            showError("Failed to parse preset JSON file.");
-            console.error(`[Trace:Preset] Failed to parse custom preset "${file.name}":`, err);
-        }
-    };
-    reader.readAsText(file);
-    event.target.value = "";
-}
-
-/**
- * Fetches a shipped default preset JSON from the `default_presets/` directory and applies it to the matching operation.
- * Called by: HTML event handler / main.js (dynamic default preset buttons)[cite: 7]
- */
-export async function loadDefaultPreset(operationKey) {
-    console.log(`[Trace:Preset] loadDefaultPreset(operationKey="${operationKey}") invoked.`);
-    const entry = defaultPresetManifest.find(p => p.operationKey === operationKey);
-    if (!entry) {
-        showError(`No default preset is registered for operation "${operationKey}".`);
-        return;
-    }
-    try {
-        const response = await fetch(entry.file);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const presetJson = await response.json();
-        mapPresetJson(operationKey, presetJson, entry.file);
-    } catch (err) {
-        showError(`Failed to load default preset "${entry.file}". The app must be served over HTTP (e.g. via start-agent.sh) for default presets to be fetchable.`);
-        console.error(err);
-    }
-}
-
-/**
- * Loads every shipped default preset from `default_presets/` into `operationPresets` so the translation
- * prompts have their default configuration available in memory without any user action.
- * Called by: main.js (DOMContentLoaded)[cite: 7]
- */
-export async function loadAllDefaultPresets() {
-    const results = await Promise.allSettled(
-        defaultPresetManifest.map(async (entry) => {
-            const response = await fetch(entry.file);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const presetJson = await response.json();
-            mapPresetJsonQuiet(entry.operationKey, presetJson, entry.file);
-        })
-    );
-    const failed = results.filter(r => r.status === 'rejected');
-    if (failed.length === defaultPresetManifest.length) {
-        console.warn('[Default Presets] Could not load any default presets from default_presets/. The app must be served over HTTP (e.g. via start-agent.sh).');
-    } else if (failed.length > 0) {
-        console.warn(`[Default Presets] ${failed.length}/${defaultPresetManifest.length} default preset(s) failed to load.`);
-    } else {
-        console.log(`[Default Presets] Loaded ${defaultPresetManifest.length} default preset(s) into memory.`);
-    }
-}
-
-/**
- * Queries available local AI Server model endpoints and populates the model selection dropdown list[cite: 7].
- * Called by: HTML event handler / main.js[cite: 7]
- */
-export async function fetchAiModels() {
-    console.log('[Trace:Models] fetchAiModels() invoked.');
-    clearError();
-    const host = document.getElementById("aiServerHost").value.trim().replace(/\/+$/, "");
-    const modelSelect = document.getElementById("aiModel");
-    const currentSelection = modelSelect.value;
-    if (!host) {
-        modelSelect.innerHTML = `<option value="">-- Enter Server URL --</option>`;
-        showError("No server URL entered. Set the local AI server address first.");
-        return;
-    }
-    // Common OpenAI-compatible model-list endpoint variants across LM Studio, Ollama, llama.cpp, etc.
-    const endpoints = [`${host}/v1/models`, `${host}/api/v0/models`, `${host}/models`];
-    console.log(`[Trace:Models] Connecting to AI server at ${host}; will try ${endpoints.length} endpoint(s): ${endpoints.join(', ')}`);
-    let modelsList = [], success = false;
-    const diagnostics = [];
-
-    for (const endpoint of endpoints) {
-        console.log(`[Trace:Models] Requesting available models from ${endpoint} ...`);
-        try {
-            const response = await fetch(endpoint);
-            console.log(`[Trace:Models] ${endpoint} responded with HTTP ${response.status} (${response.ok ? 'OK' : 'not OK'}).`);
-            if (!response.ok) {
-                diagnostics.push(`${endpoint} -> HTTP ${response.status}`);
-                continue;
-            }
-            const data = await response.json();
-            if (Array.isArray(data)) { modelsList = data; success = true; console.log(`[Trace:Models] ${endpoint} returned ${modelsList.length} model(s) (array).`); break; }
-            else if (data.data && Array.isArray(data.data)) { modelsList = data.data; success = true; console.log(`[Trace:Models] ${endpoint} returned ${modelsList.length} model(s) (data.data).`); break; }
-            else if (data.models && Array.isArray(data.models)) { modelsList = data.models; success = true; console.log(`[Trace:Models] ${endpoint} returned ${modelsList.length} model(s) (data.models).`); break; }
-            console.warn(`[Trace:Models] ${endpoint} returned OK but unexpected JSON shape (keys: ${Object.keys(data || {}).join(', ')}).`);
-            diagnostics.push(`${endpoint} -> OK but unexpected JSON shape (keys: ${Object.keys(data || {}).join(', ')})`);
-        } catch (err) {
-            // Browser fetch throws TypeError on network failure or CORS rejection; capture the reason.
-            console.error(`[Trace:Models] ${endpoint} request failed: ${err.name || 'FetchError'}: ${err.message || 'blocked (likely CORS or connection refused)'}`);
-            diagnostics.push(`${endpoint} -> ${err.name || 'FetchError'}: ${err.message || 'blocked (likely CORS or connection refused)'}`);
-        }
-    }
-
-    console.log(`[Trace:Models] Detection complete. success=${success}, rawModels=${modelsList.length}, diagnostics=${diagnostics.length}`);
-    modelSelect.innerHTML = "";
-    if (!success || modelsList.length === 0) {
-        modelSelect.innerHTML = `<option value="">-- Connection Failed / Check Server --</option>`;
-        const detail = diagnostics.length ? diagnostics.join(' | ') : 'no endpoints attempted';
-        showError(`Could not fetch models from ${host}. Verify the server is running and CORS is enabled. Details: ${detail}`);
-        return;
-    }
-
-    let added = 0;
-    modelsList.forEach(m => {
-        const modelId = m.id || m.name || m.model;
-        if (modelId) {
-            const opt = document.createElement("option");
-            opt.value = modelId;
-            opt.textContent = modelId;
-            modelSelect.appendChild(opt);
-            added++;
-        }
-    });
-
-    if (added === 0) {
-        modelSelect.innerHTML = `<option value="">-- No Models Loaded on Server --</option>`;
-        showError(`Server at ${host} responded but returned no models. Load a model in your AI server first.`);
-        return;
-    }
-
-    console.log(`[Trace:Models] Populated dropdown with ${added} model(s).`);
-    if (currentSelection) modelSelect.value = currentSelection;
-    if (!modelSelect.value && modelSelect.options.length > 0) modelSelect.selectedIndex = 0;
-}
-
-/**
- * Wraps a given string of text into an array of lines bounded by a maximum character length limit[cite: 7].
- * Called by: translator.js (translateViaAiServer)[cite: 7]
- */
-export function wrapTextToLines(text, maxLineLength = 40) {
-    // Split on any whitespace (including newlines) so multi-line input is handled
-    // correctly. The previous split(" ") kept embedded newlines glued to words
-    // (e.g. "the\ncar" treated as one token), corrupting wrapped output.
-    const words = text.split(/\s+/).filter(Boolean);
-    let lines = [];
-    let currentLine = "";
-    for (let word of words) {
-        if ((currentLine + " " + word).trim().length <= maxLineLength) {
-            currentLine = (currentLine + " " + word).trim();
-        } else {
-            if (currentLine) lines.push(currentLine);
-            currentLine = word;
-        }
-    }
-    if (currentLine) lines.push(currentLine);
-    return lines;
-}
-
-/**
- * Cleans up raw LLM outputs by stripping conversational filler words, explanation prefixes, code block formatting, and surrounding quotes[cite: 7].
- * Called by: translator.js (summarizeOldContext, translateChunkWithContext)[cite: 7]
- */
-export function cleanModelOutput(rawText) {
-    if (!rawText) return "";
-    let cleaned = rawText.split(/###|\n\nExplanation:|I’m happy to help|Could you please provide|I don’t see any/i)[0];
-    cleaned = cleaned.replace(/^(Translation:|Translated text:|English:)\s*/i, '');
-    cleaned = cleaned.trim().replace(/^["'|||「『]|["'|」』]$/g, '');
-    const lines = cleaned.split("\n")
-        .map(l => l.trim())
-        .filter(l => l.length > 0 && !l.toLowerCase().includes("translate the following"));
-    return lines.length > 0 ? lines[0] : "";
-}
-
-/**
- * Cleans up raw LLM summary outputs by stripping preamble words, role labels, and surrounding quotes.
- * Called by: translator.js (updateRecentSummary, updateArchivalSummary, summarizeOldContext)
- */
-export function cleanSummaryOutput(rawText) {
-    if (!rawText) return "";
-    let cleaned = rawText.split(/###|\n\nExplanation:|I’m happy to help|Could you please provide|I don’t see any/i)[0];
-    cleaned = cleaned.replace(/^(Summary:|Story Summary:|Updated Story Summary:|Recap:|Updated Recap:|Scene Recap:)\s*/i, '');
-    cleaned = cleaned.trim().replace(/^["']|["']$/g, '');
-    const lines = cleaned.split("\n")
-        .map(l => l.trim())
-        .filter(l => l.length > 0 && !l.toLowerCase().startsWith("task:") && !l.toLowerCase().startsWith("rules:"));
-    return lines.join(" ");
-}
-
-/**
- * Updates the Tier 2 rolling recent scene summary with newly confirmed dialogue lines.
- * Focuses on active characters, emotional tone, and immediate narrative developments.
- * Called by: translator.js (translateViaAiServer)
- */
-export async function updateRecentSummary(host, model, currentRecentSummary, newLines) {
-    console.log(`[Trace:Summary:Recent] Updating recent summary with ${newLines.length} line(s).`);
-    const newLinesText = newLines.join("\n");
-    let promptText = "";
-
-    if (!currentRecentSummary || !currentRecentSummary.trim()) {
-        promptText = `Task: Summarize the following dialogue into 1-2 concise sentences.\n` +
-            `Focus on: active character names, their tone/relationship, and the current action or discussion topic.\n` +
-            `Rules: Output ONLY the concise summary text. No preamble, commentary, or quotes.\n\n` +
-            `Dialogue:\n${newLinesText}\n\n` +
-            `Summary:`;
-    } else {
-        promptText = `Task: Update the ongoing scene recap with the new dialogue lines.\n` +
-            `Focus on: active character names, their tone/relationship, and the current action or discussion topic.\n` +
-            `Rules: Keep the updated recap under 2-3 sentences total. Output ONLY the updated recap. No preamble, commentary, or quotes.\n\n` +
-            `Current Recap:\n${currentRecentSummary}\n\n` +
-            `New Dialogue:\n${newLinesText}\n\n` +
-            `Updated Recap:`;
-    }
-
-    const recentConfig = operationPresets.recentSummary || {
-        temperature: 0.2,
-        systemPrompt: "You are a concise narrative context tracking engine for game translation."
-    };
-
-    const payload = {
-        model: model,
-        messages: [
-            { role: "system", content: recentConfig.systemPrompt },
-            { role: "user", content: promptText }
-        ],
-        stream: false,
-        temperature: recentConfig.temperature ?? 0.2,
-        max_tokens: 256,
-        chat_template_kwargs: { "enable_thinking": false }
-    };
-
-    try {
-        const res = await fetch(`${host}/v1/chat/completions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: state.currentAbortController ? state.currentAbortController.signal : undefined
-        });
-        if (!res.ok) return currentRecentSummary || "Ongoing scene dialogue.";
-        const data = await res.json();
-        const raw = data.choices?.[0]?.message?.content || "";
-        const cleaned = cleanSummaryOutput(raw);
-        console.log(`[Trace:Summary:Recent] Updated recent summary: "${cleaned}"`);
-        return cleaned || currentRecentSummary || "Ongoing scene dialogue.";
-    } catch (e) {
-        console.warn("[Trace:Summary:Recent] Failed to update recent summary:", e);
-        return currentRecentSummary || "Ongoing scene dialogue.";
-    }
-}
-
-/**
- * Updates the Tier 3 archival summary (summary-of-summaries) by compressing an overflowing scene recap.
- * If an archival summary already exists, it updates itself to preserve macro story state and key relationships.
- * Called by: translator.js (translateViaAiServer)
- */
-export async function updateArchivalSummary(host, model, currentArchivalSummary, recentSummaryToArchive) {
-    console.log(`[Trace:Summary:Archival] Compressing scene recap into archival summary.`);
-    let promptText = "";
-
-    if (!currentArchivalSummary || !currentArchivalSummary.trim()) {
-        promptText = `Task: Compress the following scene recap into ONE concise sentence.\n` +
-            `Preserve: primary character names, core relationships, and the overall story situation.\n` +
-            `Rules: Output exactly ONE sentence. No preamble, quotes, or conversational filler.\n\n` +
-            `Scene Recap:\n${recentSummaryToArchive}\n\n` +
-            `Story Summary:`;
-    } else {
-        promptText = `Task: Update the long-term story recap with the latest scene developments.\n` +
-            `Preserve: primary character names, core relationships, and macro plot state. Discard finished minor dialogue.\n` +
-            `Rules: Output exactly ONE comprehensive sentence. No preamble, quotes, or conversational filler.\n\n` +
-            `Previous Story Summary:\n${currentArchivalSummary}\n\n` +
-            `Recent Developments:\n${recentSummaryToArchive}\n\n` +
-            `Updated Story Summary:`;
-    }
-
-    const archivalConfig = operationPresets.archivalSummary || {
-        temperature: 0.15,
-        systemPrompt: "You are an expert story archivist compressing narrative history into a single high-level macro state sentence."
-    };
-
-    const payload = {
-        model: model,
-        messages: [
-            { role: "system", content: archivalConfig.systemPrompt },
-            { role: "user", content: promptText }
-        ],
-        stream: false,
-        temperature: archivalConfig.temperature ?? 0.15,
-        max_tokens: 128,
-        chat_template_kwargs: { "enable_thinking": false }
-    };
-
-    try {
-        const res = await fetch(`${host}/v1/chat/completions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: state.currentAbortController ? state.currentAbortController.signal : undefined
-        });
-        if (!res.ok) return currentArchivalSummary || recentSummaryToArchive;
-        const data = await res.json();
-        const raw = data.choices?.[0]?.message?.content || "";
-        const cleaned = cleanSummaryOutput(raw);
-        console.log(`[Trace:Summary:Archival] Updated archival summary: "${cleaned}"`);
-        return cleaned || currentArchivalSummary || recentSummaryToArchive;
-    } catch (e) {
-        console.warn("[Trace:Summary:Archival] Failed to update archival summary:", e);
-        return currentArchivalSummary || recentSummaryToArchive;
-    }
-}
-
-/**
- * Summarizes older dialogue context lines into a single sentence (kept for backwards compatibility).
- * Called by: translator.js
- */
-export async function summarizeOldContext(host, model, linesToSummarize) {
-    return await updateRecentSummary(host, model, "", linesToSummarize);
-}
-
-/**
- * Curated list of Japanese words that frequently bleed untranslated into English
- * output as romaji when the model fails to translate (e.g. "nani", "baka",
- * "matte"). Matched as whole-word tokens so substrings inside legitimate English
- * words are not flagged. This is a deterministic hard-gate: any match forces a
- * retry on every attempt.
- *
- * Intentionally EXCLUDES words commonly kept untranslated in English VN/anime
- * localization: honorifics/titles (sensei, senpai, kouhai, onii-chan, onee-chan),
- * loanwords (otaku, moe, kawaii, sugoi), and trope terms (ecchi, hentai, tsundere,
- * yandere, kuudere). These are valid English usage in this context and must not
- * trigger a hard retry. Extend this list only with true untranslated fragments.
- */
-const ROMAJI_FRAGMENT_WORDS = [
-    "nani", "baka", "aho", "urusai", "yarou", "temee", "kisama",
-    "itadakimasu", "tadaima", "okaeri", "gomen", "gomenasai",
-    "arigatou", "arigato", "sayonara", "douzo", "iie",
-    "yamete", "yamate", "chigau", "matte",
-    "doushite", "naze", "dare", "doko", "itsu", "nanji",
-    "sumimasen", "moshi moshi", "moshimoshi"
-];
-
-/**
- * Detects leftover Japanese romaji fragments in an otherwise-English translation.
- * Returns the first matched fragment, or null if none found.
- * Called by: translator.js (translateChunkWithContext)
- */
-export function detectRomajiFragment(translatedText) {
-    if (!translatedText) return null;
-    // Normalize: lowercase, collapse whitespace so multi-word entries ("onii-chan") match.
-    const normalized = translatedText.toLowerCase();
-    for (const word of ROMAJI_FRAGMENT_WORDS) {
-        const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        // Word-boundary match; tolerate trailing punctuation like "nani?" or "baka!"
-        const re = new RegExp("(?:^|[^a-z-])" + escaped + "(?:[^a-z-]|$)");
-        if (re.test(normalized)) return word;
-    }
-    return null;
-}
-
-/**
- * Assesses the quality of a Japanese-to-English translation using a stringent QA prompt.
- * Called by: translator.js (translateChunkWithContext)
- */
-export async function assessTranslationQualityWithAI(host, model, translatedText) {
-    const config = operationPresets.validator || { temperature: 0.1, systemPrompt: "You are a stringent quality assurance AI evaluating Japanese-to-English translations. Analyze the provided text for untranslated Japanese fragments, romaji placeholders, and poor localization mixing. Return 'PASS' if the translation is fully and naturally localized into English. Return 'FAIL' if any fragments or poor mixing are detected." };
-    const promptText = `Evaluate the following translation:\n\n${translatedText}\n\nResult:`;
-    
-    const payload = {
-        model: model,
-        messages: [
-            { role: "system", content: config.systemPrompt },
-            { role: "user", content: promptText }
-        ],
-        stream: false,
-        temperature: config.temperature,
-        max_tokens: 64,
-        chat_template_kwargs: { "enable_thinking": false }
-    };
-    
-    try {
-        const res = await fetch(`${host}/v1/chat/completions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: state.currentAbortController ? state.currentAbortController.signal : undefined
-        });
-        if (!res.ok) return true; // Fail open
-        const data = await res.json();
-        const content = (data.choices?.[0]?.message?.content || "").trim();
-        // Qwen2.5-3B often returns prose, lowercase, trailing punctuation, or echoes the
-        // instruction text ("Return 'FAIL' if..."). Treat the validator as advisory: only
-        // a clean, standalone FAIL verdict (possibly with minor surrounding punctuation)
-        // counts as a real failure. Anything else (PASS, prose, empty, echoed instructions)
-        // is treated as a pass so the deterministic Japanese/context checks remain the gate.
-        const upper = content.toUpperCase();
-        const isExplicitFail = /^\s*(?:RESULT:?\s*)?FAIL[\s.!?]*$/.test(upper);
-        const isEchoedInstruction = upper.includes("RETURN 'FAIL'") || upper.includes('RETURN "FAIL"');
-        return !isExplicitFail || isEchoedInstruction;
-    } catch (e) {
-        console.warn("[Trace:Validator] Error evaluating translation quality:", e);
-        return true;
-    }
-}
-
-/**
- * Translates a text chunk or chunk with prior history context using configured system parameters and handles retry logic[cite: 7].
- * Called by: benchmark.js and translator.js[cite: 7]
- */
-export async function translateChunkWithContext(host, model, chunkText, previousContext, presetType = 'jpEn', speakerName = '', tempAdjust = 0) {
-    console.log(`[Trace:Translate] translateChunkWithContext(preset="${presetType}", contextLines=${previousContext.length}) invoked.`);
-    // Pass control tags through unchanged, EXCEPT <NAME_PLATE> lines which need
-    // name resolution (they contain the name in brackets).
-    if (/^<[A-Z_]+>/.test(chunkText.trim()) && !chunkText.includes("<NAME_PLATE>")) {
-        console.log('[Trace:Translate] Passing control-tag line through unchanged.');
-        return chunkText;
-    }
-
-    let sanitized = chunkText.replace(/<[^>]+>/g, "").trim();
-    if (!sanitized) return chunkText;
-
-    let maxRetries = 5;
-    let attempts = 0;
-    let currentContext = [...previousContext];
-    let activePresetConfig = operationPresets[presetType] || operationPresets.main;
-    console.log(`[Trace:Translate] Active preset resolved: temp=${activePresetConfig.temperature}`);
-
-    while (attempts <= maxRetries) {
-        attempts++;
-        let isFallbackRun = (attempts > maxRetries);
-
-        if (isFallbackRun) {
-            currentContext = [];
-            activePresetConfig = operationPresets.retry;
-            console.warn(`[Fallback] Max retries (${maxRetries}) reached for chunk: "${sanitized}". Activating retry preset fallback.`);
-        }
-
-        // The speaker name is passed as a parameter (from resolveNamePlate) and injected
-        // into the system prompt. No inline [Speaker:] tag is added to the text.
-        let textToTranslate = sanitized;
-
-        let promptText = `Task: Translate the visual novel text block.\n` +
-            `Rules:\n` +
-            `- Preserve original character tone and pronoun context.\n` +
-            `- Output ONLY the translated string with no filler or preambles.\n\n`;
-
-        if (currentContext && currentContext.length > 0) {
-            promptText += `<history>\n` + currentContext.join("\n") + `\n</history>\n\n`;
-        }
-
-        promptText += `<current_input>\n${textToTranslate}\n</current_input>\n\nTranslation:`;
-
-        // Inject the speaker into the system prompt (not the user message) so the 3B model
-        // treats it as context/instruction rather than content to echo back in the output.
-        let systemPrompt = activePresetConfig.systemPrompt;
-        if (speakerName) {
-            systemPrompt += ` The current speaker is ${speakerName}. Keep this character's pronouns and gender consistent. Do not include the speaker name or any speaker tags in the output.`;
-        }
-
-        const payload = {
-            model: model,
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: promptText }
-            ],
-            stream: false,
-            temperature: Math.max(0.05, activePresetConfig.temperature + tempAdjust - (attempts > 1 ? ((attempts - 1) * 0.05) : 0)),
-            max_tokens: 1024,
-            chat_template_kwargs: { "enable_thinking": false }
-        };
-
-        const res = await fetch(`${host}/v1/chat/completions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: state.currentAbortController ? state.currentAbortController.signal : undefined
-        });
-
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-        const data = await res.json();
-        let rawResult = data.choices?.[0]?.message?.content || sanitized;
-        let cleanedResult = cleanModelOutput(rawResult);
-        console.log(`[Trace:Translate] Attempt ${attempts}/${maxRetries} -> cleaned length ${cleanedResult.length}`);
-        console.log(`[Trace:Translate:Response] raw: ${rawResult}`);
-        console.log(`[Trace:Translate:Response] cleaned: ${cleanedResult}`);
-
-        if (isFallbackRun) {
-            return `[MANUAL_OVERRIDE_NEEDED] ${cleanedResult}`;
-        }
-
-        // --- jp->en validation checks ---
-        // Three deterministic + one advisory check gate acceptance:
-        //   1. hasJapanese          (regex)   -> hard fail every attempt
-        //   2. hasRomajiFragment    (word list)-> hard fail every attempt
-        //   3. hasOldContext        (substring)-> hard fail every attempt
-        //   4. AI validator         (LLM call)-> hard fail on attempts 1-3 only,
-        //                                        advisory (log warning) on attempts 4+,
-        //                                        so a flaky small-model verdict cannot
-        //                                        burn all 5 retries on a good translation.
-        const isNamePlatePreset = presetType === 'namePlate';
-        const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(cleanedResult);
-        const romajiFragment = isNamePlatePreset ? null : detectRomajiFragment(cleanedResult);
-
-        // Context-leak detection: did any prior context line bleed into the output?
-        let hasOldContext = false;
-        let leakedContextLine = "";
-
-        for (let ctxLine of currentContext) {
-            // Strip the [Speaker: Name] prefix history entries carry so the leak check
-            // compares the actual translation text.
-            let cleanCtx = ctxLine.trim().replace(/^\[Speaker: [^\]]+\]\s*/, "");
-            if (cleanCtx.length > 15) {
-                if (cleanedResult.includes(cleanCtx)) {
-                    hasOldContext = true;
-                    leakedContextLine = cleanCtx;
-                    break;
-                }
-                // Sliding window: scan overlapping substrings of the context line rather
-                // than only the first 25 chars, so a leak copying the middle/end of a
-                // prior line is caught (e.g. an output that reproduces everything after
-                // a leading "B-But..."). Use a window large enough to avoid false positives
-                // on common short phrases.
-                const windowSize = 30;
-                const step = 5;
-                for (let w = 0; w + windowSize <= cleanCtx.length; w += step) {
-                    let snippet = cleanCtx.substring(w, w + windowSize);
-                    if (cleanedResult.includes(snippet)) {
-                        hasOldContext = true;
-                        leakedContextLine = cleanCtx;
-                        break;
-                    }
-                }
-                if (hasOldContext) break;
-            }
-        }
-
-        // AI validator: run for non-namePlate chunks. On attempts 1-3 a clean FAIL is a
-        // hard retry trigger; from attempt 4 onward it degrades to advisory (warning only)
-        // so a 3B model that cannot reliably emit PASS/FAIL cannot stall the loop.
-        const validatorHardFailWindow = 3;
-        const validatorIsHardFail = !isNamePlatePreset && attempts <= validatorHardFailWindow;
-        let qualityPass = true;
-        let validatorVerdict = "skipped";
-        if (!isNamePlatePreset) {
-            qualityPass = await assessTranslationQualityWithAI(host, model, cleanedResult);
-            validatorVerdict = qualityPass ? "PASS" : "FAIL";
-        }
-
-        console.log(`[Trace:Translate:Detect] attempt=${attempts}/${maxRetries} hasJapanese=${hasJapanese}, romajiFragment=${romajiFragment ? `'${romajiFragment}'` : 'none'}, hasOldContext=${hasOldContext}, aiValidator=${validatorVerdict} (${validatorIsHardFail ? 'hard-fail' : 'advisory'}), contextLines=${currentContext.length}`);
-        if (hasJapanese) console.warn(`[Trace:Translate:Detect] Japanese characters still present in output -> will retry.`);
-        if (romajiFragment) console.warn(`[Trace:Translate:Detect] Romaji fragment "${romajiFragment}" left in output -> will retry.`);
-        if (hasOldContext) console.warn(`[Trace:Translate:Detect] Context leak detected -> output contains a prior context line: "${leakedContextLine.substring(0, 60)}..."`);
-
-        // Advisory AI-FAIL warning (attempt > validatorHardFailWindow): log but do not block.
-        if (!isNamePlatePreset && !qualityPass && !validatorIsHardFail) {
-            console.warn(`[Trace:Translate:Detect] AI validator returned FAIL on attempt ${attempts} (beyond hard-fail window of ${validatorHardFailWindow}); treating as advisory only.`);
-        }
-
-        // Hard-fail conditions: Japanese chars, romaji fragment, context leak, or an AI
-        // FAIL within the early hard-fail window. Any of these forces a retry.
-        const failedHardCheck = hasJapanese || !!romajiFragment || hasOldContext;
-        const failedAiHardCheck = validatorIsHardFail && !qualityPass;
-
-        if (!failedHardCheck && !failedAiHardCheck) {
-            if (!isNamePlatePreset && !qualityPass) {
-                console.log(`[Trace:Translate:Pass] Accepting translation despite advisory AI FAIL (deterministic checks passed; validator advisory only).`);
-            } else {
-                console.log(`[Trace:Translate:Pass] Output passed all checks (no Japanese, no romaji fragment, no context leak, AI validation ${validatorVerdict}). Accepting translation.`);
-            }
-            return cleanedResult;
-        }
-        console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, romajiFragment=${romajiFragment ? `'${romajiFragment}'` : 'none'}, hasOldContext=${hasOldContext}, aiHardFail=${failedAiHardCheck}). Dropping oldest context and retrying.`);
-        if (currentContext.length > 0) currentContext.shift();
-    }
-}
-
-/**
- * Parses stylization mapping output from a model into key/value pairs.
- * Handles JSON objects, per-line "key":"value" pairs, single-quoted pairs,
- * and unquoted keys. Returns an array of { key, value }.
- * Called by: generateStylizationMapWithAI
- */
 /**
  * Validates a key/value pair from a stylization mapping output.
  * Rejects empty keys, keys with newlines, pure-numeric keys, and
  * object/array values. Returns true if the pair is valid.
+ * Called by: translator.js (parseMappingOutput)
  */
 function isValidMappingPair(key, value) {
     if (!key || typeof key !== "string") return false;
@@ -675,12 +30,12 @@ function isValidMappingPair(key, value) {
     // Reject empty or whitespace-only replacements (they delete content).
     if (typeof value === "string" && value.trim() === "") return false;
     // Reject single kana characters (they corrupt words by firing inside them).
-    // 2-char kana fragments are allowed \u2014 they can be legitimate sound ticks
-    // (e.g. \u3075\u3041 -> Faa, \u3080\u3045 -> Muuu). Grammar-particle and sentence
+    // 2-char kana fragments are allowed — they can be legitimate sound ticks
+    // (e.g. ふぁ -> Faa, むぅ -> Muuu). Grammar-particle and sentence
     // checks below filter out the problematic 2-char cases.
     if (/^[\u3040-\u309F\u30A0-\u30FF]$/.test(key.trim())) return false;
-    // Reject 2-char kana that are common grammar particles (\u306f, \u304c, \u3092,
-    // \u306b, \u3067, \u3068, \u306e, \u3082, \u304b, \u3093) \u2014 they corrupt words.
+    // Reject 2-char kana that are common grammar particles (は, が, を,
+    // に, で, と, の, も, か, ん) — they corrupt words.
     if (/^[\u306f\u304c\u3092\u306b\u3067\u3068\u306e\u3082\u304b\u3093]{1,2}$/.test(key.trim())) return false;
     // Reject keys that look like sentences rather than ticks/punctuation:
     // a key with 3+ kana that contains grammar particles (は, が, を, に, で,
@@ -689,36 +44,42 @@ function isValidMappingPair(key, value) {
     const k = key.trim();
     if (/[\u3040-\u309F\u30A0-\u30FF]{3,}/.test(k)) {
         // Contains a run of 3+ kana — check for grammar particles indicating a sentence.
-        if (/[をにでとはがのも]\s|^[をにでとはがのも]/.test(k)) return false;
+        if (/[\u3092\u306b\u3067\u3068\u306f\u304c\u306e\u3082]\s|^[\u3092\u306b\u3067\u3068\u306f\u304c\u306e\u3082]/.test(k)) return false;
         // Contains kanji mixed with a kana run longer than 4 -> sentence.
         if (/[\u4E00-\u9FAF]/.test(k) && /[\u3040-\u309F\u30A0-\u30FF]{5,}/.test(k)) return false;
     }
     // Hard cap: keys longer than 8 chars are dialogue, not ticks.
     if (k.length > 8) return false;
-    // Reject keys containing Japanese quotation brackets (\u300c, \u300d, \u300e,
-    // \u300f, \u3010, \u3011) \u2014 the model wraps patterns in brackets, which
-    // won\u2019t match the source text (brackets are dialogue markers, not content).
+    // Reject keys containing Japanese quotation brackets (「, 」, 『, 』, 【, 】)
+    // — the model wraps patterns in brackets, which won't match the source text
+    // (brackets are dialogue markers, not content).
     if (/[\u300c\u300d\u300e\u300f\u3010\u3011]/.test(k)) return false;
-    // Reject keys that are pure ASCII/English \u2014 the model echoes its own prior
+    // Reject keys that are pure ASCII/English — the model echoes its own prior
     // output back as a key (e.g. "Aa", "Na", "Ha-ha"). Keys must contain Japanese
     // characters (kana, kanji, or Japanese punctuation).
     if (!/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\u3000-\u303F\uFF00-\uFFEF]/.test(k)) return false;
     // Reject keys containing a mix of kanji + hiragana that form a word/sentence
-    // (e.g. \u51e6\u5973\u3092\u5931\u3046, \u59cb\u3081\u308b\u305e, \u3044\u3044\u7b54\u3048\u3060).
-    // These are dialogue fragments, not stylization patterns. Any kanji with 2+
-    // consecutive hiragana, or alternating kanji-hiragana (inflected verbs), is a word.
-    // NOTE: katakana is NOT counted here \u2014 katakana + kanji compounds like
-    // \u30a2\u30b5\u30ae\u6821\u9577 (Asagi Principal) are legitimate name+title mappings
-    // that appear inline in dialogue and are not handled by name-plate resolution.
+    // (e.g. 処女を失う, 始めるぞ, いい答えだ). These are dialogue fragments, not
+    // stylization patterns. Any kanji with 2+ consecutive hiragana, or alternating
+    // kanji-hiragana (inflected verbs), is a word.
+    // NOTE: katakana is NOT counted here — katakana + kanji compounds like
+    // アサギ校長 (Asagi Principal) are legitimate name+title mappings that appear
+    // inline in dialogue and are not handled by name-plate resolution.
     if (/[\u4E00-\u9FAF]/.test(k) && /[\u3040-\u309F]{2,}/.test(k)) return false;
-    // Also reject alternating kanji-hiragana patterns (e.g. \u51e6\u5973\u3092\u5931\u3046)
-    // where hiragana is interspersed between kanji \u2014 these are inflected words/sentences.
+    // Also reject alternating kanji-hiragana patterns (e.g. 処女を失う)
+    // where hiragana is interspersed between kanji — these are inflected words/sentences.
     const kanjiCount = (k.match(/[\u4E00-\u9FAF]/g) || []).length;
     const hiraganaCount = (k.match(/[\u3040-\u309F]/g) || []).length;
     if (kanjiCount >= 1 && hiraganaCount >= 2) return false;
     return true;
 }
 
+/**
+ * Parses stylization mapping output from a model into key/value pairs.
+ * Handles JSON objects, per-line "key":"value" pairs, single-quoted pairs,
+ * and unquoted keys. Returns an array of { key, value }.
+ * Called by: translator.js (generateStylizationMapWithAI)
+ */
 function parseMappingOutput(content) {
     if (!content || !content.trim()) return [];
     let pairs = [];
@@ -762,9 +123,41 @@ function parseMappingOutput(content) {
 }
 
 /**
- * Analyzes source text blocks to discover character stutters, ticks, and punctuation anomalies, formatting them into a stylization mapping list[cite: 7].
- * Called by: HTML event handler / main.js[cite: 7]
+ * Decides whether 「」 brackets should be stripped from name values during
+ * in-dialogue replacement. XOR of the two active contexts:
+ *   A = Manual line-by-line Override active AND its bracket checkbox checked
+ *   B = Generate Mapper running AND its bracket checkbox checked
+ * Brackets are stripped when exactly one of A or B is true.
+ * Called by: translator.js (stripLine)
  */
+export function shouldStripNameBrackets() {
+    const ctxManual = state.manualStepByStepMode && state.manualStepStripBrackets;
+    const ctxMapper = state.mapperGenerationActive && state.mapperStripBrackets;
+    return ctxManual !== ctxMapper; // XOR
+}
+
+/**
+ * Applies the reserved __priorityOverride__ entries from the stylization map to the source text FIRST,
+ * before the normal strip-phase replacement loop, so downstream phases never see the original characters.
+ * Applies longest-key-first so longer patterns win over their substrings; every occurrence is replaced globally.
+ * Called by: translator.js (stripLine, generateStylizationMapWithAI)
+ */
+export function applyPriorityOverride(text, map) {
+    if (!map || typeof map !== 'object') return text;
+    const override = map.__priorityOverride__;
+    if (!override || typeof override !== 'object') return text;
+    // Apply longest keys first so longer patterns win over their substrings.
+    const entries = Object.entries(override).sort((a, b) => b[0].length - a[0].length);
+    let out = text;
+    for (const [pattern, replacement] of entries) {
+        if (pattern && out.includes(pattern)) {
+            // global replace; priority override is meant to rewrite every occurrence.
+            out = out.split(pattern).join(replacement);
+        }
+    }
+    return out;
+}
+
 /**
  * Runs the stylization strip phase on a single source line: priority override
  * pre-pass, then the heavyStylizationMap replacement loop (skipping the
@@ -773,8 +166,7 @@ function parseMappingOutput(content) {
  * the AI and the list of matched patterns. When the line collapses to nothing
  * (it was entirely stylization), flushOnly is true so the caller can push the
  * extracted stylizations directly and skip translation.
- * @param {string} line - The original source line (pre-strip).
- * @returns {{textToSendToAi: string, extracted: string[], flushOnly: boolean}}
+ * Called by: translator.js (translateViaAiServer main loop + manual-step retranslate)
  */
 function stripLine(line) {
     let extractedStylizations = [];
@@ -799,44 +191,12 @@ function stripLine(line) {
 }
 
 /**
- * Reserved key in the heavyStylizationMap JSON holding entries that are applied to
- * the source text FIRST, before the 3-phase generation analysis and before the
- * normal strip-phase replacement loop. Lets the user force an early substitution
- * (e.g. 、 -> -) so downstream phases never see the original character.
- * @param {string} text - Source text to transform.
- * @param {Object} map - The heavy stylization map (may contain __priorityOverride__).
- * @returns {string} The text with priority entries applied (longest key first).
+ * Analyzes source text blocks to discover character stutters, ticks, and punctuation anomalies,
+ * formatting them into a stylization mapping list via a 3-phase AI analysis (Ticks -> Sounds -> Punctuation).
+ * Results land in state.pendingDiscoveredMappings for user review. Applies priority override first
+ * so generation phases never see the original characters.
+ * Called by: main.js (window.generateStylizationMapWithAI wiring for HTML Generate Mapping button)
  */
-/**
- * Decides whether 「」 brackets should be stripped from name values during
- * in-dialogue replacement. XOR of the two active contexts:
- *   A = Manual line-by-line Override active AND its bracket checkbox checked
- *   B = Generate Mapper running AND its bracket checkbox checked
- * Brackets are stripped when exactly one of A or B is true.
- * @returns {boolean}
- */
-export function shouldStripNameBrackets() {
-    const ctxManual = state.manualStepByStepMode && state.manualStepStripBrackets;
-    const ctxMapper = state.mapperGenerationActive && state.mapperStripBrackets;
-    return ctxManual !== ctxMapper; // XOR
-}
-
-export function applyPriorityOverride(text, map) {
-    if (!map || typeof map !== 'object') return text;
-    const override = map.__priorityOverride__;
-    if (!override || typeof override !== 'object') return text;
-    // Apply longest keys first so longer patterns win over their substrings.
-    const entries = Object.entries(override).sort((a, b) => b[0].length - a[0].length);
-    let out = text;
-    for (const [pattern, replacement] of entries) {
-        if (pattern && out.includes(pattern)) {
-            // global replace; priority override is meant to rewrite every occurrence.
-            out = out.split(pattern).join(replacement);
-        }
-    }
-    return out;
-}
-
 export async function generateStylizationMapWithAI() {
     console.log('[Trace:Stylization] generateStylizationMapWithAI() invoked.');
     clearError();
@@ -890,11 +250,11 @@ export async function generateStylizationMapWithAI() {
                 `Translate each to its English equivalent.\n` +
                 `Return lines as "source":"replacement". No markdown blocks.\n\n` +
                 `Examples:\n` +
-                `"\u30c3\uff01":"!"\n` +
-                `"\u30c3\uff01\uff1f":"!"\n` +
-                `"\u3073\u308a\u3073\u308a":"bzz-bzz"\n` +
-                `"\u3069\u304d\u3069\u304d":"thump-thump"\n\n` +
-                `TRANSLATE ticks to English \u2014 NEVER remove them. Do NOT output empty replacements unless the pattern is pure gemination punctuation (\u3063 alone).\n` +
+                `"ッ！":"!"\n` +
+                `"ッ！？":"!"\n` +
+                `"びりびり":"bzz-bzz"\n` +
+                `"どきどき":"thump-thump"\n\n` +
+                `TRANSLATE ticks to English — NEVER remove them. Do NOT output empty replacements unless the pattern is pure gemination punctuation (っ alone).\n` +
                 `Each pattern must be 2+ characters. NEVER output single kana, grammar particles, full sentences, or dialogue fragments.\n` +
                 `NEVER output a pattern containing a sentence-ending mark as part of a longer phrase.\n\n` +
                 `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
@@ -906,14 +266,14 @@ export async function generateStylizationMapWithAI() {
                 `Translate each to a natural English equivalent.\n` +
                 `Return lines as "source":"replacement". No markdown blocks.\n\n` +
                 `Examples:\n` +
-                `"\u3042\u3042\u3042":"Aaaah"\n` +
-                `"\u304d\u3083\u3042":"Kyaa"\n` +
-                `"\u3075\u3075":"Hehe"\n` +
-                `"\u3050\u306c\u306c":"Grrr"\n` +
-                `"\u3073\u308a\u3073\u308a":"bzz-bzz"\n` +
-                `"\u3069\u304d\u3069\u304d":"thump-thump"\n\n` +
+                `"あああ":"Aaaah"\n` +
+                `"きゃあ":"Kyaa"\n` +
+                `"ふふ":"Hehe"\n` +
+                `"ぐぬぬ":"Grrr"\n` +
+                `"びりびり":"bzz-bzz"\n` +
+                `"どきどき":"thump-thump"\n\n` +
                 `Each pattern MUST be 3 or more kana. NEVER output single kana, 2-char fragments, grammar particles, sentences, or dialogue.\n` +
-                `NEVER output an empty replacement \u2014 every sound maps to an English word.\n\n` +
+                `NEVER output an empty replacement — every sound maps to an English word.\n\n` +
                 `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
         },
         {
@@ -923,16 +283,16 @@ export async function generateStylizationMapWithAI() {
                 `Map each to its English equivalent. Include single chars AND multi-char sequences (e.g. ellipses, dash repeats, combined marks).\n` +
                 `Return lines as "source":"replacement". No markdown blocks.\n\n` +
                 `Examples:\n` +
-                `"\u3001":""\n` +
-                `"\u3002":"."\n` +
-                `"\uff01":"!"\n` +
-                `"\uff1f":"?"\n` +
-                `"\u30fc":"-"\n` +
-                `"\u2026":"..."\n` +
-                `"\u2015\u2015":"\u2014"\n` +
-                `"\uff01\uff1f":"!"\n\n` +
+                `"、":""\n` +
+                `"。":"."\n` +
+                `"！":"!"\n` +
+                `"？":"?"\n` +
+                `"ー":"-"\n` +
+                `"…":"..."\n` +
+                `"――":"—"\n` +
+                `"！？":"!"\n\n` +
                 `NEVER output kana that are not punctuation. NEVER output words, sentences, sounds, or dialogue.\n` +
-                `Empty replacements are allowed ONLY for punctuation being stripped (e.g. \u3001).\n\n` +
+                `Empty replacements are allowed ONLY for punctuation being stripped (e.g. 、).\n\n` +
                 `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
         }
     ];
@@ -1015,6 +375,7 @@ export async function generateStylizationMapWithAI() {
             console.warn("[Mapping Generation] Successfully aborted by user.");
         } else {
             showError("Mapping generation failed: " + err.message);
+            console.error("[Mapping Generation] Failed:", err);
         }
     } finally {
         if (loadingStatus) loadingStatus.style.display = "none";
@@ -1026,98 +387,14 @@ export async function generateStylizationMapWithAI() {
 }
 
 /**
- * Aborts ongoing translation or generation processes using an active AbortController[cite: 7].
- * Called by: HTML event handler / main.js[cite: 7]
+ * Aborts ongoing translation or generation processes using an active AbortController.
+ * Called by: main.js (window.stopTranslation wiring for HTML Stop button)
  */
 export function stopTranslation() {
     if (state.currentAbortController) {
         state.currentAbortController.abort();
         console.log("[Process] Abort signal sent by user.");
     }
-}
-
-/**
- * Manages the core sequential translation loop across lines, handling buffers, name plates, stylized pattern matching, context windows, and manual step checkpoints[cite: 7].
- * Called by: HTML event handler / main.js[cite: 7]
- */
-/**
- * Builds the tiered context window (Raw Tail -> Recent Summary -> Archival Summary) shared by the
- * production translation pipeline and the benchmark sweep, so both grade the model under
- * identical context conditions. Mutates and returns the summaryState object in place.
- *
- * Tier 1 (Raw Tail): the most recent `rawLimitThreshold` confirmed lines from history.
- * Tier 2 (Recent Summary): a rolling recap of lines that fell out of the raw tail.
- * Tier 3 (Archival Summary): a compressed macro story state when the recent summary overflows.
- * The final window is capped to `maxContextLines` entries (summary lines + raw tail combined).
- *
- * Called by: translator.js (translateViaAiServer), benchmark.js (runParameterSweepBenchmark)
- */
-export async function buildTieredContextWindow(host, model, history, maxContextLines, rawLimitThreshold, summaryState) {
-    let formattedContextForPrompt = [];
-
-    // Three-tier context window:
-    //   [Archival Summary] [Recent Summary] [Raw Tail]
-    //
-    // The window is bounded by two settings:
-    //   - rawLimitThreshold (Raw Lines): size of the raw tail (verbatim recent lines)
-    //   - maxContextLines (Summary Lines): size of the recent summary window (lines between
-    //     the raw tail and the summary window start)
-    //
-    // A line scrolls through the tiers as history grows:
-    //   1. Enters the raw tail (verbatim).
-    //   2. Exits the raw tail -> enters the recent summary window (gets summarized).
-    //   3. Exits the recent summary window -> the recent summary block is flushed into
-    //      the archival summary (compressed macro story state).
-
-    // Tier 1: Raw Tail (the most recent rawLimitThreshold confirmed lines from history)
-    const rawTailStart = Math.max(0, history.length - rawLimitThreshold);
-    const rawTail = history.slice(rawTailStart);
-
-    // Tier 2: Recent Summary window — lines between the raw tail and the summary window start.
-    // The summary window covers `maxContextLines` lines before the raw tail.
-    // Lines that exit this window are flushed to archival (Tier 3).
-    const summaryWindowEnd = rawTailStart; // exclusive (raw tail starts here)
-    const summaryWindowStart = Math.max(0, summaryWindowEnd - maxContextLines);
-
-    // Lines that newly entered the recent summary window (exited the raw tail)
-    if (summaryWindowEnd > summaryState.summarizedUpToIndex) {
-        const newlyExitedLines = history.slice(summaryState.summarizedUpToIndex, summaryWindowEnd);
-        if (newlyExitedLines.length > 0) {
-            summaryState.recentSummary = await updateRecentSummary(host, model, summaryState.recentSummary, newlyExitedLines);
-            summaryState.recentSummarySourceLines.push(...newlyExitedLines);
-            summaryState.summarizedUpToIndex = summaryWindowEnd;
-        }
-    }
-
-    // Tier 3: Archival Summary — triggered when lines exit the recent summary window
-    // (i.e., the summary has accumulated more than maxContextLines source lines, and the
-    // oldest ones have scrolled past the window). Flush the recent summary into archival.
-    if (maxContextLines > 0 && summaryState.recentSummarySourceLines.length > maxContextLines) {
-        // Lines that scrolled past the summary window get flushed to archival
-        const overflowCount = summaryState.recentSummarySourceLines.length - maxContextLines;
-        const flushedLines = summaryState.recentSummarySourceLines.splice(0, overflowCount);
-        // Re-summarize the recent summary from the remaining window lines
-        const remainingLines = summaryState.recentSummarySourceLines;
-        summaryState.archivalSummary = await updateArchivalSummary(host, model, summaryState.archivalSummary, summaryState.recentSummary);
-        // Reset recent summary to cover only the remaining window lines
-        if (remainingLines.length > 0) {
-            summaryState.recentSummary = await updateRecentSummary(host, model, "", remainingLines);
-        } else {
-            summaryState.recentSummary = "";
-        }
-        console.log(`[Trace:Summary:Archival] Flushed ${overflowCount} line(s) from recent summary to archival. Remaining in window: ${remainingLines.length}.`);
-    }
-
-    // Build hierarchical prompt context
-    if (summaryState.archivalSummary) formattedContextForPrompt.push(`[Story Context: ${summaryState.archivalSummary}]`);
-    if (summaryState.recentSummary) formattedContextForPrompt.push(`[Recent Scene: ${summaryState.recentSummary}]`);
-    formattedContextForPrompt.push(...rawTail);
-
-    // Cap the total context passed to the model
-    let sliceStart = Math.max(0, formattedContextForPrompt.length - (maxContextLines + rawLimitThreshold));
-    let currentContextSlice = (maxContextLines + rawLimitThreshold) > 0 ? formattedContextForPrompt.slice(sliceStart) : [];
-
-    return currentContextSlice;
 }
 
 /**
@@ -1133,7 +410,7 @@ export async function buildTieredContextWindow(host, model, history, maxContextL
 export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept = false) {
     let nameValue = rawNamePlateLine.replace("<NAME_PLATE>", "").trim();
 
-    if (nameValue && nameValue !== '""' && nameValue !== '\u300c\u300d' && nameValue !== '') {
+    if (nameValue && nameValue !== '""' && nameValue !== '「」' && nameValue !== '') {
         let cleanName = nameValue.replace(/^[\u300c\u300e"']|[\u300d\u300f"']$/g, '').trim();
         let finalUserApprovedName = "";
 
@@ -1156,12 +433,12 @@ export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept
             // Wrap the name in brackets so name swaps are visible in the translated dialogue.
             // The speaker context (historyEntry) uses activeSpeakerName directly, not the
             // mapped value, so this does not affect speaker context.
-            state.heavyStylizationMap[cleanName] = `\u300c${finalUserApprovedName}\u300d`;
-            console.log(`[Trace:NamePlate] Merged "${cleanName}" -> "\u300c${finalUserApprovedName}\u300d" into stylization map for in-dialogue auto-replacement.`);
+            state.heavyStylizationMap[cleanName] = `「${finalUserApprovedName}」`;
+            console.log(`[Trace:NamePlate] Merged "${cleanName}" -> "「${finalUserApprovedName}」" into stylization map for in-dialogue auto-replacement.`);
         }
 
         return {
-            namePlateLine: `<NAME_PLATE>\u300c${finalUserApprovedName}\u300d`,
+            namePlateLine: `<NAME_PLATE>「${finalUserApprovedName}」`,
             speakerName: finalUserApprovedName
         };
     } else {
@@ -1170,6 +447,74 @@ export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept
     }
 }
 
+/**
+ * Builds a getter/setter accessor object that lets buildTieredContextWindow mutate the
+ * flushBuffer-scoped summary variables in place. The accessor proxies reads/writes through
+ * closures so the tiered-summary state stays alive across the manual-step retranslate loop.
+ * Called by: translator.js (translateViaAiServer flushBuffer)
+ */
+function makeSummaryStateAccessor(getArchival, setArchival, getRecent, setRecent, getRecentSourceLines, getSummarizedUpTo, setSummarizedUpTo) {
+    return {
+        get archivalSummary() { return getArchival(); },
+        set archivalSummary(v) { setArchival(v); },
+        get recentSummary() { return getRecent(); },
+        set recentSummary(v) { setRecent(v); },
+        get recentSummarySourceLines() { return getRecentSourceLines(); },
+        get summarizedUpToIndex() { return getSummarizedUpTo(); },
+        set summarizedUpToIndex(v) { setSummarizedUpTo(v); }
+    };
+}
+
+/**
+ * Reconstructs the manual-step display block for a target translatedLines entry by
+ * replaying the same filter(l !== "") + join("\n") display order the main output uses.
+ * A single translatedLines entry may span multiple display lines (multi-line narration),
+ * so we cannot map to a single display-line index. Returns the edited text or the fallback
+ * combined translation when the block cannot be located.
+ * Called by: translator.js (translateViaAiServer flushBuffer manual-step continue path)
+ */
+function reconstructManualStepDisplayBlock(translatedLines, outputRight, targetUnfilteredIndex, fallbackText) {
+    const displayedLines = outputRight.value.split("\n");
+    let displayCursor = 0;
+    let blockStart = -1;
+    let blockEnd = -1;
+    for (let i = 0; i < translatedLines.length; i++) {
+        if (translatedLines[i] === "") continue;
+        const entryLineCount = translatedLines[i].split("\n").length;
+        if (i === targetUnfilteredIndex) {
+            blockStart = displayCursor;
+            blockEnd = displayCursor + entryLineCount;
+            break;
+        }
+        displayCursor += entryLineCount;
+    }
+    if (blockStart >= 0 && blockEnd <= displayedLines.length) {
+        return displayedLines.slice(blockStart, blockEnd).join("\n");
+    }
+    return fallbackText;
+}
+
+/**
+ * Flattens a translatedLines array whose entries may contain embedded newlines into a
+ * single flat array of display lines, so the final outputAreaRight value is one line per row.
+ * Called by: translator.js (translateViaAiServer final flatten step)
+ */
+function flattenTranslatedLines(translatedLines) {
+    let finalCleanedArray = [];
+    for (let l of translatedLines) {
+        if (l && l.includes && l.includes("\n")) finalCleanedArray.push(...l.split("\n"));
+        else finalCleanedArray.push(l);
+    }
+    return finalCleanedArray;
+}
+
+/**
+ * Manages the core sequential translation loop across lines, handling buffers, name plates,
+ * stylized pattern matching, context windows, and manual step checkpoints. Runs the strip
+ * phase per dialogue line, flushes the dialogue buffer through translateChunkWithContext,
+ * maintains the tiered summary context, and commits the final result to the right-hand file.
+ * Called by: main.js (window.translateViaAiServer wiring for HTML Translate button)
+ */
 export async function translateViaAiServer() {
     console.log('[Trace:Translation] translateViaAiServer() invoked.');
     clearError();
@@ -1224,6 +569,13 @@ export async function translateViaAiServer() {
     // (Qwen2.5-3B) need the speaker adjacent to the text to keep pronoun/gender consistent.
     let activeSpeakerName = "";
 
+    /**
+     * Flushes the accumulated dialogue buffer through translateChunkWithContext, handles
+     * manual-step checkpoints when manual mode is active, and pushes the translated result
+     * into history with the active speaker prefix. Declared inline so it closes over the
+     * loop-scoped summary state and dialogueBuffer.
+     * Called by: translator.js (translateViaAiServer main loop)
+     */
     async function flushBuffer() {
         if (dialogueBuffer.length === 0) return;
 
@@ -1231,15 +583,12 @@ export async function translateViaAiServer() {
 
         // Tiered context window (Raw Tail -> Recent Summary -> Archival Summary) is built by the
         // shared helper so the production pipeline and benchmark sweep grade under identical conditions.
-        let currentContextSlice = await buildTieredContextWindow(host, model, history, maxContextLines, rawLimitThreshold, {
-            get archivalSummary() { return archivalSummary; },
-            set archivalSummary(v) { archivalSummary = v; },
-            get recentSummary() { return recentSummary; },
-            set recentSummary(v) { recentSummary = v; },
-            get recentSummarySourceLines() { return recentSummarySourceLines; },
-            get summarizedUpToIndex() { return summarizedUpToIndex; },
-            set summarizedUpToIndex(v) { summarizedUpToIndex = v; }
-        });
+        let currentContextSlice = await buildTieredContextWindow(host, model, history, maxContextLines, rawLimitThreshold, makeSummaryStateAccessor(
+            () => archivalSummary, (v) => { archivalSummary = v; },
+            () => recentSummary, (v) => { recentSummary = v; },
+            () => recentSummarySourceLines,
+            () => summarizedUpToIndex, (v) => { summarizedUpToIndex = v; }
+        ));
 
         let activePresetKey = 'jpEn';
         let translatedCombined = await translateChunkWithContext(host, model, combinedText, currentContextSlice, activePresetKey, activeSpeakerName);
@@ -1283,15 +632,12 @@ export async function translateViaAiServer() {
                     }
                     // Rebuild the context window using the updated settings via buildTieredContextWindow,
                     // so the retranslate uses the same tiered summary pipeline as the main translation.
-                    let updatedContextWindow = await buildTieredContextWindow(host, model, history, stepCtxLines, stepRawLimit, {
-                        get archivalSummary() { return archivalSummary; },
-                        set archivalSummary(v) { archivalSummary = v; },
-                        get recentSummary() { return recentSummary; },
-                        set recentSummary(v) { recentSummary = v; },
-                        get recentSummarySourceLines() { return recentSummarySourceLines; },
-                        get summarizedUpToIndex() { return summarizedUpToIndex; },
-                        set summarizedUpToIndex(v) { summarizedUpToIndex = v; }
-                    });
+                    let updatedContextWindow = await buildTieredContextWindow(host, model, history, stepCtxLines, stepRawLimit, makeSummaryStateAccessor(
+                        () => archivalSummary, (v) => { archivalSummary = v; },
+                        () => recentSummary, (v) => { recentSummary = v; },
+                        () => recentSummarySourceLines,
+                        () => summarizedUpToIndex, (v) => { summarizedUpToIndex = v; }
+                    ));
                     console.log(`[Trace:Translation] Re-translate step: contextLines=${stepCtxLines}, rawLimit=${stepRawLimit}, windowSize=${updatedContextWindow.length}`);
                     // Re-run the mapper replacement on the original source lines so a
                     // changed bracket-strip checkbox takes effect on retranslate.
@@ -1315,32 +661,11 @@ export async function translateViaAiServer() {
                     // The user edits the translation directly in the outputRight textarea,
                     // so read their edited text back from there. A single translatedLines
                     // entry may span multiple display lines (multi-line narration), so we
-                    // cannot map to a single display-line index. Instead, reconstruct the
-                    // display block for the target entry by replaying the same
-                    // filter(l !== "") + join("\n") order and capturing every display line
-                    // that belongs to dialogueBuffer[0].index.
-                    const targetUnfilteredIndex = dialogueBuffer[0].index;
-                    const displayedLines = outputRight.value.split("\n");
-                    let displayCursor = 0;
-                    let blockStart = -1;
-                    let blockEnd = -1;
-                    for (let i = 0; i < translatedLines.length; i++) {
-                        if (translatedLines[i] === "") continue;
-                        const entryLineCount = translatedLines[i].split("\n").length;
-                        if (i === targetUnfilteredIndex) {
-                            blockStart = displayCursor;
-                            blockEnd = displayCursor + entryLineCount;
-                            break;
-                        }
-                        displayCursor += entryLineCount;
-                    }
-                    let finalManualText;
-                    if (blockStart >= 0 && blockEnd <= displayedLines.length) {
-                        finalManualText = displayedLines.slice(blockStart, blockEnd).join("\n");
-                    } else {
-                        finalManualText = translatedCombined;
-                    }
-                    translatedCombined = finalManualText;
+                    // cannot map to a single display-line index. Reconstruct the display
+                    // block for the target entry via the shared helper.
+                    translatedCombined = reconstructManualStepDisplayBlock(
+                        translatedLines, outputRight, dialogueBuffer[0].index, translatedCombined
+                    );
                     keepTranslatingStep = false;
                 }
             }
@@ -1421,11 +746,7 @@ export async function translateViaAiServer() {
         hideCurrentSourceLine();
         console.log('[Trace:Translation] Main loop finished. Flattening results and committing to file.');
 
-        let finalCleanedArray = [];
-        for (let l of translatedLines) {
-            if (l && l.includes && l.includes("\n")) finalCleanedArray.push(...l.split("\n"));
-            else finalCleanedArray.push(l);
-        }
+        let finalCleanedArray = flattenTranslatedLines(translatedLines);
 
         if (loadingStatus) loadingStatus.style.display = "none";
         if (stopBtn) stopBtn.style.display = "none";
@@ -1442,6 +763,7 @@ export async function translateViaAiServer() {
             console.warn("[Translation] Process successfully aborted by user.");
         } else {
             showError(error.message);
+            console.error("[Translation] Process failed:", error);
         }
     } finally {
         state.currentAbortController = null;
