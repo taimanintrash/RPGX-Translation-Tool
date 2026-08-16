@@ -670,6 +670,23 @@ function isValidMappingPair(key, value) {
     if (/\n|\r/.test(key)) return false;
     if (/^\d+$/.test(key.trim())) return false;
     if (value === null || typeof value === "object") return false;
+    // Reject empty or whitespace-only replacements (they delete content).
+    if (typeof value === "string" && value.trim() === "") return false;
+    // Reject single kana or 2-char kana fragments (they corrupt words).
+    if (/^[\u3040-\u309F\u30A0-\u30FF]{1,2}$/.test(key.trim())) return false;
+    // Reject keys that look like sentences rather than ticks/punctuation:
+    // a key with 3+ kana that contains grammar particles (は, が, を, に, で,
+    // と, の, は, も, か) or a mix of kanji + kana longer than 6 chars is
+    // almost certainly dialogue, not a stylization pattern.
+    const k = key.trim();
+    if (/[\u3040-\u309F\u30A0-\u30FF]{3,}/.test(k)) {
+        // Contains a run of 3+ kana — check for grammar particles indicating a sentence.
+        if (/[をにでとはがのも]\s|^[をにでとはがのも]/.test(k)) return false;
+        // Contains kanji mixed with a kana run longer than 4 -> sentence.
+        if (/[\u4E00-\u9FAF]/.test(k) && /[\u3040-\u309F\u30A0-\u30FF]{5,}/.test(k)) return false;
+    }
+    // Hard cap: keys longer than 8 chars are dialogue, not ticks.
+    if (k.length > 8) return false;
     return true;
 }
 
