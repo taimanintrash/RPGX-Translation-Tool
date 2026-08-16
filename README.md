@@ -48,34 +48,11 @@ docs/
   FUNCTION_MANIFEST.md — Static call-graph reference for all JS functions
 ```
 
-### Module Load Order
-
 `index.html` loads only `js/main.js` via `<script type="module">`. All other files are reached through ES module imports:
+assignment in `main.js`. See `docs/FUNCTION_MANIFEST.md` for the complete static call graph.
 
-- `main.js` imports from `database.js`, `ui.js`, `parser.js`, `translator.js`, `benchmark.js`
-- `translator.js` re-exports symbols from `translator-presets.js` and `translator-llm.js`
-- `ui.js` re-exports symbols from `ui-manual-step.js` and `ui-layout.js`
+The central `state` object exported from `main.js` holds all application state and is imported by every other module. 
 
-Every function wired to an HTML `onclick`/`onchange` handler is exposed via `window.*` assignment in `main.js`. See `docs/FUNCTION_MANIFEST.md` for the complete static call graph.
-
-### Shared State
-
-The central `state` object exported from `main.js` holds all application state and is imported by every other module. Key fields:
-
-| Field | Purpose |
-|---|---|
-| `loadedFilesRegistry` | Array of loaded file objects with parsed JSON data |
-| `heavyStylizationMap` | JSON object of JP→EN replacement patterns + `__priorityOverride__` pre-pass |
-| `knownNamesMap` | Cache of resolved JP→EN name transliterations |
-| `pendingDiscoveredMappings` | AI-discovered stylization candidates pending user review |
-| `currentAbortController` | Active AbortController for stop/abort |
-| `stylizationMode` | `"strip"` \| `"delineate"` \| `"disabled"` |
-| `manualStepByStepMode` | Boolean — manual review active |
-| `mapperStripBrackets` / `manualStepStripBrackets` | XOR bracket-strip toggles |
-| `mapperGenerationActive` | True while Generate Mapping is running |
-| `appliedContextLines` / `appliedRawLimit` | Manual override context values (null = use .translate-config inputs) |
-| `debugMaxLinesLimit` | Cap translation to N lines for debugging (0 = no limit) |
-| `autoSkipNameModal` | Auto-accept AI name transliterations without prompting |
 
 ---
 
@@ -94,7 +71,7 @@ The central `state` object exported from `main.js` holds all application state a
 - **Strip/Delineate/Disable Modes:** Strip rewrites JP patterns to EN equivalents before translation; Delineate prepends a note tag; Disabled passes text through unchanged.
 - **AI Mapping Generator:** 3-phase analysis (Ticks → Sounds → Punctuation) discovers stylization patterns automatically.
 - **Priority Override:** Reserved `__priorityOverride__` map key applies early global substitutions (e.g. `、` → `-`) before all other phases.
-- **Bracket-Strip XOR Logic:** Two checkboxes (mapper + manual-step) control whether `「」` brackets are stripped from name values during in-dialogue replacement. Stripping occurs when exactly one checkbox is checked.
+- **Bracket-Strip Logic:** Two checkboxes (mapper and manual-step) control whether `「」` brackets are stripped from name values during in-dialogue replacement.
 
 ### UI & UX
 - **Interactive Step-by-Step Manual Review:** Per-chunk review with live context preview, editable output, re-translate with adjusted settings.

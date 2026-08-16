@@ -37,7 +37,8 @@ When the translator hits a `<NAME_PLATE>` tag with a character name, a popup app
 
 ## Step 5: Save Your Work
 
-Click **Export** / **Save File** to download the translated script files.
+Click **Save File** to save to local browser cache.
+Click **Export** to download translated/updated script file.
 
 ---
 
