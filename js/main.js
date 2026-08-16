@@ -28,12 +28,6 @@ export const state = {
         "__priorityOverride__": {
             "、": "-"
         },
-        "！？": "!",
-        "ッ！？": "!",
-        "ッ！": "!",
-        "――": "—",
-        "ああぁ-ッ": "あー",
-        "ビリビリィィ-ッ": "ビリビーッ"
     },
     activePreset: {
         temperature: 0.1,
