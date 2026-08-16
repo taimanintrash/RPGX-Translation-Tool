@@ -672,8 +672,14 @@ function isValidMappingPair(key, value) {
     if (value === null || typeof value === "object") return false;
     // Reject empty or whitespace-only replacements (they delete content).
     if (typeof value === "string" && value.trim() === "") return false;
-    // Reject single kana or 2-char kana fragments (they corrupt words).
-    if (/^[\u3040-\u309F\u30A0-\u30FF]{1,2}$/.test(key.trim())) return false;
+    // Reject single kana characters (they corrupt words by firing inside them).
+    // 2-char kana fragments are allowed \u2014 they can be legitimate sound ticks
+    // (e.g. \u3075\u3041 -> Faa, \u3080\u3045 -> Muuu). Grammar-particle and sentence
+    // checks below filter out the problematic 2-char cases.
+    if (/^[\u3040-\u309F\u30A0-\u30FF]$/.test(key.trim())) return false;
+    // Reject 2-char kana that are common grammar particles (\u306f, \u304c, \u3092,
+    // \u306b, \u3067, \u3068, \u306e, \u3082, \u304b, \u3093) \u2014 they corrupt words.
+    if (/^[\u306f\u304c\u3092\u306b\u3067\u3068\u306e\u3082\u304b\u3093]{1,2}$/.test(key.trim())) return false;
     // Reject keys that look like sentences rather than ticks/punctuation:
     // a key with 3+ kana that contains grammar particles (は, が, を, に, で,
     // と, の, は, も, か) or a mix of kanji + kana longer than 6 chars is
