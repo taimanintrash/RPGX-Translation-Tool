@@ -64,6 +64,8 @@ export async function saveUIStateToCache() {
             debugLimit: state.debugMaxLinesLimit,
             autoSkipNames: state.autoSkipNameModal,
             manualStepMode: state.manualStepByStepMode,
+            mapperStripBrackets: state.mapperStripBrackets,
+            manualStepStripBrackets: state.manualStepStripBrackets,
             stylizationOption: state.stylizationMode,
             stylizationMapData: state.heavyStylizationMap
         }, "cachedUIState");

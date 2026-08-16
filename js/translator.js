@@ -766,6 +766,39 @@ function parseMappingOutput(content) {
  * Called by: HTML event handler / main.js[cite: 7]
  */
 /**
+ * Runs the stylization strip phase on a single source line: priority override
+ * pre-pass, then the heavyStylizationMap replacement loop (skipping the
+ * reserved __priorityOverride__ key), stripping name brackets only when the
+ * active bracket-strip XOR context is on. Returns the cleaned text to send to
+ * the AI and the list of matched patterns. When the line collapses to nothing
+ * (it was entirely stylization), flushOnly is true so the caller can push the
+ * extracted stylizations directly and skip translation.
+ * @param {string} line - The original source line (pre-strip).
+ * @returns {{textToSendToAi: string, extracted: string[], flushOnly: boolean}}
+ */
+function stripLine(line) {
+    let extractedStylizations = [];
+    let cleanedTextForAi = applyPriorityOverride(line, state.heavyStylizationMap);
+
+    for (const [pattern, replacement] of Object.entries(state.heavyStylizationMap)) {
+        if (pattern === "__priorityOverride__") continue;
+        if (cleanedTextForAi.includes(pattern)) {
+            extractedStylizations.push(pattern);
+            const stripBrackets = shouldStripNameBrackets();
+            const inlineReplacement = (stripBrackets && typeof replacement === 'string' && /^\u300c.*\u300d$/.test(replacement))
+                ? replacement.slice(1, -1)
+                : replacement;
+            cleanedTextForAi = cleanedTextForAi.replace(pattern, inlineReplacement).trim();
+        }
+    }
+
+    if (!cleanedTextForAi && extractedStylizations.length > 0) {
+        return { textToSendToAi: "", extracted: extractedStylizations, flushOnly: true };
+    }
+    return { textToSendToAi: cleanedTextForAi, extracted: extractedStylizations, flushOnly: false };
+}
+
+/**
  * Reserved key in the heavyStylizationMap JSON holding entries that are applied to
  * the source text FIRST, before the 3-phase generation analysis and before the
  * normal strip-phase replacement loop. Lets the user force an early substitution
@@ -774,6 +807,20 @@ function parseMappingOutput(content) {
  * @param {Object} map - The heavy stylization map (may contain __priorityOverride__).
  * @returns {string} The text with priority entries applied (longest key first).
  */
+/**
+ * Decides whether 「」 brackets should be stripped from name values during
+ * in-dialogue replacement. XOR of the two active contexts:
+ *   A = Manual line-by-line Override active AND its bracket checkbox checked
+ *   B = Generate Mapper running AND its bracket checkbox checked
+ * Brackets are stripped when exactly one of A or B is true.
+ * @returns {boolean}
+ */
+export function shouldStripNameBrackets() {
+    const ctxManual = state.manualStepByStepMode && state.manualStepStripBrackets;
+    const ctxMapper = state.mapperGenerationActive && state.mapperStripBrackets;
+    return ctxManual !== ctxMapper; // XOR
+}
+
 export function applyPriorityOverride(text, map) {
     if (!map || typeof map !== 'object') return text;
     const override = map.__priorityOverride__;
@@ -804,6 +851,7 @@ export async function generateStylizationMapWithAI() {
     if (!sourceText.trim()) showError("Source 1 text area is empty. Load/select a script ID first.");
 
     state.currentAbortController = new AbortController();
+    state.mapperGenerationActive = true;
 
     if (loadingStatus) {
         loadingStatus.style.display = "flex";
@@ -973,6 +1021,7 @@ export async function generateStylizationMapWithAI() {
         if (stopBtn) stopBtn.style.display = "none";
         if (progressBar) progressBar.style.display = "none";
         state.currentAbortController = null;
+        state.mapperGenerationActive = false;
     }
 }
 
@@ -1244,6 +1293,14 @@ export async function translateViaAiServer() {
                         set summarizedUpToIndex(v) { summarizedUpToIndex = v; }
                     });
                     console.log(`[Trace:Translation] Re-translate step: contextLines=${stepCtxLines}, rawLimit=${stepRawLimit}, windowSize=${updatedContextWindow.length}`);
+                    // Re-run the mapper replacement on the original source lines so a
+                    // changed bracket-strip checkbox takes effect on retranslate.
+                    if (state.stylizationMode === "strip") {
+                        combinedText = dialogueBuffer
+                            .map(item => stripLine(item.originalLine || item.text).textToSendToAi)
+                            .filter(t => t)
+                            .join(" ").replace(/\n/g, " ").trim();
+                    }
                     translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry', activeSpeakerName);
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
@@ -1335,38 +1392,16 @@ export async function translateViaAiServer() {
                 let cleanSourceLine = trimmedLine.replace(/\n/g, " ").trim();
                 setCurrentSourceLine(cleanSourceLine);
                 let textToSendToAi = cleanSourceLine;
+                let originalLine = trimmedLine;
 
                 if (state.stylizationMode === "strip") {
-                    let extractedStylizations = [];
-                    // Apply the priority override FIRST so the rest of the map and the
-                    // model never see the original characters (e.g. 、 -> -). This runs
-                    // before the normal replacement loop and is not tracked as an
-                    // extracted stylization since it is a pure pre-pass rewrite.
-                    let cleanedTextForAi = applyPriorityOverride(trimmedLine, state.heavyStylizationMap);
-
-                    for (const [pattern, replacement] of Object.entries(state.heavyStylizationMap)) {
-                        // The priority override is applied above as a pre-pass; skip it here.
-                        if (pattern === "__priorityOverride__") continue;
-                        if (cleanedTextForAi.includes(pattern)) {
-                            extractedStylizations.push(pattern);
-                            // Name values are stored wrapped in corner brackets so they stay
-                            // visible in the editor and ordered first, but inline brackets
-                            // break kana-run / stutter detection downstream (e.g. ゆ-「Yukikaze」).
-                            // Strip the brackets for the actual in-dialogue replacement only;
-                            // the saved map is left untouched.
-                            const inlineReplacement = (typeof replacement === 'string' && /^「.*」$/.test(replacement))
-                                ? replacement.slice(1, -1)
-                                : replacement;
-                            cleanedTextForAi = cleanedTextForAi.replace(pattern, inlineReplacement).trim();
-                        }
-                    }
-
-                    if (!cleanedTextForAi && extractedStylizations.length > 0) {
+                    let result = stripLine(trimmedLine);
+                    textToSendToAi = result.textToSendToAi;
+                    if (result.flushOnly) {
                         await flushBuffer();
-                        translatedLines.push(extractedStylizations.join(" "));
+                        translatedLines.push(result.extracted.join(" "));
                         continue;
                     }
-                    textToSendToAi = cleanedTextForAi;
                 }
                 else if (state.stylizationMode === "delineate") {
                     textToSendToAi = `[Note: Contains stylized/stuttering expressions] ${trimmedLine}`;
@@ -1374,8 +1409,9 @@ export async function translateViaAiServer() {
 
                 // The speaker is injected into the system prompt inside translateChunkWithContext,
                 // so the dialogue text is passed clean — no inline [Speaker:] tag that the
-                // model might echo back.
-                dialogueBuffer.push({ index: translatedLines.length, text: textToSendToAi });
+                // model might echo back. The original line is retained so a manual-step
+                // retranslate can re-run the strip phase with the current bracket setting.
+                dialogueBuffer.push({ index: translatedLines.length, text: textToSendToAi, originalLine });
                 translatedLines.push("");
             }
             outputRight.value = translatedLines.filter(l => l !== "").join("\n");

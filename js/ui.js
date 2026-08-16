@@ -128,6 +128,7 @@ export function openDebugMenu() {
     document.getElementById("autoSkipNameModalCheckbox").checked = state.autoSkipNameModal;
     document.getElementById("manualStepModeCheckbox").checked = state.manualStepByStepMode;
     document.getElementById("stylizationModeSelect").value = state.stylizationMode;
+    document.getElementById("mapperStripBracketsCheckbox").checked = state.mapperStripBrackets;
     document.getElementById("stylizationMapEditor").value = JSON.stringify(state.heavyStylizationMap, null, 4);
     renderDiscoveredMappingsUI();
 }
@@ -181,6 +182,10 @@ export function closeDebugMenu() {
     state.manualStepByStepMode = document.getElementById("manualStepModeCheckbox").checked;
     syncManualStepUIVisibility();
     state.stylizationMode = document.getElementById("stylizationModeSelect").value;
+    const mapperBox = document.getElementById("mapperStripBracketsCheckbox");
+    if (mapperBox) state.mapperStripBrackets = mapperBox.checked;
+    const manualBox = document.getElementById("manualStepStripBracketsCheckbox");
+    if (manualBox) state.manualStepStripBrackets = manualBox.checked;
 
     try {
         const parsedMap = JSON.parse(document.getElementById("stylizationMapEditor").value);
@@ -501,6 +506,19 @@ async function refreshStepContextPreview(currentContextWindow) {
  * (The current source line box is permanently visible above the toolbar).
  * Called by: ui.js (closeDebugMenu, syncManualStepModeLive), main.js (init)
  */
+/**
+ * Reads both bracket-strip checkboxes into state. Called live whenever either
+ * checkbox toggles (onchange), so the strip-phase XOR decision reflects the
+ * current UI without needing to close the debug menu.
+ * Called by: HTML onchange handlers on the two bracket-strip checkboxes.
+ */
+export function syncBracketStripToggles() {
+    const mapperBox = document.getElementById("mapperStripBracketsCheckbox");
+    const manualBox = document.getElementById("manualStepStripBracketsCheckbox");
+    if (mapperBox) state.mapperStripBrackets = mapperBox.checked;
+    if (manualBox) state.manualStepStripBrackets = manualBox.checked;
+}
+
 export function syncManualStepUIVisibility() {
     const msToolbar = document.getElementById("manualStepToolbar");
     const outputLeft = document.getElementById("outputAreaLeft");
