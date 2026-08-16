@@ -490,7 +490,9 @@ export async function assessTranslationQualityWithAI(host, model, translatedText
  */
 export async function translateChunkWithContext(host, model, chunkText, previousContext, presetType = 'jpEn', speakerName = '', tempAdjust = 0) {
     console.log(`[Trace:Translate] translateChunkWithContext(preset="${presetType}", contextLines=${previousContext.length}) invoked.`);
-    if (/^<[A-Z_]+>/.test(chunkText.trim()) && !chunkText.includes('"')) {
+    // Pass control tags through unchanged, EXCEPT <NAME_PLATE> lines which need
+    // name resolution (they contain the name in brackets).
+    if (/^<[A-Z_]+>/.test(chunkText.trim()) && !chunkText.includes("<NAME_PLATE>")) {
         console.log('[Trace:Translate] Passing control-tag line through unchanged.');
         return chunkText;
     }
@@ -1052,7 +1054,7 @@ export async function buildTieredContextWindow(host, model, history, maxContextL
 export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept = false) {
     let nameValue = rawNamePlateLine.replace("<NAME_PLATE>", "").trim();
 
-    if (nameValue && nameValue !== '""' && nameValue !== '') {
+    if (nameValue && nameValue !== '""' && nameValue !== '\u300c\u300d' && nameValue !== '') {
         let cleanName = nameValue.replace(/^[\u300c\u300e"']|[\u300d\u300f"']$/g, '').trim();
         let finalUserApprovedName = "";
 
@@ -1072,12 +1074,15 @@ export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept
         // translation (strip mode), just like stutters and ticks. This keeps names consistent
         // across name plates and in-dialogue references without extra model calls.
         if (cleanName && finalUserApprovedName && cleanName !== finalUserApprovedName) {
-            state.heavyStylizationMap[cleanName] = finalUserApprovedName;
-            console.log(`[Trace:NamePlate] Merged "${cleanName}" -> "${finalUserApprovedName}" into stylization map for in-dialogue auto-replacement.`);
+            // Wrap the name in brackets so name swaps are visible in the translated dialogue.
+            // The speaker context (historyEntry) uses activeSpeakerName directly, not the
+            // mapped value, so this does not affect speaker context.
+            state.heavyStylizationMap[cleanName] = `\u300c${finalUserApprovedName}\u300d`;
+            console.log(`[Trace:NamePlate] Merged "${cleanName}" -> "\u300c${finalUserApprovedName}\u300d" into stylization map for in-dialogue auto-replacement.`);
         }
 
         return {
-            namePlateLine: `<NAME_PLATE>"${finalUserApprovedName}"`,
+            namePlateLine: `<NAME_PLATE>\u300c${finalUserApprovedName}\u300d`,
             speakerName: finalUserApprovedName
         };
     } else {
