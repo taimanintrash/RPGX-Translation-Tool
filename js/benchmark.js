@@ -88,37 +88,13 @@ export async function runParameterSweepBenchmark() {
                 }
             }
 
-            // Chunked grading: split the translated block into fixed-size batches and grade each
-            // chunk independently via the auditor, then average the chunk scores on the backend.
-            // This gives finer-grained signal than a single whole-block grade and isolates where
-            // quality drops within the cell. Lines that are control tags or blank pass through
-            // untranslated and are grouped with their adjacent dialogue for context.
-            const CHUNK_SIZE = Math.max(1, parseInt(document.getElementById("benchmarkChunkSizeInput")?.value, 10) || 5);
-            let translatedChunks = [];
-            for (let i = 0; i < translatedLines.length; i += CHUNK_SIZE) {
-                translatedChunks.push(translatedLines.slice(i, i + CHUNK_SIZE).join("\n"));
-            }
-
-            let chunkScores = [];
-            for (let ci = 0; ci < translatedChunks.length; ci++) {
-                let chunkScore = await gradeCandidateAgent(host, model, translatedChunks[ci], referenceStandard);
-                console.log(`[Benchmark Chunk] cell(Context=${cLine}, RawLimit=${rLimit}) chunk ${ci + 1}/${translatedChunks.length} -> Score: ${chunkScore.overallScore}/100`, chunkScore);
-                chunkScores.push(chunkScore);
-            }
-
-            // Backend score recomputation: average the per-chunk scores into one cell score.
-            let avg = (arr) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
-            let scoreData = {
-                overallScore: avg(chunkScores.map(s => s.overallScore)),
-                genderScore: avg(chunkScores.map(s => s.genderScore)),
-                semanticScore: avg(chunkScores.map(s => s.semanticScore)),
-                flowScore: avg(chunkScores.map(s => s.flowScore)),
-                feedback: chunkScores.map((s, i) => `Chunk ${i + 1} (${s.overallScore}/100): ${s.feedback}`).join("\n")
-            };
-            console.log(`[Benchmark Result] Context: ${cLine}, Raw Limit: ${rLimit} | Score: ${scoreData.overallScore}/100 (avg of ${chunkScores.length} chunk(s))`, scoreData);
+            // Chunked grading is delegated to the shared helper so the main sweep loop
+            // reads top-to-bottom: translate -> grade -> log.
+            let scoreData = await gradeTranslatedChunks(host, model, translatedLines, referenceStandard, cLine, rLimit);
+            console.log(`[Benchmark Result] Context: ${cLine}, Raw Limit: ${rLimit} | Score: ${scoreData.overallScore}/100 (avg of ${scoreData.chunkCount} chunk(s))`, scoreData);
 
             resultsLog += `--------------------------------------------------\n`;
-            resultsLog += `[Config] Context Lines: ${cLine} | Raw Limit: ${rLimit} (${translatedChunks.length} chunk(s) of ${CHUNK_SIZE} lines)\n`;
+            resultsLog += `[Config] Context Lines: ${cLine} | Raw Limit: ${rLimit} (${scoreData.chunkCount} chunk(s) of ${scoreData.chunkSize} lines)\n`;
             resultsLog += `[Overall Score]: ${scoreData.overallScore}/100\n`;
             resultsLog += `  ├── Pronoun/Gender Consistency: ${scoreData.genderScore}/100\n`;
             resultsLog += `  ├── Semantic Fidelity: ${scoreData.semanticScore}/100\n`;
@@ -129,6 +105,42 @@ export async function runParameterSweepBenchmark() {
     }
     reportBox.value += `\nInconsistency-focused sweep completed successfully! Check the granular scores and feedback breakdown above.`;
     console.log("[Benchmark] Sweep matrix execution complete.");
+}
+
+/**
+ * Splits translated lines into fixed-size chunks, grades each chunk independently via the
+ * auditor, then averages the per-chunk scores into one cell score. Gives finer-grained signal
+ * than a single whole-block grade and isolates where quality drops within the cell. Returns
+ * the averaged score data plus chunkCount and chunkSize for the results log.
+ * Called by: benchmark.js (runParameterSweepBenchmark)
+ */
+async function gradeTranslatedChunks(host, model, translatedLines, referenceStandard, cLine, rLimit) {
+    // Lines that are control tags or blank pass through untranslated and are grouped with
+    // their adjacent dialogue for context.
+    const CHUNK_SIZE = Math.max(1, parseInt(document.getElementById("benchmarkChunkSizeInput")?.value, 10) || 5);
+    let translatedChunks = [];
+    for (let i = 0; i < translatedLines.length; i += CHUNK_SIZE) {
+        translatedChunks.push(translatedLines.slice(i, i + CHUNK_SIZE).join("\n"));
+    }
+
+    let chunkScores = [];
+    for (let ci = 0; ci < translatedChunks.length; ci++) {
+        let chunkScore = await gradeCandidateAgent(host, model, translatedChunks[ci], referenceStandard);
+        console.log(`[Benchmark Chunk] cell(Context=${cLine}, RawLimit=${rLimit}) chunk ${ci + 1}/${translatedChunks.length} -> Score: ${chunkScore.overallScore}/100`, chunkScore);
+        chunkScores.push(chunkScore);
+    }
+
+    // Backend score recomputation: average the per-chunk scores into one cell score.
+    let avg = (arr) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
+    return {
+        overallScore: avg(chunkScores.map(s => s.overallScore)),
+        genderScore: avg(chunkScores.map(s => s.genderScore)),
+        semanticScore: avg(chunkScores.map(s => s.semanticScore)),
+        flowScore: avg(chunkScores.map(s => s.flowScore)),
+        feedback: chunkScores.map((s, i) => `Chunk ${i + 1} (${s.overallScore}/100): ${s.feedback}`).join("\n"),
+        chunkCount: translatedChunks.length,
+        chunkSize: CHUNK_SIZE
+    };
 }
 
 /**
