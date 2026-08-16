@@ -1313,7 +1313,15 @@ export async function translateViaAiServer() {
                     for (const [pattern, replacement] of Object.entries(state.heavyStylizationMap)) {
                         if (cleanedTextForAi.includes(pattern)) {
                             extractedStylizations.push(pattern);
-                            cleanedTextForAi = cleanedTextForAi.replace(pattern, replacement).trim();
+                            // Name values are stored wrapped in corner brackets so they stay
+                            // visible in the editor and ordered first, but inline brackets
+                            // break kana-run / stutter detection downstream (e.g. ゆ-「Yukikaze」).
+                            // Strip the brackets for the actual in-dialogue replacement only;
+                            // the saved map is left untouched.
+                            const inlineReplacement = (typeof replacement === 'string' && /^「.*」$/.test(replacement))
+                                ? replacement.slice(1, -1)
+                                : replacement;
+                            cleanedTextForAi = cleanedTextForAi.replace(pattern, inlineReplacement).trim();
                         }
                     }
 

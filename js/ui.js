@@ -238,7 +238,7 @@ export function renderDiscoveredMappingsUI() {
         <button class="action-btn" style="padding: 2px 6px; font-size: 11px; background-color: #64748b;" onclick="setAllDiscoveredSelection(false)">Deselect All</button>
     </div>`;
 
-    html += `<div style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; background: #f8fafc; max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;">`;
+    html += `<div style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; background: #f8fafc; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;">`;
 
     state.pendingDiscoveredMappings.forEach((item, index) => {
         html += `<div style="display: flex; align-items: center; justify-content: space-between; background: white; padding: 4px 8px; border-radius: 4px; border: 1px solid #e2e8f0; font-size: 12px; gap: 6px;">
