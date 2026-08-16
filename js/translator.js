@@ -780,10 +780,33 @@ export async function generateStylizationMapWithAI() {
     let discoveredArray = [];
     let seenKeys = new Set();
 
-    // The three phases. Each has its own focused prompt + preset so the model handles
-    // one category at a time instead of mixing punctuation rules, sound translation,
-    // and tick normalization in a single pass.
+    // The phases run in logical order so each phase sees text cleaned by prior phases.
+    // Particles (pre-translate particle-words) -> Punctuation (normalize marks) ->
+    // Sounds (translate onomatopoeia) -> Ticks (normalize stutters).
+    // Discovered mappings from prior phases are applied to the chunk text before
+    // passing it to the next phase, so later phases don't re-discover fragments.
     const phases = [
+        {
+            name: "Particles",
+            presetKey: "stylizationParticles",
+            prompt: (chunk) => `Find Japanese words in this text that contain grammar particles (\u306f, \u304c, \u3092, \u306b, \u3067, \u3068, \u306e, \u3082, \u304b, \u3093) and would be corrupted if the particle were stripped individually.\n` +
+                `Translate the WHOLE word (including its particle) to English so it can be pre-replaced before the main translation.\n` +
+                `Return lines as "source_word":"english_translation". No markdown blocks.\n\n` +
+                `Examples:\n` +
+                `"\u3053\u308c\u306f":"this"\n` +
+                `"\u79c1\u306f":"I"\n` +
+                `"\u3042\u306a\u305f\u306f":"you"\n` +
+                `"\u305d\u308c\u306f":"that"\n` +
+                `"\u5f7c\u5973\u306f":"she"\n\n` +
+                `Rules:\n` +
+                `- Only output words that contain a grammar particle (\u306f, \u304c, \u3092, \u306b, \u3067, \u3068, \u306e, \u3082, \u304b, \u3093).\n` +
+                `- Translate the whole word+particle to natural English, not just the particle.\n` +
+                `- NEVER output a bare particle alone (\u306f, \u304c, etc.) \u2014 always include the word it attaches to.\n` +
+                `- NEVER output full sentences or dialogue lines.\n` +
+                `- NEVER output an empty replacement.\n` +
+                `- Keep keys short (single words, not phrases).\n\n` +
+                `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
+        },
         {
             name: "Punctuation",
             presetKey: "stylizationPunctuation",
@@ -836,27 +859,6 @@ export async function generateStylizationMapWithAI() {
                 `NEVER output a pattern containing a sentence-ending mark as part of a longer phrase.\n\n` +
                 `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
         },
-        {
-            name: "Particles",
-            presetKey: "stylizationParticles",
-            prompt: (chunk) => `Find Japanese words in this text that contain grammar particles (\u306f, \u304c, \u3092, \u306b, \u3067, \u3068, \u306e, \u3082, \u304b, \u3093) and would be corrupted if the particle were stripped individually.\n` +
-                `Translate the WHOLE word (including its particle) to English so it can be pre-replaced before the main translation.\n` +
-                `Return lines as "source_word":"english_translation". No markdown blocks.\n\n` +
-                `Examples:\n` +
-                `"\u3053\u308c\u306f":"this"\n` +
-                `"\u79c1\u306f":"I"\n` +
-                `"\u3042\u306a\u305f\u306f":"you"\n` +
-                `"\u305d\u308c\u306f":"that"\n` +
-                `"\u5f7c\u5973\u306f":"she"\n\n` +
-                `Rules:\n` +
-                `- Only output words that contain a grammar particle (\u306f, \u304c, \u3092, \u306b, \u3067, \u3068, \u306e, \u3082, \u304b, \u3093).\n` +
-                `- Translate the whole word+particle to natural English, not just the particle.\n` +
-                `- NEVER output a bare particle alone (\u306f, \u304c, etc.) \u2014 always include the word it attaches to.\n` +
-                `- NEVER output full sentences or dialogue lines.\n` +
-                `- NEVER output an empty replacement.\n` +
-                `- Keep keys short (single words, not phrases).\n\n` +
-                `Snippet:\n${chunk.substring(0, 800)}\n\nOutput:`
-        }
     ];
 
     try {
@@ -870,12 +872,19 @@ export async function generateStylizationMapWithAI() {
                 if (state.currentAbortController.signal.aborted) throw new Error("Generation cancelled by user.");
 
                 let progressPercent = Math.round(((phaseIndex - 1) * totalChunks + (i + 1)) / (phases.length * totalChunks) * 95);
-                if (loadingStatus) loadingStatus.innerHTML = `Generating stylization mapping... (Phase ${phaseIndex}/3: ${phase.name} - block ${i + 1} of ${totalChunks})`;
+                if (loadingStatus) loadingStatus.innerHTML = `Generating stylization mapping... (Phase ${phaseIndex}/4: ${phase.name} - block ${i + 1} of ${totalChunks})`;
                 if (progressBar) progressBar.value = progressPercent;
 
                 let chunkText = dialogueLines.slice(i * 50, (i + 1) * 50).join("\n");
                 // Strip embedded newlines so the phase prompt text is a single coherent string.
                 chunkText = chunkText.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+                // Apply mappings discovered by prior phases so this phase sees cleaned
+                // text (e.g. particle-words already translated, punctuation normalized).
+                for (let { key, value } of discoveredArray) {
+                    if (chunkText.includes(key)) {
+                        chunkText = chunkText.split(key).join(value || "");
+                    }
+                }
                 if (!chunkText.trim()) continue;
 
                 const promptText = phase.prompt(chunkText);
@@ -924,7 +933,7 @@ export async function generateStylizationMapWithAI() {
         if (loadingStatus) loadingStatus.innerHTML = "Finalizing discovered mapping list...";
         if (progressBar) progressBar.value = 95;
 
-        console.log(`[Trace:Stylization] Discovered ${discoveredArray.length} unique mapping candidate(s) across 3 phases.`);
+        console.log(`[Trace:Stylization] Discovered ${discoveredArray.length} unique mapping candidate(s) across 4 phases.`);
         if (discoveredArray.length > 0) {
             state.pendingDiscoveredMappings = discoveredArray;
             renderDiscoveredMappingsUI();
