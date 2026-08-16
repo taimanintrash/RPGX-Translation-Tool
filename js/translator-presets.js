@@ -125,7 +125,7 @@ export async function loadDefaultPreset(operationKey) {
         const presetJson = await response.json();
         mapPresetJson(operationKey, presetJson, entry.file);
     } catch (err) {
-        showError(`Failed to load default preset "${entry.file}". The app must be served over HTTP (e.g. via start-agent.sh) for default presets to be fetchable.`);
+        showError(`Failed to load default preset "${entry.file}". The app must be served over HTTP (e.g. via python3 -m http.server) for default presets to be fetchable.`);
         console.error(err);
     }
 }
@@ -146,7 +146,7 @@ export async function loadAllDefaultPresets() {
     );
     const failed = results.filter(r => r.status === 'rejected');
     if (failed.length === defaultPresetManifest.length) {
-        console.warn('[Default Presets] Could not load any default presets from default_presets/. The app must be served over HTTP (e.g. via start-agent.sh).');
+        console.warn('[Default Presets] Could not load any default presets from default_presets/. The app must be served over HTTP (e.g. via python3 -m http.server).');
     } else if (failed.length > 0) {
         console.warn(`[Default Presets] ${failed.length}/${defaultPresetManifest.length} default preset(s) failed to load.`);
     } else {

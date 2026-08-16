@@ -1,38 +1,53 @@
 # Quick Start Guide
 
-Welcome! If you just want to get the translation tool running quickly without worrying about the technical details, follow these simple steps.
+Want to get translating fast? Follow these steps. For technical details, customization, and troubleshooting, see the main `README.md`.
+
+---
 
 ## Step 1: Start Your AI
-1. Open your local AI program (like **LM Studio**).
-2. Load a model (we recommend `Qwen2.5-3B-Instruct` or similar).
-3. Start the **Local Server** in your AI program. (Make sure it's running on port `1234`, which is the default).
 
-## Step 2: Open the Translation Tool
-You cannot just double-click the `index.html` file—it needs a simple server to load its configuration files properly. 
+1. Open your local AI program (e.g. **LM Studio**).
+2. Load a model (we recommend `Qwen2.5-3B-Instruct`).
+3. Start the **Local Server** (default port: `1234`).
 
-### Windows / Mac / Linux (Easiest Way):
-1. Open a terminal or command prompt.
-2. Navigate to the folder where you downloaded this tool.
-3. Type the following command and press Enter:
+## Step 2: Open the Tool
+
+You can't double-click `index.html` directly — it needs a simple server to load its config files.
+
+1. Open a terminal in the folder where you downloaded this tool.
+2. Run:
    ```bash
    python3 -m http.server 8000
    ```
-   *(If you don't have Python, any local web server will work, like double-clicking `index.html` using the VS Code "Live Server" extension).*
-4. Open your web browser and go to: `http://localhost:8000/index.html`
+   *(No Python? Any static server works — `npx http-server`, VS Code Live Server, etc.)*
+3. Open your browser and go to: `http://localhost:8000/index.html`
 
 ## Step 3: Connect and Translate
-1. At the top of the webpage, click the **Refresh (↻)** button next to the model dropdown.
+
+1. Click **Refresh (↻)** next to the model dropdown at the top.
 2. Select your AI model from the list.
 3. Click **Choose Files** and upload your Japanese game script files (usually found in your game's `data/scripts/data` folder).
 4. Select a script from the list on the left.
-5. Edit the summary and raw context windows in top bar if needed (defualt to 0 - fine tune it for the model you are using).
-6. Click **Run Translation** on the right side to start translating!
+5. Set the **Summary Lines** and **Raw Lines** in the top bar if needed (defaults of 0 are fine to start — fine-tune for your model later).
+6. Click **Run Translation** on the right side.
 
-## Step 4: Saving Your Work
-When you are done reviewing or translating, click **Export** to download the edited JSON/JS game script files.
+## Step 4: Review Names
 
-## Step 5: Advanced Fetures
-1. This application has a line by line translation toll if you want more fine control and editing of the translation.
+When the translator hits a `<NAME_PLATE>` tag with a character name, a popup appears showing the Japanese name and a suggested English transliteration. Approve or edit it, then click confirm. The name is remembered for the rest of the session.
+
+## Step 5: Save Your Work
+
+Click **Export** / **Save File** to download the translated script files.
 
 ---
-*For more advanced features, customizing prompts, or troubleshooting, please see the main `README.md` file.*
+
+## Line-by-Line Mode (Optional)
+
+Want more control? Enable **Manual Review** in the Debug menu (gear icon) to translate one chunk at a time. After each chunk you can:
+- Edit the translation directly in the right text area.
+- Adjust context settings and click **Re-Translate** to try again.
+- Click **Continue** to accept and move to the next chunk.
+
+---
+
+*For features, setup details, preset customization, debugging, and troubleshooting, see `README.md`.*

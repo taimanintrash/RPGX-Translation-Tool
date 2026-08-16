@@ -1,142 +1,454 @@
 # RPG Script & Scene Data Viewer, Editor & Translation Suite
 
-A lightweight, single-file HTML5 web tool built for visual novel localizers, script editors, and AI translation. It is a dedicated Japanese-to-English translation tool. It allows you to parse, compare, edit, and translate complex game script files locally using OpenAI-compatible local AI servers like **LM Studio**. This tool is specifically engineered and optimized for small local LLMs, and is currently being actively tested and tuned with **Qwen-3B-Instruct**. Note: To modify prompts or validation criteria, edit the JSON preset configuration files in the `default_presets/` directory.
+A lightweight, browser-based Japanese-to-English visual novel translation tool. It parses, compares, edits, and translates complex game script files locally using OpenAI-compatible local AI servers (LM Studio, Ollama, vLLM, llama.cpp). Engineered and tuned for small local LLMs, currently tested with **Qwen2.5-3B-Instruct**.
+
+No build tools, no Node.js packages, no server-side runtime. Pure vanilla JS ES modules + a single HTML file + CSS. Serve over HTTP so the browser can fetch the shipped preset files, and it runs.
 
 ---
 
-## Key Features
+## Table of Contents
 
-* **Side-by-Side Dual-Pane Editor:** Load two script versions (e.g., original Japanese vs. translated English) to compare, edit, copy, and export files.
-* **LM Studio & Local Server Integration:** Connects seamlessly to local inference engines via OpenAI-compatible endpoints (`/v1/models` and `/v1/chat/completions`).
-* **3-Tier Contextual Summarization Engine (Optimized for Qwen2.5-3B):**
-  * **Tier 1 (Raw Tail):** Feeds the most recent 2–4 dialogue lines verbatim for immediate pronoun and speaker continuity.
-  * **Tier 2 (Rolling Scene Recap):** A single tight paragraph tracking active characters, tone, and immediate scene developments as lines exit the raw tail.
-  * **Tier 3 (Archival Story State):** A self-updating, 1-sentence macro story recap that compresses scene recaps when they overflow, ensuring strictly bounded prompt token costs.
-* **Interactive Step-by-Step Manual Review Toolbar:**
-  * Displays the active source line in a dedicated header element.
-  * Live context preview dropdown displaying exact context lines and summaries fed to the model.
-  * In-place translation edits, line approval, and dynamic re-translation with adjustable context sliders.
-* **Interactive Name Plate Resolver:** Intercepts `<NAME_PLATE>` character tags and prompts for user-approved transliterations with persistent mapping memory.
-* **Romaji & Validation Failsafes:** Detects leftover Japanese characters and untranslated romaji fragments (e.g., *nani*, *watashi*, *konna*), automatically triggering retry policies.
-* **Stylization & Text Masking:**
-  * Strips or delineates Japanese visual novel speech patterns (e.g., ！？, ――, stutters) to prevent small LLMs from getting confused.
-  * **AI Mapping Generator:** Automatically analyzes source scripts and suggests JSON key-value replacement rules.
-* **Dynamic Preset System:** Auto-loads 6 pre-configured prompt presets from `default_presets/` (Main, Benchmark, Japanese-to-English, Retry Translation, Name Plate Unique, Stylization Mapping).
-* **Modern Theming & Dark Mode:**
-  * Full dark mode support (`[data-theme="dark"]`) with theme-aware scrollbars and low-glare, eye-strain-reducing palette tuning.
-  * Clean UI typography with all emoji-only controls replaced by intuitive text and symbols.
-* **Parameter Sweep & Benchmark Suite:**
-  * Tests combinations of context lengths and raw limit thresholds.
-  * Employs an AI grading agent to score candidate translations across gender consistency, semantic fidelity, and conversational flow.
-* **Persistent Offline Caching:** Automatically caches loaded script files, UI selections, and settings in browser IndexedDB (`ScriptParserCacheDB`).
+1. [Architecture](#architecture)
+2. [Features](#features)
+3. [Requirements](#requirements)
+4. [Setup](#setup)
+5. [Loading & Translating Scripts](#loading--translating-scripts)
+6. [Manual Step-by-Step Review](#manual-step-by-step-review)
+7. [Stylization & Text Masking](#stylization--text-masking)
+8. [Name Plate Resolution](#name-plate-resolution)
+9. [Tiered Context Summarization](#tiered-context-summarization)
+10. [Translation Validation Pipeline](#translation-validation-pipeline)
+11. [Debug & Benchmark Menu](#debug--benchmark-menu)
+12. [Preset System](#preset-system)
+13. [Prompt Engineering for Small Models](#prompt-engineering-for-small-models)
+14. [Debugging & Troubleshooting](#debugging--troubleshooting)
 
 ---
 
-## Tool Dependencies & Requirements
+## Architecture
 
-No build tools, Node.js packages, or web servers are required to host the tool itself. It runs directly in any modern browser.
+### File Structure
 
-### 1. Client-Side Requirements
-* **Browser:** Any modern web browser supporting ES6+, HTML5 IndexedDB, and Fetch API (e.g., Google Chrome, Brave, Microsoft Edge, Mozilla Firefox).
+```
+index.html              — Single-page UI; loads only js/main.js as a module
+styles.css             — Full styling, light/dark theme, responsive panes
+js/
+  main.js              — Entry point, shared state object, window.* wiring, theme toggle
+  database.js          — IndexedDB persistence (file cache + UI state cache)
+  parser.js            — File/script registry, dropdown population, comparison views
+  translator.js        — Translation pipeline: stylization, name-plate, main loop
+  translator-presets.js — Operation preset definitions + default-preset JSON loaders
+  translator-llm.js    — LLM HTTP helpers: model fetch, summarization, validation, chunk translation
+  ui.js                — Debug modal, stylization-map CRUD, error banner
+  ui-manual-step.js    — Name-plate + manual step-by-step override modals
+  ui-layout.js         — Pure DOM layout: modal drag, resize handles, auto-number inputs
+  benchmark.js         — Multi-dimensional parameter sweep benchmark with chunked grading
+default_presets/        — 11 shipped JSON prompt presets (see Preset System)
+docs/
+  FUNCTION_MANIFEST.md — Static call-graph reference for all JS functions
+```
 
-### 2. Local AI Server (Required for AI Features)
-* **Local Inference Server:** Required for running local translation and evaluation models.
-  * **Server Address:** Defaults to `http://127.0.0.1:1234`
-  * **CORS Settings:** Ensure Cross-Origin Resource Sharing (CORS) is enabled in your server settings.
-* **Alternative Local Servers:** Any local API that exposes standard OpenAI endpoints (`/v1/models` and `/v1/chat/completions`) will work.
+### Module Load Order
+
+`index.html` loads only `js/main.js` via `<script type="module">`. All other files are reached through ES module imports:
+
+- `main.js` imports from `database.js`, `ui.js`, `parser.js`, `translator.js`, `benchmark.js`
+- `translator.js` re-exports symbols from `translator-presets.js` and `translator-llm.js`
+- `ui.js` re-exports symbols from `ui-manual-step.js` and `ui-layout.js`
+
+Every function wired to an HTML `onclick`/`onchange` handler is exposed via `window.*` assignment in `main.js`. See `docs/FUNCTION_MANIFEST.md` for the complete static call graph.
+
+### Shared State
+
+The central `state` object exported from `main.js` holds all application state and is imported by every other module. Key fields:
+
+| Field | Purpose |
+|---|---|
+| `loadedFilesRegistry` | Array of loaded file objects with parsed JSON data |
+| `heavyStylizationMap` | JSON object of JP→EN replacement patterns + `__priorityOverride__` pre-pass |
+| `knownNamesMap` | Cache of resolved JP→EN name transliterations |
+| `pendingDiscoveredMappings` | AI-discovered stylization candidates pending user review |
+| `currentAbortController` | Active AbortController for stop/abort |
+| `stylizationMode` | `"strip"` \| `"delineate"` \| `"disabled"` |
+| `manualStepByStepMode` | Boolean — manual review active |
+| `mapperStripBrackets` / `manualStepStripBrackets` | XOR bracket-strip toggles |
+| `mapperGenerationActive` | True while Generate Mapping is running |
+| `appliedContextLines` / `appliedRawLimit` | Manual override context values (null = use .translate-config inputs) |
+| `debugMaxLinesLimit` | Cap translation to N lines for debugging (0 = no limit) |
+| `autoSkipNameModal` | Auto-accept AI name transliterations without prompting |
 
 ---
 
-## Quick Start Guide
+## Features
+
+### Core Translation
+- **Side-by-Side Dual-Pane Editor:** Load two script versions (original Japanese vs. translated English) to compare, edit, copy, and export.
+- **Sequential Translation Pipeline:** Line-by-line processing with dialogue buffering, name-plate resolution, stylization stripping, and tiered context window construction.
+- **Multi-Check Validation Gate:** Every translation attempt is validated against Japanese character detection, romaji fragment detection, context-leak detection, and an AI quality validator before acceptance.
+
+### Context Management
+- **3-Tier Summarization Engine:** Raw Tail → Rolling Scene Recap → Archival Story State, bounded for small-model token limits.
+- **Tiered Context Window Builder:** Shared between the production pipeline and the benchmark sweep so both grade under identical conditions.
+
+### Stylization
+- **Strip/Delineate/Disable Modes:** Strip rewrites JP patterns to EN equivalents before translation; Delineate prepends a note tag; Disabled passes text through unchanged.
+- **AI Mapping Generator:** 3-phase analysis (Ticks → Sounds → Punctuation) discovers stylization patterns automatically.
+- **Priority Override:** Reserved `__priorityOverride__` map key applies early global substitutions (e.g. `、` → `-`) before all other phases.
+- **Bracket-Strip XOR Logic:** Two checkboxes (mapper + manual-step) control whether `「」` brackets are stripped from name values during in-dialogue replacement. Stripping occurs when exactly one checkbox is checked.
+
+### UI & UX
+- **Interactive Step-by-Step Manual Review:** Per-chunk review with live context preview, editable output, re-translate with adjusted settings.
+- **Interactive Name Plate Resolver:** Prompts for user-approved name transliterations with persistent mapping memory.
+- **Resizable Panes:** Sidebar, source panes, and manual-step context rows are all drag-resizable.
+- **Dark Mode:** Full dark/light theme toggle with theme-aware scrollbars, persisted to localStorage.
+- **Persistent Offline Caching:** Loaded files, UI selections, and settings cached in IndexedDB (`ScriptParserCacheDB`).
+
+### Benchmarking
+- **Parameter Sweep Matrix:** Tests combinations of context lengths and raw limit thresholds.
+- **Chunked Grading:** Splits translated output into fixed-size chunks, grades each independently via an AI auditor, then averages scores.
+- **Multi-Criteria Scoring:** Pronoun/gender consistency, semantic fidelity, and conversational flow.
+
+---
+
+## Requirements
+
+### Client-Side
+- **Browser:** Any modern browser supporting ES6+ modules, HTML5 IndexedDB, and Fetch API (Chrome, Brave, Edge, Firefox).
+
+### Local AI Server (required for AI features)
+- Any local inference server exposing OpenAI-compatible endpoints:
+  - `GET /v1/models` (or `/api/v0/models`, `/models` — all three are tried automatically)
+  - `POST /v1/chat/completions`
+- **Server Address:** Defaults to `http://127.0.0.1:1234`
+- **CORS:** Must be enabled in your server settings.
+- **Tested with:** LM Studio, Ollama, vLLM, llama.cpp
+- **Recommended model:** `Qwen2.5-3B-Instruct`
+
+---
+
+## Setup
 
 ### Step 1: Launch Local AI Server
-1. Open your AI Server (e.g., LM Studio, Ollama, vLLM, text-generation-webui) and load your preferred translation model (e.g. `Qwen2.5-3B-Instruct`).
+
+1. Open your AI server (LM Studio, Ollama, etc.) and load your translation model (e.g. `Qwen2.5-3B-Instruct`).
 2. Start the **Local Inference Server** (default port: 1234).
+3. Ensure **CORS is enabled** in your server settings.
 
-### Step 2: Launch the Web Application (Local HTTP Server)
+### Step 2: Serve the Web Application
 
-The tool must be served over HTTP (not opened directly as a `file://` URL) so the browser can fetch the shipped default presets in `default_presets/` and avoid browser file-access restrictions. Run any static file server from the repository root.
+The tool must be served over HTTP (not opened as `file://`) so the browser can fetch the default presets in `default_presets/`.
 
-**Option A - From a cloned repository:**
-1. Clone the repo: `git clone https://github.com/antAmaine/RPGX-Translation-Tool.git`
-2. Move into the project folder: `cd RPGX-Translation-Tool`
-3. Start a local server with Python 3 (no extra installs needed):
-   ```bash
-   python3 -m http.server 8000
-   ```
-4. Open `http://localhost:8000/index.html` in your browser.
+**From a cloned repository:**
+```bash
+git clone https://github.com/taimanintrash/RPGX-Translation-Tool.git
+cd RPGX-Translation-Tool
+python3 -m http.server 8000
+```
 
-**Option B - From a downloaded GitHub copy (no git):**
-1. On the GitHub repo page, click **Code -> Download ZIP**, then extract it.
+Open `http://localhost:8000/index.html` in your browser.
+
+**Without git (downloaded ZIP):**
+1. Download and extract the ZIP from GitHub.
 2. Open a terminal in the extracted folder.
-3. Start a local server:
-   ```bash
-   python3 -m http.server 8000
-   ```
-   *(If Python is unavailable, any static server works, e.g. `npx http-server` or VS Code's Live Server extension.)*
-4. Open `http://localhost:8000/index.html` in your browser.
+3. Run `python3 -m http.server 8000` (or any static server: `npx http-server`, VS Code Live Server).
+4. Open `http://localhost:8000/index.html`.
 
-Once the page is open:
-1. In the top toolbar, verify the server URL (`http://127.0.0.1:1234`) and click the **Refresh (↻)** button to populate your model list.
-2. Select your loaded model from the dropdown.
+### Step 3: Connect to AI Server
 
-### Step 3: Load Script Files
-1. Click **Choose Files** in the top panel and upload your script files (`.json` or `.js`) Found in data/scripts/data in the veiwer's folder.
-2. Select a **Script ID** from the sidebar to display source text in the left pane.
+1. Verify the server URL in the top toolbar (`http://127.0.0.1:1234`).
+2. Click the **Refresh (↻)** button to populate the model dropdown.
+3. Select your loaded model.
 
-### Step 4: Translate & Edit
-
-* Click **Run Translation** on the right pane to start auto-translating.
-* **Manual Review Mode:** When "Enable Manual Review" is checked, the dedicated review toolbar appears after each chunk:
-    * View the original Japanese text in the dedicated source line box.
-    * Inspect the live context window dropdown to verify what narrative history the model sees.
-    * Edit translation directly in the right text area.
-    * Click **Approve Line** to commit the translation to memory and proceed.
-    * Click **Re-Translate** with adjusted context lines or raw limits to re-prompt the model.
-* When new character names are encountered in `<NAME_PLATE>`, approve or modify transliterations in the modal dialog.
-* Click **Save File** to export your completed translations.
+If the dropdown shows "Connection Failed," see [Debugging & Troubleshooting](#debugging--troubleshooting).
 
 ---
 
-## Prompt Engineering for Small Models
+## Loading & Translating Scripts
 
-Small local models (like Qwen-2.5-3B) require strict prompt structures to avoid hallucinations and formatting breaks. Follow these guidelines when editing `default_presets/`:
+### Load Files
+1. Click **Choose Files** in the top panel and upload script files (`.json` or `.js`), typically found in the game's `data/scripts/data` folder.
+2. Select a **Script ID** from the sidebar to display source text in the left pane.
+3. Optionally select a file in the right dropdown to load an existing translation for comparison.
 
-1. **Always Use English**: Write system prompts in English, regardless of the target translation language. Open-weight models follow strict logic best in English. Instructions in other languages increase the risk of conversational drift.
-2. **Rule-Bound Structure**: Avoid generic paragraphs. Establish a persona and append a numbered `RULES:` block.
-3. **Negative Constraints**: Explicitly ban unwanted behaviors (e.g., `Do NOT include explanations`).
-4. **Enforce JSON Rigidity**: When expecting JSON, state `Output strictly in valid JSON format` and explicitly ban markdown wrappers to prevent parsing failures.
+### Configure Context
+- **Summary Lines** (`contextLinesCount`): Size of the recent summary window. 0 = no summarization (raw lines only).
+- **Raw Lines** (`rawContextLimit`): Number of verbatim recent lines fed to the model as the raw tail.
 
-**Example Prompt:**
-> "You are a specialized Japanese-to-English game localizer. Translate the dialogue naturally while maintaining character voice and nuance. RULES: 1) Output ONLY the translated English text. 2) Do NOT include any explanations, notes, or preamble. 3) Preserve all original game tags and structural formatting exactly."
+Both default to 0; fine-tune for your model.
+
+### Translate
+1. Select a target file in the right dropdown.
+2. Click **Run Translation** on the right pane.
+3. Progress displays in the loading status bar; click **Stop** to abort at any time.
+4. Click **Save File** / **Export** to download the translated JSON/JS script.
+
+---
+
+## Manual Step-by-Step Review
+
+Enable **Manual Review** via the Debug Menu checkbox (`manualStepModeCheckbox`) or the toolbar toggle. When active:
+
+- After each dialogue chunk is translated, the **Manual Step Override** toolbar appears.
+- The current source line shows in the **source line box** (permanently visible).
+- A **live context preview** displays the exact archival summary, recent summary, raw tail, and summary source lines fed to the model.
+- **Context Lines** and **Raw Limit** inputs can be adjusted per-step:
+  - Changing Context Lines triggers a confirmation prompt (destructive — recomputes summaries).
+  - Changing Raw Limit only reshapes the raw tail display (no recalculation).
+  - Click **Apply** to recompute summaries with the new settings without retranslating.
+- Edit the translation directly in the right text area.
+- **Re-Translate:** Re-runs `translateChunkWithContext` with the adjusted context window and current bracket-strip setting. The strip phase re-runs on the original source lines so a toggled bracket checkbox takes effect.
+- **Continue / Approve Line:** Commits the (possibly edited) translation to memory and proceeds to the next chunk.
+
+The manual-step display block is reconstructed from the output textarea by replaying the same `filter(l !== "") + join("\n")` order, so multi-line narration entries are captured correctly.
+
+---
+
+## Stylization & Text Masking
+
+Stylization handles Japanese visual novel speech patterns (stutters, ticks, sound effects, punctuation) that confuse small LLMs.
+
+### Modes (`stylizationModeSelect`)
+
+| Mode | Behavior |
+|---|---|
+| **Strip** | Replaces JP patterns with EN equivalents before sending to the AI. Lines that are entirely stylization are flushed directly without translation. |
+| **Delineate** | Prepends `[Note: Contains stylized/stuttering expressions]` to the source line. |
+| **Disabled** | Passes source text through unchanged. |
+
+### Stylization Map (`heavyStylizationMap`)
+
+A JSON object stored in `state.heavyStylizationMap`, edited via the stylization map editor textarea in the Debug Menu. Structure:
+
+```json
+{
+  "__priorityOverride__": { "、": "-" },
+  "凜子": "「Rinko」",
+  "ッ！": "!",
+  "びりびり": "bzz-bzz"
+}
+```
+
+- **`__priorityOverride__`** (reserved key): Entries applied FIRST, before generation phases and the strip-phase replacement loop. Longest key first, globally. Use for early character substitutions.
+- **Name entries** (values wrapped in `「」`): Applied first after priority override, sorted by key length descending.
+- **Other entries**: Applied after name entries, sorted by key length descending so longer multi-character keys are applied before their substrings.
+- **Empty-value entries**: Dropped automatically on save (they replace text with nothing).
+
+### Strip Phase (`stripLine`)
+
+For each dialogue line:
+1. Apply `__priorityOverride__` pre-pass (longest key first, global replace).
+2. Iterate `Object.entries(state.heavyStylizationMap)` (skipping `__priorityOverride__`), replacing patterns longest-first.
+3. Strip `「」` from name values when the bracket-strip XOR decision is true.
+4. If the line collapses to nothing (entirely stylization), `flushOnly=true` — the extracted stylizations are pushed directly and translation is skipped.
+
+### Bracket-Strip XOR Logic
+
+Two checkboxes control whether `「」` brackets are stripped from name values during in-dialogue replacement:
+
+- **Mapper checkbox** (`mapperStripBracketsCheckbox`): Active during Generate Mapping.
+- **Manual-step checkbox** (`manualStepStripBracketsCheckbox`): Active during Manual line-by-line Override retranslation.
+
+**XOR truth table:**
+
+| Manual checked | Mapper checked | Result |
+|---|---|---|
+| ✓ | ✗ | Strip brackets |
+| ✗ | ✓ | Strip brackets |
+| ✓ | ✓ | Keep brackets |
+| ✗ | ✗ | Keep brackets |
+
+Stripping occurs when exactly one checkbox is checked. Both checkboxes persist to/from IndexedDB.
+
+### AI Mapping Generator (`generateStylizationMapWithAI`)
+
+3-phase analysis of dialogue lines:
+1. **Ticks** — stutters, repeated-kana ticks, gemination tick+punctuation combos.
+2. **Sounds** — onomatopoeia and sound effects (3+ kana patterns).
+3. **Punctuation** — Japanese punctuation marks and multi-character sequences.
+
+Priority override is applied to dialogue lines before analysis so phases never see the original characters. Results land in `state.pendingDiscoveredMappings` for review. Discovered items are validated by `isValidMappingPair` (rejects single kana, grammar particles, sentences, pure ASCII, bracket-wrapped patterns, and kanji+hiragana word fragments).
+
+---
+
+## Name Plate Resolution
+
+`resolveNamePlate` intercepts `<NAME_PLATE>` lines and:
+
+1. Extracts the Japanese name from the plate.
+2. Checks `state.knownNamesMap` for a cached resolution.
+3. If not cached, transliterates via the `namePlate` preset (`translateChunkWithContext` with `presetType='namePlate'`).
+4. Prompts the user (via `promptUserForNameTranslation`) unless `autoSkipNameModal` is set or benchmark mode (`autoAccept=true`).
+5. Caches the resolution in `state.knownNamesMap`.
+6. Merges the JP→EN name into the stylization map as `「ENname」` so in-dialogue occurrences are auto-replaced.
+7. Returns `{ namePlateLine, speakerName }` where speakerName is `"Narrator"` for empty plates (denoting narration).
+
+The resolved speaker name is passed to `translateChunkWithContext` as the `speakerName` parameter, injected into the system prompt (not inline) so the model treats it as context rather than content to echo.
+
+---
+
+## Tiered Context Summarization
+
+The context window is built by `buildTieredContextWindow`, shared by the production pipeline and the benchmark sweep:
+
+### Tier 1 — Raw Tail
+The most recent `rawLimitThreshold` confirmed lines from history, fed verbatim for immediate pronoun and speaker continuity.
+
+### Tier 2 — Rolling Scene Recap
+A single tight paragraph tracking active characters, tone, and immediate scene developments. Updated via `updateRecentSummary` as lines exit the raw tail. Bounded by `maxContextLines`.
+
+### Tier 3 — Archival Story State
+A self-updating, 1-sentence macro story recap. Compressed via `updateArchivalSummary` when the recent summary overflows `maxContextLines` source lines. The recent summary is reset to cover only the remaining window lines.
+
+### Window Assembly
+Final context = `[Archival Summary] + [Recent Summary] + [Raw Tail]`, capped to `maxContextLines + rawLimitThreshold` entries.
+
+---
+
+## Translation Validation Pipeline
+
+`translateChunkWithContext` runs a multi-check validation gate with retry logic (up to 5 attempts):
+
+| Check | Method | Fail Window |
+|---|---|---|
+| Japanese characters | Regex `[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]` | Hard fail every attempt |
+| Romaji fragment | Word-list match (`detectRomajiFragment`) | Hard fail every attempt |
+| Context leak | Exact + sliding 30-char window match (`detectContextLeak`) | Hard fail every attempt |
+| AI validator | LLM PASS/FAIL verdict (`assessTranslationQualityWithAI`) | Hard fail attempts 1–3, advisory (log only) attempts 4+ |
+
+On failure, the oldest context line is dropped and the attempt retries with reduced temperature. After max retries, a fallback run with the `retry` preset and empty context produces a `[MANUAL_OVERRIDE_NEEDED]` result.
+
+The AI validator is intentionally lenient: only a clean standalone `FAIL` verdict counts as a failure. Prose, lowercase, echoed instructions, or empty responses are treated as a pass so a flaky small model cannot stall the loop.
 
 ---
 
 ## Debug & Benchmark Menu
 
-Click **Debug & Benchmark** in the right pane to access advanced research tools:
+Click **Debug & Benchmark** in the right pane to open the draggable modal.
 
-* **Page 1 (Stylization & Masking):**
-  * Limit translation runs to a specific line count for rapid debugging.
-  * Toggle stylization modes (Strip & Re-inject, Delineate, or Disabled).
-  * Auto-generate and approve text replacement maps using the AI.
-* **Page 2 (Parameter Sweep & Benchmark):**
-  * Input comma-separated context values (e.g., `2, 6, 12`) and raw limits (e.g., `1, 2, 4`).
-  * Run multi-dimensional parameter matrix sweeps to let an AI evaluator grade candidates against reference ground-truth text for pronoun fidelity, semantics, and narrative flow.
+### Page 1 — Translation & Stylization
+
+| Control | Purpose |
+|---|---|
+| Max Lines Limit | Cap translation to N lines for rapid debugging (0 = no limit) |
+| Auto-Skip Name Modal | Auto-accept AI name transliterations without prompting |
+| Manual Step Mode | Enable the step-by-step review toolbar |
+| Stylization Mode | Strip / Delineate / Disabled |
+| Mapper Strip Brackets | Bracket-strip checkbox for Generate Mapping (XOR) |
+| Manual Strip Brackets | Bracket-strip checkbox for manual override (XOR) |
+| Stylization Map Editor | JSON textarea — edit the map directly, Save Map to commit |
+| Generate Mapping | Run the 3-phase AI stylization analysis |
+| Discovered Mappings | Review/select/edit discovered patterns, Add Selected to commit |
+| Save & Close | Reorder map, persist to IndexedDB, close modal |
+
+### Page 2 — Inconsistency-Focused Benchmark Suite
+
+| Control | Purpose |
+|---|---|
+| Benchmark Text | Dedicated text input (falls back to Source 1 if empty) |
+| Reference File / Scene | Select a reference standard for semantic fidelity grading |
+| Context Values | Comma-separated context line counts to sweep (e.g. `2, 6, 12`) |
+| Raw Limit Values | Comma-separated raw limits to sweep (e.g. `1, 2, 4`) |
+| Chunk Size | Lines per grading chunk (default 5) |
+| Run Sweep | Execute the parameter sweep matrix |
+
+The sweep translates each cell (context × raw-limit combination) through the full production pipeline (name-plate resolution, tiered context, translation), then grades each chunk independently via `gradeCandidateAgent` and averages the scores. The auditor sees ONLY the candidate translation — no history or prompt scaffolding is leaked.
 
 ---
 
-## Commit History & Development Changelog
+## Preset System
 
-Summary of major feature milestones merged into `main`:
+11 JSON preset files ship in `default_presets/` and are auto-loaded into memory on startup via `loadAllDefaultPresets`. Each maps to an operation key in `operationPresets`:
 
-* **Tiered Context Summarization Pipeline:** Replaced unbounded milestone lists with a 3-tier hierarchy (Raw Tail → Rolling Scene Recap → Self-Updating Archival Story State) bounded for 3B-parameter models.
-* **Separate Source Line & Live Context Preview (PR #22):** Decoupled the active source line element and added real-time context preview dropdown updates during manual review.
-* **Manual Override Source UI & Toolbar Overhaul (PR #18, #21):** Themed and repositioned the manual step toolbar with live context controls and editable textareas.
-* **Romaji & Quality Validation Failsafes (PR #19, #20):** Added automated detection for untranslated romaji fragments and Japanese glyphs to trigger retry presets.
-* **Logging & Execution Tracing (PR #16, #19):** Added comprehensive console traces (`[Trace:...]`) covering server requests, response cleaning, and pipeline checkpoints.
-* **Proper Noun & Name Plate Fixes (PR #17):** Initialized `knownNamesMap` in global state to ensure zero crashes on first encountering character name plates.
-* **Dark Mode & Eye-Strain Reduction Palette (PR #9, #10, #11, #12, #13, #14, #15):** Implemented full dark mode toggle, theme-aware custom scrollbars, and calibrated low-contrast light surfaces.
-* **Model Auto-Detection (PR #7):** Hardened server connectivity parsing to support diverse local LLM API responses and surface accurate error reasons.
-* **UI Streamlining (PR #5, #6):** Cleaned up Distinct Presets controls and eliminated emoji-only buttons for consistent readability.
-* **Dynamic Preset System & Shipped Presets (PR #1, #2, #3, #4):** Embedded 6 default JSON presets with dynamic loading into runtime operation configs.
+| File | Operation Key | Purpose |
+|---|---|---|
+| `benchmark_prompt.json` | `benchmark` | AI quality auditor system prompt |
+| `japanese_to_english.json` | `jpEn` | Main JP→EN translation |
+| `retry_translation.json` | `retry` | Fallback after validation failure |
+| `name_plate_unique.json` | `namePlate` | Name transliteration |
+| `stylization_mapping.json` | `stylization` | General stylization mapper |
+| `stylization_punctuation.json` | `stylizationPunctuation` | Punctuation normalization |
+| `stylization_sounds.json` | `stylizationSounds` | Onomatopoeia translation |
+| `stylization_ticks.json` | `stylizationTicks` | Stutter/tick normalization |
+| `recent_summary.json` | `recentSummary` | Tier 2 scene recap |
+| `archival_summary.json` | `archivalSummary` | Tier 3 macro story state |
+| `translation_validator.json` | `validator` | QA pass/fail evaluator |
+
+Each preset JSON contains `temperature` and `systemPrompt` (or an `operation.fields` array with `llm.prediction.temperature` and `llm.prediction.systemPrompt` keys). Custom presets can be uploaded via the Debug Menu's per-operation file inputs to override any default in memory.
+
+To modify prompts or validation criteria, edit the JSON files in `default_presets/` or upload a custom JSON override.
+
+---
+
+## Prompt Engineering for Small Models
+
+Small local models (like Qwen2.5-3B) require strict prompt structures to avoid hallucinations and formatting breaks. Follow these guidelines when editing presets:
+
+1. **Always Use English:** Write system prompts in English, regardless of target translation language. Open-weight models follow strict logic best in English.
+2. **Rule-Bound Structure:** Establish a persona and append a numbered `RULES:` block. Avoid generic paragraphs.
+3. **Negative Constraints:** Explicitly ban unwanted behaviors (e.g., `Do NOT include explanations`).
+4. **Enforce JSON Rigidity:** When expecting JSON, state `Output strictly in valid JSON format` and ban markdown wrappers.
+
+**Example:**
+> "You are a specialized Japanese-to-English game localizer. Translate the dialogue naturally while maintaining character voice and nuance. RULES: 1) Output ONLY the translated English text. 2) Do NOT include any explanations, notes, or preamble. 3) Preserve all original game tags and structural formatting exactly."
+
+---
+
+## Debugging & Troubleshooting
+
+### Model Dropdown Shows "Connection Failed"
+
+The app tries three endpoint variants in order: `/v1/models`, `/api/v0/models`, `/models`. If all fail:
+
+1. **Verify the server is running:** Check that your AI server (LM Studio, Ollama) is started and a model is loaded.
+2. **Check the URL:** Ensure the server address is correct (`http://127.0.0.1:1234` by default).
+3. **Enable CORS:** CORS must be enabled in your server settings for the browser to make cross-origin requests.
+4. **Check diagnostics:** The error banner shows which endpoints were tried and why they failed (HTTP status, CORS rejection, or unexpected JSON shape).
+
+### Default Presets Not Loading
+
+If the console shows `[Default Presets] Could not load any default presets`:
+
+- The app must be served over HTTP (`python3 -m http.server`), not opened as `file://`. Browsers block `fetch()` of local files for security.
+
+### Translation Produces `[MANUAL_OVERRIDE_NEEDED]`
+
+This means the chunk exhausted all 5 retry attempts. Causes:
+- The model consistently outputs Japanese characters, romaji fragments, or context leaks that fail validation.
+- Try a different model, increase context lines, or switch stylization mode.
+- Use Manual Step Mode to review and manually correct the output.
+
+### Stylization Patterns Not Being Applied
+
+1. Verify the stylization mode is set to **Strip** in the Debug Menu.
+2. Check that the pattern exists in the stylization map editor (valid JSON).
+3. Use **Save Map** after editing — changes are not applied until saved.
+4. Verify the pattern key contains Japanese characters (pure-ASCII keys are rejected by `isValidMappingPair`).
+
+### Context Leaks in Translation
+
+If translated output contains text from prior context lines:
+- The context-leak detector uses exact + sliding 30-char window matching. Very short common phrases may slip through.
+- Reduce the raw context limit or context lines count.
+- Check the console trace `[Trace:Translate:Detect]` for `hasOldContext=true` warnings.
+
+### Console Trace Logging
+
+The app uses `[Trace:Section]` prefix conventions for all major operations. Key trace prefixes:
+
+| Prefix | Section |
+|---|---|
+| `[Trace:Init]` | Application boot |
+| `[Trace:Models]` | Model detection |
+| `[Trace:Translation]` | Main translation loop |
+| `[Trace:Translate]` | Chunk translation + validation |
+| `[Trace:Translate:Detect]` | Validation check results |
+| `[Trace:Summary:Recent]` / `[Trace:Summary:Archival]` | Tiered summarization |
+| `[Trace:NamePlate]` | Name-plate resolution |
+| `[Trace:Stylization]` | Stylization map generation |
+| `[Trace:UI]` | UI operations |
+| `[Trace:Benchmark]` | Parameter sweep |
+| `[Trace:Preset]` | Preset loading |
+| `[Trace:Theme]` | Theme toggle |
+| `[Trace:Files]` | File loading/parsing |
+
+Open the browser DevTools console (F12) to view these traces during operation.
