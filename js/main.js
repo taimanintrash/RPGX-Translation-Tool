@@ -7,6 +7,16 @@ export const state = {
     stylizationMode: "strip",
     pendingDiscoveredMappings: [],
     manualStepByStepMode: false,
+    // Bracket-strip toggles for name replacements (values stored as 「Name」).
+    // When the active context's checkbox is checked, the 「」 are stripped during
+    // in-dialogue replacement so stutters/kana-runs are not broken. The mapper
+    // checkbox applies during Generate Mapping; the manual-step checkbox applies
+    // during Manual line-by-line Override retranslation.
+    mapperStripBrackets: false,
+    manualStepStripBrackets: false,
+    // Flag set true while Generate Mapping is actively running, so the strip
+    // decision can XOR the mapper context against the manual-step context.
+    mapperGenerationActive: false,
     knownNamesMap: {},
     manualStepResolver: null,
     // Applied manual-override values. When set (not null), the main translation
@@ -15,7 +25,9 @@ export const state = {
     appliedContextLines: null,
     appliedRawLimit: null,
     heavyStylizationMap: {
-        "、": "",
+        "__priorityOverride__": {
+            "、": "-"
+        },
         "！？": "!",
         "ッ！？": "!",
         "ッ！": "!",
@@ -38,7 +50,7 @@ import { initDraggableModal } from './ui.js';
 import { refreshApplicationState, renderComparisonViews } from './parser.js';
 import { loadFiles, removeFile, onSelectID, onSelectIDMobile, onCompareSelectionChange, saveEditsToMemory, injectTranslationToRight, downloadFile, updateBenchmarkSceneDropdown } from './parser.js';
 import { fetchAiModels, translateViaAiServer, stopTranslation, generateStylizationMapWithAI, loadSpecificPreset, loadDefaultPreset, loadAllDefaultPresets } from './translator.js';
-import { openDebugMenu, switchDebugPage, closeDebugMenu, closeDebugMenuWithoutSaving, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, copyStylizationMapToClipboard, toggleDiscoveredSelection, setAllDiscoveredSelection, updateDiscoveredKey, updateDiscoveredVal, resolveNameModal, closeNameModal, resolveManualStepContinue, triggerStepRetranslation, applyStepContextSettings, syncManualStepUIVisibility, syncManualStepModeLive, initPaneResizer, initAutoNumberInputs } from './ui.js';
+import { openDebugMenu, switchDebugPage, closeDebugMenu, closeDebugMenuWithoutSaving, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, copyStylizationMapToClipboard, toggleDiscoveredSelection, setAllDiscoveredSelection, updateDiscoveredKey, updateDiscoveredVal, resolveNameModal, closeNameModal, resolveManualStepContinue, triggerStepRetranslation, applyStepContextSettings, syncManualStepUIVisibility, syncManualStepModeLive, syncBracketStripToggles, initPaneResizer, initAutoNumberInputs } from './ui.js';
 import { runParameterSweepBenchmark } from './benchmark.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -77,6 +89,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (cachedState.manualStepMode !== undefined) {
                 state.manualStepByStepMode = cachedState.manualStepMode;
                 document.getElementById("manualStepModeCheckbox").checked = state.manualStepByStepMode;
+            }
+            if (cachedState.mapperStripBrackets !== undefined) {
+                state.mapperStripBrackets = cachedState.mapperStripBrackets;
+                const mapperBox = document.getElementById("mapperStripBracketsCheckbox");
+                if (mapperBox) mapperBox.checked = state.mapperStripBrackets;
+            }
+            if (cachedState.manualStepStripBrackets !== undefined) {
+                state.manualStepStripBrackets = cachedState.manualStepStripBrackets;
+                const manualBox = document.getElementById("manualStepStripBracketsCheckbox");
+                if (manualBox) manualBox.checked = state.manualStepStripBrackets;
             }
             if (cachedState.stylizationOption !== undefined) {
                 state.stylizationMode = cachedState.stylizationOption;
@@ -177,6 +199,7 @@ window.triggerStepRetranslation = triggerStepRetranslation;
 window.applyStepContextSettings = applyStepContextSettings;
 window.syncManualStepUIVisibility = syncManualStepUIVisibility;
 window.syncManualStepModeLive = syncManualStepModeLive;
+window.syncBracketStripToggles = syncBracketStripToggles;
 window.runParameterSweepBenchmark = runParameterSweepBenchmark;
 window.translateViaAiServer = translateViaAiServer;
 window.generateStylizationMapWithAI = generateStylizationMapWithAI;

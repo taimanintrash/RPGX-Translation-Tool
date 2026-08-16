@@ -165,6 +165,10 @@
                                 class="manual-step-input">
                             <button id="stepApplyContextBtn" class="translate-btn manual-step-btn"
                                 onclick="applyStepContextSettings()" title="Apply context settings and recalculate summaries">Apply</button>
+                            <label for="manualStepStripBracketsCheckbox" class="manual-step-label" style="font-weight: normal; cursor: pointer; user-select: none; white-space: nowrap;" title="When checked (and Manual Override is active), strip the corner brackets from name values during in-dialogue replacement on retranslate. XOR with the mapper checkbox.">
+                                <input type="checkbox" id="manualStepStripBracketsCheckbox" style="margin: 0 4px 0 0; cursor: pointer; width: 14px; height: 14px; vertical-align: middle;"
+                                    onchange="if (window.syncBracketStripToggles) window.syncBracketStripToggles();"> Strip Name Brackets
+                            </label>
                             <div style="display: flex; gap: 8px; margin-left: auto;">
                                 <button id="stepRetranslateBtn" class="translate-btn manual-step-btn"
                                     onclick="triggerStepRetranslation()">Retranslate</button>
@@ -275,7 +279,11 @@
                 <div class="modal-field">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <label><strong>Heavy Stylization Map (JSON):</strong></label>
-                        <div style="display: flex; gap: 4px;">
+                        <div style="display: flex; gap: 4px; align-items: center;">
+                            <label for="mapperStripBracketsCheckbox" class="modal-checkbox-row" style="font-size: 11px; font-weight: normal; margin-top: 0; white-space: nowrap;" title="When checked (and Generate Mapping is running), strip the corner brackets from name values during in-dialogue replacement. XOR with the manual-step checkbox.">
+                                <input type="checkbox" id="mapperStripBracketsCheckbox" style="margin: 0; cursor: pointer; width: 14px; height: 14px;"
+                                    onchange="if (window.syncBracketStripToggles) window.syncBracketStripToggles();"> Strip Name Brackets
+                            </label>
                             <button class="translate-btn" style="padding: 3px 8px; font-size: 11px;"
                                 onclick="generateStylizationMapWithAI()">Generate Mapping</button>
                             <button class="action-btn"

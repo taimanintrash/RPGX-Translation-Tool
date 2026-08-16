@@ -128,6 +128,7 @@ export function openDebugMenu() {
     document.getElementById("autoSkipNameModalCheckbox").checked = state.autoSkipNameModal;
     document.getElementById("manualStepModeCheckbox").checked = state.manualStepByStepMode;
     document.getElementById("stylizationModeSelect").value = state.stylizationMode;
+    document.getElementById("mapperStripBracketsCheckbox").checked = state.mapperStripBrackets;
     document.getElementById("stylizationMapEditor").value = JSON.stringify(state.heavyStylizationMap, null, 4);
     renderDiscoveredMappingsUI();
 }
@@ -181,6 +182,10 @@ export function closeDebugMenu() {
     state.manualStepByStepMode = document.getElementById("manualStepModeCheckbox").checked;
     syncManualStepUIVisibility();
     state.stylizationMode = document.getElementById("stylizationModeSelect").value;
+    const mapperBox = document.getElementById("mapperStripBracketsCheckbox");
+    if (mapperBox) state.mapperStripBrackets = mapperBox.checked;
+    const manualBox = document.getElementById("manualStepStripBracketsCheckbox");
+    if (manualBox) state.manualStepStripBrackets = manualBox.checked;
 
     try {
         const parsedMap = JSON.parse(document.getElementById("stylizationMapEditor").value);
@@ -295,12 +300,24 @@ export function updateDiscoveredVal(index, newVal) {
  * @returns {Object} A new object with the same entries in the desired order.
  */
 function orderStylizationMap(map) {
+    const PRIORITY_KEY = "__priorityOverride__";
     const isNameEntry = (val) => typeof val === 'string' && /^「.*」$/.test(val);
+    const isEmpty = (val) => val === "" || val === null || val === undefined;
     const entries = Object.entries(map);
     const byKeyLengthDesc = (a, b) => b[0].length - a[0].length;
-    const names = entries.filter(([_, v]) => isNameEntry(v)).sort(byKeyLengthDesc);
-    const others = entries.filter(([_, v]) => !isNameEntry(v)).sort(byKeyLengthDesc);
-    return Object.fromEntries([...names, ...others]);
+    // The priority override must always come first in the saved JSON so it is
+    // applied before every other entry. It is excluded from the name/other
+    // grouping and kept verbatim (its value is itself an object).
+    const priority = entries.filter(([k]) => k === PRIORITY_KEY);
+    const rest = entries
+        .filter(([k]) => k !== PRIORITY_KEY)
+        // Empty-value mappings are useless (they replace text with nothing) and
+        // are dropped on save. The priority override above handles intentional
+        // character stripping via explicit "-" entries instead.
+        .filter(([_, v]) => !isEmpty(v));
+    const names = rest.filter(([_, v]) => isNameEntry(v)).sort(byKeyLengthDesc);
+    const others = rest.filter(([_, v]) => !isNameEntry(v)).sort(byKeyLengthDesc);
+    return Object.fromEntries([...priority, ...names, ...others]);
 }
 
 /**
@@ -314,7 +331,21 @@ export function commitApprovedMappingsToMap() {
 
     try {
         let currentMap = JSON.parse(document.getElementById("stylizationMapEditor").value);
-        selectedItems.forEach(item => { if (item.key.trim() !== "") currentMap[item.key] = item.value; });
+        selectedItems.forEach(item => {
+            // Add Selected only writes to the regular mapping fields. The reserved
+            // __priorityOverride__ key holds an object managed separately, so a
+            // discovered item whose key is the reserved token is skipped to avoid
+            // overwriting it with a plain string value.
+            if (item.key.trim() === "__priorityOverride__") {
+                console.log('[Trace:UI] Skipping discovered item with reserved __priorityOverride__ key.');
+                return;
+            }
+            if (item.key.trim() !== "" && item.value !== "" && item.value !== null && item.value !== undefined) {
+                currentMap[item.key] = item.value;
+            } else {
+                console.log(`[Trace:UI] Skipping useless empty mapping: "${item.key}" -> "${item.value}"`);
+            }
+        });
         state.heavyStylizationMap = orderStylizationMap(currentMap);
         document.getElementById("stylizationMapEditor").value = JSON.stringify(state.heavyStylizationMap, null, 4);
 
@@ -475,6 +506,19 @@ async function refreshStepContextPreview(currentContextWindow) {
  * (The current source line box is permanently visible above the toolbar).
  * Called by: ui.js (closeDebugMenu, syncManualStepModeLive), main.js (init)
  */
+/**
+ * Reads both bracket-strip checkboxes into state. Called live whenever either
+ * checkbox toggles (onchange), so the strip-phase XOR decision reflects the
+ * current UI without needing to close the debug menu.
+ * Called by: HTML onchange handlers on the two bracket-strip checkboxes.
+ */
+export function syncBracketStripToggles() {
+    const mapperBox = document.getElementById("mapperStripBracketsCheckbox");
+    const manualBox = document.getElementById("manualStepStripBracketsCheckbox");
+    if (mapperBox) state.mapperStripBrackets = mapperBox.checked;
+    if (manualBox) state.manualStepStripBrackets = manualBox.checked;
+}
+
 export function syncManualStepUIVisibility() {
     const msToolbar = document.getElementById("manualStepToolbar");
     const outputLeft = document.getElementById("outputAreaLeft");
