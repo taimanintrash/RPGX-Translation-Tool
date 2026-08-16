@@ -745,7 +745,13 @@ export async function generateStylizationMapWithAI() {
     }
 
     let sourceLines = sourceText.split("\n");
-    let totalChunks = Math.min(sourceLines.length, 5);
+    // Filter to only dialogue lines, mirroring the main translation loop: skip
+    // <NAME_PLATE>, control tags (<...>), and empty lines. Then strip newlines
+    // so the mapping phases see the same clean text the translator sees.
+    let dialogueLines = sourceLines
+        .map(l => l.trim())
+        .filter(l => l && !l.startsWith("<"));
+    let totalChunks = Math.min(dialogueLines.length, 5);
     let discoveredArray = [];
     let seenKeys = new Set();
 
@@ -821,7 +827,9 @@ export async function generateStylizationMapWithAI() {
                 if (loadingStatus) loadingStatus.innerHTML = `Generating stylization mapping... (Phase ${phaseIndex}/3: ${phase.name} - block ${i + 1} of ${totalChunks})`;
                 if (progressBar) progressBar.value = progressPercent;
 
-                let chunkText = sourceLines.slice(i * 50, (i + 1) * 50).join("\n");
+                let chunkText = dialogueLines.slice(i * 50, (i + 1) * 50).join("\n");
+                // Strip embedded newlines so the phase prompt text is a single coherent string.
+                chunkText = chunkText.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
                 if (!chunkText.trim()) continue;
 
                 const promptText = phase.prompt(chunkText);
