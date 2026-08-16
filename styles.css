@@ -731,21 +731,21 @@ button.debug-btn:hover {
     color: var(--text-primary);
     padding: 16px;
     border-radius: 8px;
-    width: 720px;
-    height: 620px;
+    width: 960px;
+    height: 820px;
     box-shadow: 0 10px 25px var(--shadow-color);
     display: flex;
     flex-direction: column;
     gap: 12px;
     position: absolute;
-    top: 10vh;
-    left: calc(50vw - 360px);
+    top: 6vh;
+    left: calc(50vw - 480px);
     resize: both;
     overflow: hidden;
     pointer-events: auto;
     border: 1px solid var(--border-strong);
-    min-width: 480px;
-    min-height: 400px;
+    min-width: 600px;
+    min-height: 520px;
 }
 
 .modal-header {
