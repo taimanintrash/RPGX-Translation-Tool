@@ -184,7 +184,8 @@ export function closeDebugMenu() {
 
     try {
         const parsedMap = JSON.parse(document.getElementById("stylizationMapEditor").value);
-        state.heavyStylizationMap = parsedMap;
+        state.heavyStylizationMap = orderStylizationMap(parsedMap);
+        document.getElementById("stylizationMapEditor").value = JSON.stringify(state.heavyStylizationMap, null, 4);
     } catch (e) {
         showError("Invalid JSON format in Stylization Map. Changes to the map were not saved.");
     }
@@ -210,7 +211,8 @@ export function saveStylizationMapFromView() {
     try {
         const editorValue = document.getElementById("stylizationMapEditor").value;
         const parsedMap = JSON.parse(editorValue);
-        state.heavyStylizationMap = parsedMap;
+        state.heavyStylizationMap = orderStylizationMap(parsedMap);
+        document.getElementById("stylizationMapEditor").value = JSON.stringify(state.heavyStylizationMap, null, 4);
         saveUIStateToCache();
         showError("Stylization mapping successfully saved to variable and local cache!");
     } catch (e) {
@@ -286,6 +288,22 @@ export function updateDiscoveredVal(index, newVal) {
 }
 
 /**
+ * Returns an ordered copy of a stylization map object: name entries (values wrapped in
+ * 「」) first, then all other entries, each group sorted by key length descending so
+ * longer multi-character keys are applied before their substrings during replacement.
+ * @param {Object} map - The source stylization map.
+ * @returns {Object} A new object with the same entries in the desired order.
+ */
+function orderStylizationMap(map) {
+    const isNameEntry = (val) => typeof val === 'string' && /^「.*」$/.test(val);
+    const entries = Object.entries(map);
+    const byKeyLengthDesc = (a, b) => b[0].length - a[0].length;
+    const names = entries.filter(([_, v]) => isNameEntry(v)).sort(byKeyLengthDesc);
+    const others = entries.filter(([_, v]) => !isNameEntry(v)).sort(byKeyLengthDesc);
+    return Object.fromEntries([...names, ...others]);
+}
+
+/**
  * Commits selected pending discovered mappings into the active heavy stylization map dictionary[cite: 7].
  * Called by: HTML event handler / main.js[cite: 7]
  */
@@ -297,7 +315,7 @@ export function commitApprovedMappingsToMap() {
     try {
         let currentMap = JSON.parse(document.getElementById("stylizationMapEditor").value);
         selectedItems.forEach(item => { if (item.key.trim() !== "") currentMap[item.key] = item.value; });
-        state.heavyStylizationMap = currentMap;
+        state.heavyStylizationMap = orderStylizationMap(currentMap);
         document.getElementById("stylizationMapEditor").value = JSON.stringify(state.heavyStylizationMap, null, 4);
 
         state.pendingDiscoveredMappings = state.pendingDiscoveredMappings.filter(item => !item.selected);
