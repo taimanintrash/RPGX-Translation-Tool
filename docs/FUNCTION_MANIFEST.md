@@ -1,86 +1,86 @@
 # Function Manifest
 
-This document describes every JavaScript module in the RPGX Translation Tool, the functions it exports/contains, and the static call graph between them.
+This document describes every JavaScript module in the RPGX Translation Tool, the functions it exports/contains, and the static call graph between them[cite: 2].
 
 **File load order:** `index.html` loads only `js/main.js` as `<script type="module">`. Every other file is reached via ES module imports. `main.js` imports from `database.js`, `ui.js`, `parser.js`, `translator.js`, and `benchmark.js`. `translator.js` re-exports symbols from `translator-presets.js` and `translator-llm.js`. `ui.js` re-exports symbols from `ui-manual-step.js` and `ui-layout.js`. `logger.js` is imported directly by `translator-llm.js`, `translator.js`, and `benchmark.js` (no re-export hub; each module imports the capture functions it needs). Log files are written to `docs/logs/<loop>/<preset>.md` at run end by the companion `serve.py` dev server (replaces `python3 -m http.server`).
 
-**HTML event handlers:** Functions wired to `window.*` in `main.js` are invoked by inline `onclick`/`onchange` attributes in `index.html`. These are noted as "Called by: HTML event handler (via main.js window.* wiring)".
+**HTML event handlers:** Functions wired to `window.*` in `main.js` are invoked by inline `onclick`/`onchange` attributes in `index.html`[cite: 2]. These are noted as "Called by: HTML event handler (via main.js window.* wiring)"[cite: 2].
 
 ---
 
 ## js/main.js — Application entry point, shared state, theme toggle, and window.* wiring
 
-Exports the central `state` object (imported by every other module), wires all module functions to `window.*` for HTML event handlers, restores cached UI state on DOMContentLoaded, and provides the light/dark theme toggle.
+Exports the central `state` object (imported by every other module), wires all module functions to `window.*` for HTML event handlers, restores cached UI state on DOMContentLoaded, and provides the light/dark theme toggle[cite: 2].
 
 ### applyTheme — Applies the given theme ('light' or 'dark') to the document root and updates the toggle button label
 
 #### What function call it:
-- js/main.js (toggleTheme, DOMContentLoaded)
+- js/main.js (toggleTheme, DOMContentLoaded)[cite: 2]
 
 #### What functions are used in it :
-- js/main.js (recolorScriptSelectOptions)
+- js/main.js (recolorScriptSelectOptions)[cite: 2]
 
 ### recolorScriptSelectOptions — Re-applies inline status colors to script-select options after a theme change (native option elements can't be restyled via CSS classes)
 
 #### What function call it:
-- js/main.js (applyTheme)
+- js/main.js (applyTheme)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### toggleTheme — Toggles between light and dark themes and persists the choice to localStorage
 
 #### What function call it:
-- HTML event handler via main.js window.toggleTheme (theme toggle button)
+- HTML event handler via main.js window.toggleTheme (theme toggle button)[cite: 2]
 
 #### What functions are used in it :
-- js/main.js (applyTheme)
+- js/main.js (applyTheme)[cite: 2]
 
 ---
 
 ## js/database.js — IndexedDB persistence layer for cached files and UI state
 
-Provides open/put/get operations for the IndexedDB cache storing the file registry and UI settings.
+Provides open/put/get operations for the IndexedDB cache storing the file registry and UI settings[cite: 2].
 
 ### openDatabase — Opens (or creates) the IndexedDB database and object store
 
 #### What function call it:
-- js/database.js (saveFilesToCache, loadFilesFromCache, saveUIStateToCache, loadUIStateFromCache)
+- js/database.js (saveFilesToCache, loadFilesFromCache, saveUIStateToCache, loadUIStateFromCache)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### saveFilesToCache — Persists the loaded file registry to IndexedDB
 
 #### What function call it:
-- js/parser.js (checkFinishedReads, removeFile, saveEditsToMemory, commitTextToRightFile)
+- js/parser.js (checkFinishedReads, removeFile, saveEditsToMemory, commitTextToRightFile)[cite: 2]
 
 #### What functions are used in it :
-- js/database.js (openDatabase)
+- js/database.js (openDatabase)[cite: 2]
 
 ### loadFilesFromCache — Retrieves the cached file registry from IndexedDB
 
 #### What function call it:
-- js/main.js (DOMContentLoaded)
+- js/main.js (DOMContentLoaded)[cite: 2]
 
 #### What functions are used in it :
-- js/database.js (openDatabase)
+- js/database.js (openDatabase)[cite: 2]
 
 ### saveUIStateToCache — Persists the current UI settings (dropdowns, debug flags, stylization map, bracket toggles) to IndexedDB
 
 #### What function call it:
-- js/parser.js (onSelectID, onCompareSelectionChange), js/ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap), js/ui-manual-step.js (syncManualStepModeLive)
+- js/parser.js (onSelectID, onCompareSelectionChange), js/ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap), js/ui-manual-step.js (syncManualStepModeLive)[cite: 2]
 
 #### What functions are used in it :
-- js/database.js (openDatabase)
+- js/database.js (openDatabase)[cite: 2]
 
 ### loadUIStateFromCache — Retrieves cached UI state settings from IndexedDB
 
 #### What function call it:
-- js/main.js (DOMContentLoaded)
+- js/main.js (DOMContentLoaded)[cite: 2]
 
 #### What functions are used in it :
-- js/database.js (openDatabase)
+- js/database.js (openDatabase)[cite: 2]
 
 ---
 
@@ -160,210 +160,210 @@ In-memory ring buffer that captures every prompt sent to the LLM and every respo
 
 ## js/parser.js — File/script registry, dropdown population, and comparison view rendering
 
-Manages loading JSON script files into the registry, parsing content, populating file/script/master-ID dropdowns, rendering comparison views, and committing translated text back to the right-hand file.
+Manages loading JSON script files into the registry, parsing content, populating file/script/master-ID dropdowns, rendering comparison views, and committing translated text back to the right-hand file[cite: 2].
 
 ### loadFiles — Loads one or more JSON files from a file input into the registry
 
 #### What function call it:
-- HTML event handler via main.js window.loadFiles (HTML file input)
+- HTML event handler via main.js window.loadFiles (HTML file input)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (checkFinishedReads, parseContentToJSON), js/ui.js (showError)
+- js/parser.js (checkFinishedReads, parseContentToJSON), js/ui.js (showError)[cite: 2]
 
 ### checkFinishedReads — Processes completed FileReader reads, parses each, and refreshes application state
 
 #### What function call it:
-- js/parser.js (loadFiles)
+- js/parser.js (loadFiles)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (refreshApplicationState, saveFilesToCache, saveUIStateToCache)
+- js/parser.js (refreshApplicationState, saveFilesToCache, saveUIStateToCache)[cite: 2]
 
 ### removeFile — Removes a file from the registry by name and refreshes state
 
 #### What function call it:
-- HTML event handler via main.js window.removeFiles (HTML remove button)
+- HTML event handler via main.js window.removeFiles (HTML remove button)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (refreshApplicationState, saveFilesToCache, saveUIStateToCache), js/parser.js (updateFileListUI)
+- js/parser.js (refreshApplicationState, saveFilesToCache, saveUIStateToCache), js/parser.js (updateFileListUI)[cite: 2]
 
 ### parseContentToJSON — Parses raw file content into JSON, with regex-extraction fallback
 
 #### What function call it:
-- js/parser.js (loadFiles)
+- js/parser.js (loadFiles)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### refreshApplicationState — Refreshes all core UI elements: file lists, dropdowns, and comparison views
 
 #### What function call it:
-- js/parser.js (checkFinishedReads, removeFile), js/main.js (DOMContentLoaded)
+- js/parser.js (checkFinishedReads, removeFile), js/main.js (DOMContentLoaded)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (renderComparisonViews, updateBenchmarkFileDropdown, updateFileDropdowns, updateFileListUI, updateMasterIDList)
+- js/parser.js (renderComparisonViews, updateBenchmarkFileDropdown, updateFileDropdowns, updateFileListUI, updateMasterIDList)[cite: 2]
 
 ### updateFileListUI — Renders the file list in the sidebar
 
 #### What function call it:
-- js/parser.js (refreshApplicationState)
+- js/parser.js (refreshApplicationState)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (removeFile)
+- js/parser.js (removeFile)[cite: 2]
 
 ### updateFileDropdowns — Populates the left/right file selection dropdowns
 
 #### What function call it:
-- js/parser.js (refreshApplicationState)
+- js/parser.js (refreshApplicationState)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### updateBenchmarkFileDropdown — Populates the benchmark reference file dropdown
 
 #### What function call it:
-- js/parser.js (refreshApplicationState)
+- js/parser.js (refreshApplicationState)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (updateBenchmarkSceneDropdown)
+- js/parser.js (updateBenchmarkSceneDropdown)[cite: 2]
 
 ### updateBenchmarkSceneDropdown — Populates the benchmark reference scene dropdown based on the selected file
 
 #### What function call it:
-- HTML event handler via main.js window.updateBenchmarkSceneDropdown (HTML dropdown onchange)
+- HTML event handler via main.js window.updateBenchmarkSceneDropdown (HTML dropdown onchange)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### updateMasterIDList — Populates the master script ID list from all loaded files
 
 #### What function call it:
-- js/parser.js (refreshApplicationState, commitTextToRightFile)
+- js/parser.js (refreshApplicationState, commitTextToRightFile)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### onSelectID — Handles script selection change, renders comparison views, saves UI state
 
 #### What function call it:
-- HTML event handler via main.js window.onSelectID (HTML select onchange)
+- HTML event handler via main.js window.onSelectID (HTML select onchange)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (renderComparisonViews, saveUIStateToCache), js/parser.js (onSelectIDMobile)
+- js/parser.js (renderComparisonViews, saveUIStateToCache), js/parser.js (onSelectIDMobile)[cite: 2]
 
 ### onSelectIDMobile — Syncs the mobile select element with the main select and triggers the standard update
 
 #### What function call it:
-- HTML event handler via main.js window.onSelectIDMobile (HTML mobile select onchange)
+- HTML event handler via main.js window.onSelectIDMobile (HTML mobile select onchange)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (onSelectID)
+- js/parser.js (onSelectID)[cite: 2]
 
 ### onCompareSelectionChange — Handles left/right file selection comparison change, renders views, saves UI state
 
 #### What function call it:
-- HTML event handler via main.js window.onCompareSelectionChange (HTML select onchange)
+- HTML event handler via main.js window.onCompareSelectionChange (HTML select onchange)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (renderComparisonViews, saveUIStateToCache)
+- js/parser.js (renderComparisonViews, saveUIStateToCache)[cite: 2]
 
 ### renderComparisonViews — Renders the left (source) and right (translated) comparison text areas
 
 #### What function call it:
-- js/parser.js (onSelectID, onCompareSelectionChange), js/main.js (DOMContentLoaded)
+- js/parser.js (onSelectID, onCompareSelectionChange), js/main.js (DOMContentLoaded)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (extractScriptText)
+- js/parser.js (extractScriptText)[cite: 2]
 
 ### extractScriptText — Extracts the script text for a given key from a file data object
 
 #### What function call it:
-- js/parser.js (renderComparisonViews), js/benchmark.js (runParameterSweepBenchmark)
+- js/parser.js (renderComparisonViews), js/benchmark.js (runParameterSweepBenchmark)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### saveEditsToMemory — Saves manual edits from the left text area back into the file registry in memory
 
 #### What function call it:
-- HTML event handler via main.js window.saveEditsToMemory (HTML save button)
+- HTML event handler via main.js window.saveEditsToMemory (HTML save button)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (saveFilesToCache), js/ui.js (showError)
+- js/parser.js (saveFilesToCache), js/ui.js (showError)[cite: 2]
 
 ### commitTextToRightFile — Commits translated text to the right-hand file object and updates the master ID list
 
 #### What function call it:
-- js/translator.js (translateViaAiServer)
+- js/translator.js (translateViaAiServer)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (renderComparisonViews, saveFilesToCache, updateMasterIDList), js/parser.js (injectTranslationToRight)
+- js/parser.js (renderComparisonViews, saveFilesToCache, updateMasterIDList), js/parser.js (injectTranslationToRight)[cite: 2]
 
 ### injectTranslationToRight — Injects the current right-hand text into the target file
 
 #### What function call it:
-- HTML event handler via main.js window.injectTranslationToRight (HTML inject button)
+- HTML event handler via main.js window.injectTranslationToRight (HTML inject button)[cite: 2]
 
 #### What functions are used in it :
-- js/parser.js (commitTextToRightFile), js/ui.js (showError)
+- js/parser.js (commitTextToRightFile), js/ui.js (showError)[cite: 2]
 
 ### downloadFile — Downloads a file from the registry as a blob
 
 #### What function call it:
-- HTML event handler via main.js window.downloadFile (HTML download button)
+- HTML event handler via main.js window.downloadFile (HTML download button)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (showError)
+- js/ui.js (showError)[cite: 2]
 
 ---
 
 ## js/translator.js — Translation pipeline: stylization, name-plate resolution, and the main translation loop
 
-Contains the stylization strip phase (stripLine, shouldStripNameBrackets, applyPriorityOverride), the 3-phase stylization map generator (generateStylizationMapWithAI), name-plate resolution (resolveNamePlate), the stop control, and the core sequential translation loop (translateViaAiServer). Re-exports all symbols from translator-presets.js and translator-llm.js.
+Contains the stylization strip phase (stripLine, shouldStripNameBrackets, applyPriorityOverride), the 3-phase stylization map generator (generateStylizationMapWithAI), name-plate resolution (resolveNamePlate), the stop control, and the core sequential translation loop (translateViaAiServer). Re-exports all symbols from translator-presets.js and translator-llm.js[cite: 2].
 
 ### isValidMappingPair — Validates a key/value pair from a stylization mapping output (rejects empty keys, sentences, single kana, pure ASCII, etc.)
 
 #### What function call it:
-- js/translator.js (parseMappingOutput)
+- js/translator.js (parseMappingOutput)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### parseMappingOutput — Parses stylization mapping output from a model into key/value pairs (JSON, regex-extracted JSON, or line-by-line)
 
 #### What function call it:
-- js/translator.js (generateStylizationMapWithAI)
+- js/translator.js (generateStylizationMapWithAI)[cite: 2]
 
 #### What functions are used in it :
-- js/translator.js (isValidMappingPair)
+- js/translator.js (isValidMappingPair)[cite: 2]
 
 ### shouldStripNameBrackets — Decides whether 「」 brackets are stripped from name values during in-dialogue replacement (XOR of manual-step and mapper contexts)
 
 #### What function call it:
-- js/translator.js (stripLine)
+- js/translator.js (stripLine)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### applyPriorityOverride — Applies the reserved __priorityOverride__ entries to source text FIRST (longest key first, globally), before the normal strip-phase replacement loop
 
 #### What function call it:
-- js/translator.js (stripLine, generateStylizationMapWithAI)
+- js/translator.js (stripLine, generateStylizationMapWithAI)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### stripLine — Runs the stylization strip phase on a single source line: priority override pre-pass, then the heavyStylizationMap replacement loop
 
 #### What function call it:
-- js/translator.js (translateViaAiServer main loop, flushBuffer manual-step retranslate)
+- js/translator.js (translateViaAiServer main loop, flushBuffer manual-step retranslate)[cite: 2]
 
 #### What functions are used in it :
-- js/translator.js (applyPriorityOverride, shouldStripNameBrackets)
+- js/translator.js (applyPriorityOverride, shouldStripNameBrackets)[cite: 2]
 
 ### generateStylizationMapWithAI — Analyzes source text to discover stutters/ticks/sounds/punctuation via a 3-phase AI analysis, populating state.pendingDiscoveredMappings; sets the active log loop to 'mapping' (via beginLoop), captures each phase prompt/response, and flushes to docs/logs/mapping/*.md + marks the session in its finally
 
 #### What function call it:
-- HTML event handler via main.js window.generateStylizationMapWithAI (HTML Generate Mapping button)
+- HTML event handler via main.js window.generateStylizationMapWithAI (HTML Generate Mapping button)[cite: 2]
 
 #### What functions are used in it :
 - js/translator.js (applyPriorityOverride, parseMappingOutput), js/ui.js (clearError, renderDiscoveredMappingsUI, showError), js/logger.js (beginLoop, logAIInteraction, markSession, flushLoopToDisk)
@@ -371,147 +371,147 @@ Contains the stylization strip phase (stripLine, shouldStripNameBrackets, applyP
 ### stopTranslation — Aborts the active process via the AbortController and sets the abortWarningShown guard so the in-flight catch block surfaces a yellow warning banner naming the cancelled process (translation / mapping / benchmark)
 
 #### What function call it:
-- HTML event handler via main.js window.stopTranslation (HTML Stop button)
+- HTML event handler via main.js window.stopTranslation (HTML Stop button)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### resolveNamePlate — Resolves a <NAME_PLATE> line into a translated name plate line and the active speaker name; merges JP->EN name into the stylization map
 
 #### What function call it:
-- js/translator.js (translateViaAiServer), js/benchmark.js (runParameterSweepBenchmark)
+- js/translator.js (translateViaAiServer), js/benchmark.js (runParameterSweepBenchmark)[cite: 2]
 
 #### What functions are used in it :
-- js/translator.js (translateChunkWithContext), js/ui-manual-step.js (promptUserForNameTranslation)
+- js/translator.js (translateChunkWithContext), js/ui-manual-step.js (promptUserForNameTranslation)[cite: 2]
 
 ### makeSummaryStateAccessor — Builds a getter/setter accessor object that lets buildTieredContextWindow mutate flushBuffer-scoped summary variables in place
 
 #### What function call it:
-- js/translator.js (translateViaAiServer flushBuffer)
+- js/translator.js (translateViaAiServer flushBuffer)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### reconstructManualStepDisplayBlock — Reconstructs the manual-step display block for a target translatedLines entry by replaying the filter+join display order
 
 #### What function call it:
-- js/translator.js (translateViaAiServer flushBuffer manual-step continue path)
+- js/translator.js (translateViaAiServer flushBuffer manual-step continue path)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### flattenTranslatedLines — Flattens a translatedLines array whose entries may contain embedded newlines into a single flat array of display lines
 
 #### What function call it:
-- js/translator.js (translateViaAiServer final flatten step)
+- js/translator.js (translateViaAiServer final flatten step)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### translateViaAiServer — Core sequential translation loop: buffers dialogue, strips stylization, resolves name plates, translates via translateChunkWithContext, handles manual-step checkpoints, commits to file
 
 #### What function call it:
-- HTML event handler via main.js window.translateViaAiServer (HTML Translate button)
+- HTML event handler via main.js window.translateViaAiServer (HTML Translate button)[cite: 2]
 
 #### What functions are used in it :
 - js/translator.js (flushBuffer, stripLine, resolveNamePlate, makeSummaryStateAccessor, reconstructManualStepDisplayBlock, flattenTranslatedLines), js/translator-llm.js (buildTieredContextWindow, translateChunkWithContext, wrapTextToLines), js/ui-manual-step.js (promptUserForManualStep, setCurrentSourceLine, hideCurrentSourceLine), js/ui.js (clearError, showError), js/parser.js (commitTextToRightFile), js/logger.js (beginLoop, markSession, flushLoopToDisk)
 
-### flushBuffer (nested in translateViaAiServer) — Flushes the accumulated dialogue buffer through translateChunkWithContext, handles manual-step checkpoints, pushes result into history with speaker prefix
+### flushBuffer — Flushes the accumulated dialogue buffer through translateChunkWithContext, handles manual-step checkpoints, pushes result into history with speaker prefix (nested helper in translateViaAiServer)
 
 #### What function call it:
-- js/translator.js (translateViaAiServer main loop)
+- js/translator.js (translateViaAiServer main loop)[cite: 2]
 
 #### What functions are used in it :
-- js/translator.js (stripLine, makeSummaryStateAccessor, reconstructManualStepDisplayBlock), js/translator-llm.js (buildTieredContextWindow, translateChunkWithContext, wrapTextToLines), js/ui-manual-step.js (promptUserForManualStep)
+- js/translator.js (stripLine, makeSummaryStateAccessor, reconstructManualStepDisplayBlock), js/translator-llm.js (buildTieredContextWindow, translateChunkWithContext, wrapTextToLines), js/ui-manual-step.js (promptUserForManualStep)[cite: 2]
 
 ---
 
 ## js/translator-presets.js — Operation preset definitions and default-preset JSON loaders
 
-Defines the operationPresets dictionary (temperature + systemPrompt per operation tier), the defaultPresetManifest (shipped JSON files), and the loaders that apply presets from file uploads or shipped defaults. translator.js re-exports all symbols.
+Defines the operationPresets dictionary (temperature + systemPrompt per operation tier), the defaultPresetManifest (shipped JSON files), and the loaders that apply presets from file uploads or shipped defaults. translator.js re-exports all symbols[cite: 2].
 
 ### mapPresetJsonQuiet — Maps a parsed preset JSON onto an operation config, logging (not error-bannering) the result; used by the silent default loader
 
 #### What function call it:
-- js/translator-presets.js (loadAllDefaultPresets)
+- js/translator-presets.js (loadAllDefaultPresets)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### mapPresetJson — Maps a parsed preset JSON onto an operation config, then surfaces a success banner; used by the interactive upload path
 
 #### What function call it:
-- js/translator-presets.js (loadSpecificPreset, loadDefaultPreset)
+- js/translator-presets.js (loadSpecificPreset, loadDefaultPreset)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (showError)
+- js/ui.js (showError)[cite: 2]
 
 ### loadSpecificPreset — Loads and maps preset config from an uploaded JSON file for a specified operation
 
 #### What function call it:
-- HTML event handler via main.js window.loadSpecificPreset (HTML file-upload onchange), js/ui.js (renderDistinctPresetControls via global window.loadSpecificPreset)
+- HTML event handler via main.js window.loadSpecificPreset (HTML file-upload onchange), js/ui.js (renderDistinctPresetControls via global window.loadSpecificPreset)[cite: 2]
 
 #### What functions are used in it :
-- js/translator-presets.js (mapPresetJson), js/ui.js (showError)
+- js/translator-presets.js (mapPresetJson), js/ui.js (showError)[cite: 2]
 
 ### loadDefaultPreset — Fetches a shipped default preset JSON from default_presets/ and applies it to the matching operation
 
 #### What function call it:
-- HTML event handler via main.js window.loadDefaultPreset (HTML default-preset button)
+- HTML event handler via main.js window.loadDefaultPreset (HTML default-preset button)[cite: 2]
 
 #### What functions are used in it :
-- js/translator-presets.js (mapPresetJson), js/ui.js (showError)
+- js/translator-presets.js (mapPresetJson), js/ui.js (showError)[cite: 2]
 
 ### loadAllDefaultPresets — Loads every shipped default preset from default_presets/ into operationPresets on startup
 
 #### What function call it:
-- js/main.js (DOMContentLoaded)
+- js/main.js (DOMContentLoaded)[cite: 2]
 
 #### What functions are used in it :
-- js/translator-presets.js (mapPresetJsonQuiet)
+- js/translator-presets.js (mapPresetJsonQuiet)[cite: 2]
 
 ---
 
 ## js/translator-llm.js — LLM HTTP helpers: model discovery, text cleaning, tiered summarization, validation, and chunk translation
 
-Contains the AI server model-list fetcher, text-wrapping and output-cleaning helpers, the tiered summarization engine (recent + archival), the romaji-fragment detector, the AI quality validator, the context-leak detector, the chunk translator with retry logic, and the tiered context-window builder. translator.js re-exports all symbols.
+Contains the AI server model-list fetcher, text-wrapping and output-cleaning helpers, the tiered summarization engine (recent + archival), the romaji-fragment detector, the AI quality validator, the context-leak detector, the chunk translator with retry logic, and the tiered context-window builder. translator.js re-exports all symbols[cite: 2].
 
 ### fetchAiModels — Queries available local AI Server model endpoints and populates the model selection dropdown
 
 #### What function call it:
-- js/main.js (DOMContentLoaded, window.fetchAiModels wiring)
+- js/main.js (DOMContentLoaded, window.fetchAiModels wiring)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (clearError, showError)
+- js/ui.js (clearError, showError)[cite: 2]
 
 ### wrapTextToLines — Wraps a string of text into an array of lines bounded by a max character length
 
 #### What function call it:
-- js/translator.js (translateViaAiServer flushBuffer)
+- js/translator.js (translateViaAiServer flushBuffer)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### cleanModelOutput — Cleans raw LLM outputs by stripping conversational filler, prefixes, code blocks, and surrounding quotes
 
 #### What function call it:
-- js/translator-llm.js (translateChunkWithContext)
+- js/translator-llm.js (translateChunkWithContext)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### cleanSummaryOutput — Cleans raw LLM summary outputs by stripping preamble, role labels, and surrounding quotes
 
 #### What function call it:
-- js/translator-llm.js (updateRecentSummary, updateArchivalSummary)
+- js/translator-llm.js (updateRecentSummary, updateArchivalSummary)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### updateRecentSummary — Updates the Tier 2 rolling recent scene summary with newly confirmed dialogue lines
 
 #### What function call it:
-- js/translator-llm.js (buildTieredContextWindow, summarizeOldContext)
+- js/translator-llm.js (buildTieredContextWindow, summarizeOldContext)[cite: 2]
 
 #### What functions are used in it :
 - js/translator-llm.js (cleanSummaryOutput), js/logger.js (logAIInteraction)
@@ -519,31 +519,31 @@ Contains the AI server model-list fetcher, text-wrapping and output-cleaning hel
 ### updateArchivalSummary — Updates the Tier 3 archival summary by compressing an overflowing scene recap
 
 #### What function call it:
-- js/translator-llm.js (buildTieredContextWindow)
+- js/translator-llm.js (buildTieredContextWindow)[cite: 2]
 
 #### What functions are used in it :
-- js/translator-llm.js (cleanSummaryOutput), js/logger.js (logAIInteraction)
+- js/translator-llm.js (cleanSummaryOutput)[cite: 2]
 
 ### summarizeOldContext — Summarizes older dialogue context lines into a single sentence (backwards-compat wrapper around updateRecentSummary)
 
 #### What function call it:
-- js/translator.js (legacy callers)
+- js/translator.js (legacy callers)[cite: 2]
 
 #### What functions are used in it :
-- js/translator-llm.js (updateRecentSummary)
+- js/translator-llm.js (updateRecentSummary)[cite: 2]
 
 ### detectRomajiFragment — Detects leftover Japanese romaji fragments in an English translation; returns the first match or null
 
 #### What function call it:
-- js/translator-llm.js (translateChunkWithContext)
+- js/translator-llm.js (translateChunkWithContext)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### assessTranslationQualityWithAI — Assesses translation quality via a stringent QA prompt; returns true (pass) unless a clean standalone FAIL is emitted
 
 #### What function call it:
-- js/translator-llm.js (translateChunkWithContext)
+- js/translator-llm.js (translateChunkWithContext)[cite: 2]
 
 #### What functions are used in it :
 - js/logger.js (logAIInteraction)
@@ -551,15 +551,15 @@ Contains the AI server model-list fetcher, text-wrapping and output-cleaning hel
 ### detectContextLeak — Detects whether a prior context line leaked into the translation output (exact + sliding 30-char window match)
 
 #### What function call it:
-- js/translator-llm.js (translateChunkWithContext)
+- js/translator-llm.js (translateChunkWithContext)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### translateChunkWithContext — Translates a text chunk with prior context, running a multi-check validation gate (Japanese, romaji, context leak, AI validator) with retry logic
 
 #### What function call it:
-- js/translator.js (translateViaAiServer, flushBuffer, resolveNamePlate), js/benchmark.js (runParameterSweepBenchmark)
+- js/translator.js (translateViaAiServer, flushBuffer, resolveNamePlate), js/benchmark.js (runParameterSweepBenchmark)[cite: 2]
 
 #### What functions are used in it :
 - js/translator-llm.js (assessTranslationQualityWithAI, cleanModelOutput, detectContextLeak, detectRomajiFragment), js/logger.js (logAIInteraction)
@@ -567,423 +567,423 @@ Contains the AI server model-list fetcher, text-wrapping and output-cleaning hel
 ### buildTieredContextWindow — Builds the tiered context window (Raw Tail -> Recent Summary -> Archival Summary) shared by the pipeline and benchmark
 
 #### What function call it:
-- js/translator.js (translateViaAiServer flushBuffer), js/benchmark.js (runParameterSweepBenchmark), js/ui-manual-step.js (refreshStepContextPreview)
+- js/translator.js (translateViaAiServer flushBuffer), js/benchmark.js (runParameterSweepBenchmark), js/ui-manual-step.js (refreshStepContextPreview)[cite: 2]
 
 #### What functions are used in it :
-- js/translator-llm.js (updateArchivalSummary, updateRecentSummary)
+- js/translator-llm.js (updateArchivalSummary, updateRecentSummary)[cite: 2]
 
 ---
 
 ## js/ui.js — Debug modal, stylization-map CRUD, and notification banner (error/success/warning)
 
-Manages the debug modal (open/close/page switching), the stylization map editor (save, order, commit discovered mappings, delete, copy), the discovered-mappings review UI, and the notification banner (showError red / showSuccess green / showWarning yellow, all sharing #errorBanner). Re-exports symbols from ui-manual-step.js and ui-layout.js.
+Manages the debug modal (open/close/page switching), the stylization map editor (save, order, commit discovered mappings, delete, copy), the discovered-mappings review UI, and the notification banner (showError red / showSuccess green / showWarning yellow, all sharing #errorBanner). Re-exports symbols from ui-manual-step.js and ui-layout.js[cite: 2].
 
 ### showError — Displays a red error message banner and logs to console
 
 #### What function call it:
-- js/parser.js (loadFiles, saveEditsToMemory, downloadFile, injectTranslationToRight), js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/translator-llm.js (fetchAiModels), js/translator-presets.js (loadSpecificPreset, loadDefaultPreset), js/ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings), js/benchmark.js (runParameterSweepBenchmark)
+- js/parser.js (loadFiles, saveEditsToMemory, downloadFile, injectTranslationToRight), js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/translator-llm.js (fetchAiModels), js/translator-presets.js (loadSpecificPreset, loadDefaultPreset), js/ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings), js/benchmark.js (runParameterSweepBenchmark)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (setBanner)
+- js/ui.js (setBanner)[cite: 2]
 
 ### showSuccess — Displays a green success banner and logs to console
 
 #### What function call it:
-- js/parser.js (saveEditsToMemory)
+- js/parser.js (saveEditsToMemory)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (setBanner)
+- js/ui.js (setBanner)[cite: 2]
 
 ### showWarning — Displays a yellow warning banner and logs to console
 
 #### What function call it:
-- js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/benchmark.js (runParameterSweepBenchmark)
+- js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/benchmark.js (runParameterSweepBenchmark)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (setBanner)
+- js/ui.js (setBanner)[cite: 2]
 
 ### setBanner — Applies a banner variant class to #errorBanner, shows it, and sets its text (shared by showError/showSuccess/showWarning)
 
 #### What function call it:
-- js/ui.js (showError, showSuccess, showWarning)
+- js/ui.js (showError, showSuccess, showWarning)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### clearError — Clears and hides the message banner (error, success, or warning)
 
 #### What function call it:
-- js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/translator-llm.js (fetchAiModels)
+- js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/translator-llm.js (fetchAiModels)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### renderDistinctPresetControls — Renders one custom-upload row per default preset file in default_presets/, each with a display label showing the active preset file name (default or custom)
 
 #### What function call it:
-- js/ui.js (openDebugMenu)
+- js/ui.js (openDebugMenu)[cite: 2]
 
 #### What functions are used in it :
-- js/translator-presets.js (loadSpecificPreset via global window.loadSpecificPreset)
+- js/translator-presets.js (loadSpecificPreset via global window.loadSpecificPreset)[cite: 2]
 
 ### openDebugMenu — Opens the debug modal and initializes input values from state; disables the Save Map button until the editor is edited
 
 #### What function call it:
-- HTML event handler via main.js window.openDebugMenu (HTML Debug button)
+- HTML event handler via main.js window.openDebugMenu (HTML Debug button)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (updateDebugPageDisplay, renderDistinctPresetControls, renderDiscoveredMappingsUI, setSaveMapButtonEnabled, initStylizationMapEditorSaveActivation)
+- js/ui.js (updateDebugPageDisplay, renderDistinctPresetControls, renderDiscoveredMappingsUI, setSaveMapButtonEnabled, initStylizationMapEditorSaveActivation)[cite: 2]
 
 ### switchDebugPage — Switches between debug modal pages
 
 #### What function call it:
-- HTML event handler via main.js window.switchDebugPage (HTML prev/next buttons)
+- HTML event handler via main.js window.switchDebugPage (HTML prev/next buttons)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (updateDebugPageDisplay)
+- js/ui.js (updateDebugPageDisplay)[cite: 2]
 
 ### updateDebugPageDisplay — Updates section visibility and button states for the current debug page
 
 #### What function call it:
-- js/ui.js (openDebugMenu, switchDebugPage)
+- js/ui.js (openDebugMenu, switchDebugPage)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### closeDebugMenu — Saves debug modal config changes, reorders the stylization map, and closes the overlay
 
 #### What function call it:
-- HTML event handler via main.js window.closeDebugMenu (HTML Save & Close button)
+- HTML event handler via main.js window.closeDebugMenu (HTML Save & Close button)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (orderStylizationMap, saveUIStateToCache, showError), js/ui-manual-step.js (syncManualStepUIVisibility)
+- js/ui.js (orderStylizationMap, saveUIStateToCache, showError), js/ui-manual-step.js (syncManualStepUIVisibility)[cite: 2]
 
 ### closeDebugMenuWithoutSaving — Closes the debug modal without saving
 
 #### What function call it:
-- HTML event handler via main.js window.closeDebugMenuWithoutSaving (HTML Cancel button)
+- HTML event handler via main.js window.closeDebugMenuWithoutSaving (HTML Cancel button)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### saveStylizationMapFromView — Parses and saves the stylization map editor JSON to memory and cache, then disables the Save Map button
 
 #### What function call it:
-- HTML event handler via main.js window.saveStylizationMapFromView (HTML Save Map button)
+- HTML event handler via main.js window.saveStylizationMapFromView (HTML Save Map button)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (orderStylizationMap, saveUIStateToCache, setSaveMapButtonEnabled, showError)
+- js/ui.js (orderStylizationMap, saveUIStateToCache, setSaveMapButtonEnabled, showError)[cite: 2]
 
 ### setSaveMapButtonEnabled — Enables or disables the Save Map button and toggles its grayed-out style
 
 #### What function call it:
-- js/ui.js (saveStylizationMapFromView, openDebugMenu, initStylizationMapEditorSaveActivation), js/translator.js (generateStylizationMapWithAI)
+- js/ui.js (saveStylizationMapFromView, openDebugMenu, initStylizationMapEditorSaveActivation), js/translator.js (generateStylizationMapWithAI)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### initStylizationMapEditorSaveActivation — Attaches a one-time input listener to the stylization map editor so any edit reactivates the Save Map button
 
 #### What function call it:
-- js/ui.js (openDebugMenu)
+- js/ui.js (openDebugMenu)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (setSaveMapButtonEnabled)
+- js/ui.js (setSaveMapButtonEnabled)[cite: 2]
 
 ### renderDiscoveredMappingsUI — Renders the HTML container listing discovered stylization mappings pending review
 
 #### What function call it:
-- js/translator.js (generateStylizationMapWithAI), js/ui.js (openDebugMenu, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, setAllDiscoveredSelection)
+- js/translator.js (generateStylizationMapWithAI), js/ui.js (openDebugMenu, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, setAllDiscoveredSelection)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (setAllDiscoveredSelection, toggleDiscoveredSelection, updateDiscoveredKey, updateDiscoveredVal)
+- js/ui.js (setAllDiscoveredSelection, toggleDiscoveredSelection, updateDiscoveredKey, updateDiscoveredVal)[cite: 2]
 
 ### toggleDiscoveredSelection — Updates the selection status of an individual pending discovered mapping
 
 #### What function call it:
-- HTML event handler via main.js window.toggleDiscoveredSelection (HTML checkbox onchange)
+- HTML event handler via main.js window.toggleDiscoveredSelection (HTML checkbox onchange)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### setAllDiscoveredSelection — Sets the selection state for all pending discovered mappings at once
 
 #### What function call it:
-- HTML event handler via main.js window.setAllDiscoveredSelection (HTML Select/Deselect All buttons)
+- HTML event handler via main.js window.setAllDiscoveredSelection (HTML Select/Deselect All buttons)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (renderDiscoveredMappingsUI)
+- js/ui.js (renderDiscoveredMappingsUI)[cite: 2]
 
 ### updateDiscoveredKey — Updates the key string of a pending discovered mapping entry
 
 #### What function call it:
-- HTML event handler via main.js window.updateDiscoveredKey (HTML input oninput)
+- HTML event handler via main.js window.updateDiscoveredKey (HTML input oninput)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### updateDiscoveredVal — Updates the value string of a pending discovered mapping entry
 
 #### What function call it:
-- HTML event handler via main.js window.updateDiscoveredVal (HTML input oninput)
+- HTML event handler via main.js window.updateDiscoveredVal (HTML input oninput)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### orderStylizationMap — Returns an ordered copy of a stylization map: priority override first, then names, then others, each by key length desc; drops empty-value entries
 
 #### What function call it:
-- js/ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap)
+- js/ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### commitApprovedMappingsToMap — Commits selected pending discovered mappings into the heavy stylization map; skips empty and __priorityOverride__ keys
 
 #### What function call it:
-- HTML event handler via main.js window.commitApprovedMappingsToMap (HTML Add Selected button)
+- HTML event handler via main.js window.commitApprovedMappingsToMap (HTML Add Selected button)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (orderStylizationMap, renderDiscoveredMappingsUI, saveUIStateToCache, showError)
+- js/ui.js (orderStylizationMap, renderDiscoveredMappingsUI, saveUIStateToCache, showError)[cite: 2]
 
 ### deleteSelectedDiscoveredMappings — Deletes selected items from the pending discovered mappings list
 
 #### What function call it:
-- HTML event handler via main.js window.deleteSelectedDiscoveredMappings (HTML Delete Selected button)
+- HTML event handler via main.js window.deleteSelectedDiscoveredMappings (HTML Delete Selected button)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (renderDiscoveredMappingsUI, showError)
+- js/ui.js (renderDiscoveredMappingsUI, showError)[cite: 2]
 
 ### copyStylizationMapToClipboard — Copies the stylization map editor text to the system clipboard
 
 #### What function call it:
-- HTML event handler via main.js window.copyStylizationMapToClipboard (HTML Copy button)
+- HTML event handler via main.js window.copyStylizationMapToClipboard (HTML Copy button)[cite: 2]
 
 #### What functions are used in it :
-- js/ui.js (showError)
+- js/ui.js (showError)[cite: 2]
 
 ---
 
 ## js/ui-manual-step.js — Name-plate and manual step-by-step override modals
 
-Contains the name-plate translation modal, the manual-step toolbar (continue/retranslate/apply), the live context-preview recompute, the bracket-strip toggle sync, and the source-line display. ui.js re-exports all symbols.
+Contains the name-plate translation modal, the manual-step toolbar (continue/retranslate/apply), the live context-preview recompute, the bracket-strip toggle sync, and the source-line display. ui.js re-exports all symbols[cite: 2].
 
 ### promptUserForNameTranslation — Displays a modal to review/modify character name translations; returns a promise resolving to the user-approved name
 
 #### What function call it:
-- js/translator.js (resolveNamePlate)
+- js/translator.js (resolveNamePlate)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### resolveNameModal — Resolves the name translation modal promise with the user's input value
 
 #### What function call it:
-- HTML event handler via main.js window.resolveNameModal (HTML Confirm button)
+- HTML event handler via main.js window.resolveNameModal (HTML Confirm button)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### closeNameModal — Closes the name translation modal with an empty fallback value
 
 #### What function call it:
-- HTML event handler via main.js window.closeNameModal (HTML Cancel button)
+- HTML event handler via main.js window.closeNameModal (HTML Cancel button)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### refreshStepContextPreview — Recomputes the context-preview dropdown from stored history + current step settings by replaying through buildTieredContextWindow
 
 #### What function call it:
-- js/ui-manual-step.js (promptUserForManualStep, applyStepContextSettings, handleContextLinesChange)
+- js/ui-manual-step.js (promptUserForManualStep, applyStepContextSettings, handleContextLinesChange)[cite: 2]
 
 #### What functions are used in it :
-- js/translator-llm.js (buildTieredContextWindow)
+- js/translator-llm.js (buildTieredContextWindow)[cite: 2]
 
 ### syncManualStepUIVisibility — Synchronizes the visibility of the manual step toolbar and source-pane label/actions based on manual mode state
 
 #### What function call it:
-- js/ui.js (closeDebugMenu, syncManualStepModeLive), js/main.js (DOMContentLoaded)
+- js/ui.js (closeDebugMenu, syncManualStepModeLive), js/main.js (DOMContentLoaded)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### syncManualStepModeLive — Toggles manual step mode live when the debug checkbox changes
 
 #### What function call it:
-- HTML event handler via main.js window.syncManualStepModeLive (HTML checkbox onchange)
+- HTML event handler via main.js window.syncManualStepModeLive (HTML checkbox onchange)[cite: 2]
 
 #### What functions are used in it :
-- js/ui-manual-step.js (syncManualStepUIVisibility), js/database.js (saveUIStateToCache)
+- js/ui-manual-step.js (syncManualStepUIVisibility), js/database.js (saveUIStateToCache)[cite: 2]
 
 ### syncBracketStripToggles — Reads both bracket-strip checkboxes into state live on toggle
 
 #### What function call it:
-- HTML event handler via main.js window.syncBracketStripToggles (HTML checkbox onchange)
+- HTML event handler via main.js window.syncBracketStripToggles (HTML checkbox onchange)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### setCurrentSourceLine — Shows the current source line being translated in the permanently visible element
 
 #### What function call it:
-- js/translator.js (translateViaAiServer main loop)
+- js/translator.js (translateViaAiServer main loop)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### hideCurrentSourceLine — Clears the source line text when translation ends
 
 #### What function call it:
-- js/translator.js (translateViaAiServer completion)
+- js/translator.js (translateViaAiServer completion)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### handleContextLinesChange — Handles a context-lines input change: confirms before recomputing summaries
 
 #### What function call it:
-- js/ui-manual-step.js (promptUserForManualStep input listener)
+- js/ui-manual-step.js (promptUserForManualStep input listener)[cite: 2]
 
 #### What functions are used in it :
-- js/ui-manual-step.js (refreshStepContextPreview)
+- js/ui-manual-step.js (refreshStepContextPreview)[cite: 2]
 
 ### handleRawLinesChange — Handles a raw-lines input change: reshapes the raw tail display without summary recalc
 
 #### What function call it:
-- js/ui-manual-step.js (promptUserForManualStep input listener)
+- js/ui-manual-step.js (promptUserForManualStep input listener)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### promptUserForManualStep — Opens the manual step toolbar for step-by-step evaluation; stores history/summary context, syncs inputs, resolves with the chosen action
 
 #### What function call it:
-- js/translator.js (translateViaAiServer flushBuffer manual-step loop)
+- js/translator.js (translateViaAiServer flushBuffer manual-step loop)[cite: 2]
 
 #### What functions are used in it :
-- js/ui-manual-step.js (refreshStepContextPreview)
+- js/ui-manual-step.js (refreshStepContextPreview)[cite: 2]
 
 ### resolveManualStepContinue — Resolves the manual step prompt with a continue action, capturing context/raw values and manual summary edits
 
 #### What function call it:
-- HTML event handler via main.js window.resolveManualStepContinue (HTML Continue button)
+- HTML event handler via main.js window.resolveManualStepContinue (HTML Continue button)[cite: 2]
 
 #### What functions are used in it :
-- js/ui-manual-step.js (readManualSummaryEdits)
+- js/ui-manual-step.js (readManualSummaryEdits)[cite: 2]
 
 ### applyStepContextSettings — Applies manual override context/raw values to state and recomputes summaries from history
 
 #### What function call it:
-- HTML event handler via main.js window.applyStepContextSettings (HTML Apply button)
+- HTML event handler via main.js window.applyStepContextSettings (HTML Apply button)[cite: 2]
 
 #### What functions are used in it :
-- js/ui-manual-step.js (refreshStepContextPreview)
+- js/ui-manual-step.js (refreshStepContextPreview)[cite: 2]
 
 ### triggerStepRetranslation — Resolves the manual step prompt with a retranslate action, capturing context/raw values and manual summary edits
 
 #### What function call it:
-- HTML event handler via main.js window.triggerStepRetranslation (HTML Retranslate button)
+- HTML event handler via main.js window.triggerStepRetranslation (HTML Retranslate button)[cite: 2]
 
 #### What functions are used in it :
-- js/ui-manual-step.js (readManualSummaryEdits)
+- js/ui-manual-step.js (readManualSummaryEdits)[cite: 2]
 
 ### readManualSummaryEdits — Reads the current (possibly user-edited) archival and recent summary boxes; returns null if neither box exists
 
 #### What function call it:
-- js/ui-manual-step.js (resolveManualStepContinue, triggerStepRetranslation)
+- js/ui-manual-step.js (resolveManualStepContinue, triggerStepRetranslation)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ---
 
 ## js/ui-layout.js — Pure DOM layout helpers: modal drag, pane/column/row resize, auto-number inputs
 
-Contains the debug modal drag handler, the generic column/row resizers, the footer sync, the pane resizer initializer, and the auto-resizing number input initializer. No translation or state logic. ui.js re-exports all symbols.
+Contains the debug modal drag handler, the generic column/row resizers, the footer sync, the pane resizer initializer, and the auto-resizing number input initializer. No translation or state logic. ui.js re-exports all symbols[cite: 2].
 
 ### initDraggableModal — Initializes mouse drag-and-drop for the floating debug modal window
 
 #### What function call it:
-- js/main.js (DOMContentLoaded)
+- js/main.js (DOMContentLoaded)[cite: 2]
 
 #### What functions are used in it :
-- js/ui-layout.js (onMouseMove, onMouseUp)
+- js/ui-layout.js (onMouseMove, onMouseUp)[cite: 2]
 
-### onMouseMove (nested in initDraggableModal) — Moves the modal on mouse drag
+### onMouseMove — Moves the modal on mouse drag (nested helper in initDraggableModal)
 
 #### What function call it:
-- js/ui-layout.js (initDraggableModal via document mousemove listener)
+- js/ui-layout.js (initDraggableModal via document mousemove listener)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
-### onMouseUp (nested in initDraggableModal) — Stops the modal drag on mouseup
+### onMouseUp — Stops the modal drag on mouseup (nested helper in initDraggableModal)
 
 #### What function call it:
-- js/ui-layout.js (initDraggableModal via document mouseup listener)
+- js/ui-layout.js (initDraggableModal via document mouseup listener)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
-### _initColResizer — Creates a column (horizontal) drag resizer between two elements
+### initColResizer — Creates a column (horizontal) drag resizer between two elements
 
 #### What function call it:
-- js/ui-layout.js (initPaneResizer)
+- js/ui-layout.js (initPaneResizer)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
-### _initRowResizer — Creates a row (vertical) drag resizer between two sibling elements
+### initRowResizer — Creates a row (vertical) drag resizer between two sibling elements
 
 #### What function call it:
-- js/ui-layout.js (initPaneResizer)
+- js/ui-layout.js (initPaneResizer)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
-### _syncFooter — Syncs the external footer row alignment with the sidebar and pane widths
+### syncFooter — Syncs the external footer row alignment with the sidebar and pane widths
 
 #### What function call it:
-- js/ui-layout.js (initPaneResizer via onResize callback + window resize listener)
+- js/ui-layout.js (initPaneResizer via onResize callback + window resize listener)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ### initPaneResizer — Initializes all draggable resize handles (sidebar, source panes, context rows) and aligns the footer
 
 #### What function call it:
-- js/main.js (DOMContentLoaded)
+- js/main.js (DOMContentLoaded)[cite: 2]
 
 #### What functions are used in it :
-- js/ui-layout.js (_initColResizer, _initRowResizer)
+- js/ui-layout.js (initColResizer, initRowResizer)[cite: 2]
 
 ### initAutoNumberInputs — Makes .auto-number-input elements dynamically resize to fit their value
 
 #### What function call it:
-- js/main.js (DOMContentLoaded)
+- js/main.js (DOMContentLoaded)[cite: 2]
 
 #### What functions are used in it :
-- js/ui-layout.js (resize)
+- js/ui-layout.js (resize)[cite: 2]
 
-### resize (nested in initAutoNumberInputs) — Sets a calc width based on the input value length
+### resize — Sets a calc width based on the input value length (nested helper in initAutoNumberInputs)
 
 #### What function call it:
-- js/ui-layout.js (initAutoNumberInputs)
+- js/ui-layout.js (initAutoNumberInputs)[cite: 2]
 
 #### What functions are used in it :
-- (none)
+- (none)[cite: 2]
 
 ---
 
 ## js/benchmark.js — Multi-dimensional parameter sweep benchmark with chunked grading
 
-Runs a context-lines × raw-limits sweep matrix, translates each cell via the production pipeline, grades each chunk independently via the AI auditor, and averages the scores into a per-cell report.
+Runs a context-lines × raw-limits sweep matrix, translates each cell via the production pipeline, grades each chunk independently via the AI auditor, and averages the scores into a per-cell report[cite: 2].
 
 ### runParameterSweepBenchmark — Runs the multi-dimensional parameter sweep matrix and logs evaluation feedback and scores; uses an AbortController (silent abort of any running process, signal checks in the sweep loop, try/catch with abort handling)
 
 #### What function call it:
-- HTML event handler via main.js window.runParameterSweepBenchmark (HTML Run Benchmark button)
+- HTML event handler via main.js window.runParameterSweepBenchmark (HTML Run Benchmark button)[cite: 2]
 
 #### What functions are used in it :
 - js/benchmark.js (gradeTranslatedChunks), js/translator.js (resolveNamePlate), js/translator-llm.js (buildTieredContextWindow, translateChunkWithContext), js/parser.js (extractScriptText), js/ui.js (showError, showWarning), js/logger.js (beginLoop, markSession, flushLoopToDisk)
@@ -991,15 +991,15 @@ Runs a context-lines × raw-limits sweep matrix, translates each cell via the pr
 ### gradeTranslatedChunks — Splits translated lines into fixed-size chunks, grades each via the auditor, averages the per-chunk scores into one cell score; checks the abort signal between chunks and forwards it to the grader
 
 #### What function call it:
-- js/benchmark.js (runParameterSweepBenchmark)
+- js/benchmark.js (runParameterSweepBenchmark)[cite: 2]
 
 #### What functions are used in it :
-- js/benchmark.js (gradeCandidateAgent)
+- js/benchmark.js (gradeCandidateAgent)[cite: 2]
 
 ### gradeCandidateAgent — Acts as an evaluation grading engine that prompts an AI model to score a candidate translation against a reference standard; passes the abort signal to fetch
 
 #### What function call it:
-- js/benchmark.js (gradeTranslatedChunks)
+- js/benchmark.js (gradeTranslatedChunks)[cite: 2]
 
 #### What functions are used in it :
 - js/logger.js (logAIInteraction)
