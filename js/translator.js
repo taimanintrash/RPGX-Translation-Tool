@@ -9,6 +9,7 @@ import { showError, showWarning, clearError, setSaveMapButtonEnabled, promptUser
 import { commitTextToRightFile } from './parser.js';
 import { operationPresets } from './translator-presets.js';
 import { translateChunkWithContext, buildTieredContextWindow, wrapTextToLines } from './translator-llm.js';
+import { beginLoop, logAIInteraction, markSession, flushLoopToDisk } from './logger.js';
 
 // Re-export preset/manifest symbols so imports from ./translator.js resolve unchanged.
 export { operationPresets, defaultPresetManifest, loadSpecificPreset, loadDefaultPreset, loadAllDefaultPresets } from './translator-presets.js';
@@ -217,6 +218,7 @@ export async function generateStylizationMapWithAI() {
     }
     state.currentAbortController = new AbortController();
     state.mapperGenerationActive = true;
+    beginLoop('mapping');
 
     if (loadingStatus) {
         loadingStatus.style.display = "flex";
@@ -347,6 +349,13 @@ export async function generateStylizationMapWithAI() {
                 // Parse the model output flexibly. Models may return a JSON object,
                 // individual "key":"value" lines, single-quoted pairs, or unquoted keys.
                 let phasePairs = parseMappingOutput(content);
+                logAIInteraction({
+                    preset: phase.presetKey,
+                    prompt: promptText,
+                    response: content,
+                    retryAttempt: 1,
+                    outcome: 'generated'
+                });
                 for (let { key, value } of phasePairs) {
                     // Skip if the key already exists in the base heavyStylizationMap.
                     if (state.heavyStylizationMap && Object.prototype.hasOwnProperty.call(state.heavyStylizationMap, key)) {
@@ -398,6 +407,12 @@ export async function generateStylizationMapWithAI() {
         state.currentAbortController = null;
         state.mapperGenerationActive = false;
         state.abortWarningShown = false;
+        // Flush the mapping-loop logs to disk (docs/logs/mapping/*.md) and mark
+        // the session boundary. The abort-vs-completed status is inferred from
+        // the abortWarningShown guard set by stopTranslation.
+        markSession(state.abortWarningShown ? 'aborted' : 'completed', 'mapping generation run');
+        await flushLoopToDisk('mapping');
+        beginLoop('translation');
     }
 }
 
@@ -577,6 +592,8 @@ export async function translateViaAiServer() {
     if (stopBtn) stopBtn.style.display = "inline-block";
     if (progressBar) { progressBar.style.display = "block"; progressBar.removeAttribute("value"); }
 
+    beginLoop('translation');
+
     let lines = fullText.split("\n");
     let translatedLines = [];
     let dialogueBuffer = [];
@@ -671,7 +688,9 @@ export async function translateViaAiServer() {
                             .filter(t => t)
                             .join(" ").replace(/\n/g, " ").trim();
                     }
+                    beginLoop('retranslate');
                     translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry', activeSpeakerName);
+                    beginLoop('translation');
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
                 } else {
@@ -797,6 +816,14 @@ export async function translateViaAiServer() {
         // override values. The next translation reads from .translate-config again.
         state.appliedContextLines = null;
         state.appliedRawLimit = null;
+        // Flush translation-loop logs to disk (docs/logs/translation/*.md) and mark
+        // the session boundary. The retranslate path's entries are flushed here too
+        // since they were captured under the 'translation' active loop after restore.
+        markSession(state.abortWarningShown ? 'aborted' : 'completed', 'translation run');
+        await flushLoopToDisk('translation');
+        // Retranslate (manual-step) entries were captured under the 'retranslate'
+        // loop during the run; flush them to docs/logs/manual-step/*.md too.
+        await flushLoopToDisk('retranslate');
         state.abortWarningShown = false;
     }
 }

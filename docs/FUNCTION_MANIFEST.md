@@ -2,7 +2,7 @@
 
 This document describes every JavaScript module in the RPGX Translation Tool, the functions it exports/contains, and the static call graph between them.
 
-**File load order:** `index.html` loads only `js/main.js` as `<script type="module">`. Every other file is reached via ES module imports. `main.js` imports from `database.js`, `ui.js`, `parser.js`, `translator.js`, and `benchmark.js`. `translator.js` re-exports symbols from `translator-presets.js` and `translator-llm.js`. `ui.js` re-exports symbols from `ui-manual-step.js` and `ui-layout.js`.
+**File load order:** `index.html` loads only `js/main.js` as `<script type="module">`. Every other file is reached via ES module imports. `main.js` imports from `database.js`, `ui.js`, `parser.js`, `translator.js`, and `benchmark.js`. `translator.js` re-exports symbols from `translator-presets.js` and `translator-llm.js`. `ui.js` re-exports symbols from `ui-manual-step.js` and `ui-layout.js`. `logger.js` is imported directly by `translator-llm.js`, `translator.js`, and `benchmark.js` (no re-export hub; each module imports the capture functions it needs). Log files are written to `docs/logs/<loop>/<preset>.md` at run end by the companion `serve.py` dev server (replaces `python3 -m http.server`).
 
 **HTML event handlers:** Functions wired to `window.*` in `main.js` are invoked by inline `onclick`/`onchange` attributes in `index.html`. These are noted as "Called by: HTML event handler (via main.js window.* wiring)".
 
@@ -81,6 +81,80 @@ Provides open/put/get operations for the IndexedDB cache storing the file regist
 
 #### What functions are used in it :
 - js/database.js (openDatabase)
+
+---
+
+## js/logger.js — Structured AI interaction logging (prompt/response capture by loop, written to disk)
+
+In-memory ring buffer that captures every prompt sent to the LLM and every response received, grouped by originating loop (translation / retranslate / mapping / benchmark) and further split by preset, so each preset's prompt/response pairs land in their own file for performance tracking. Each preset buffer keeps only the latest 500 entries (rolling window). At run end the buffers are flushed to disk via the companion `serve.py` write endpoint into `docs/logs/<loopFolder>/<preset>.md` (markdown, AI-parseable). Owns no `state`-object fields; keeps its own module-scoped buffers and a single `activeLoopKind` cursor that the loops set via `beginLoop()`.
+
+**Loop → folder mapping:** translation → `docs/logs/translation/`, retranslate → `docs/logs/manual-step/`, mapping → `docs/logs/mapping/`, benchmark → `docs/logs/benchmark/`.
+
+**Entry schema (simplified, 5 fields):** `preset`, `prompt`, `response`, `retryAttempt`, `outcome` (accepted / retried / fallback / generated / graded).
+
+### setCaptureEnabled — Enables or disables capture; when disabled, logging calls are no-ops so the production pipeline pays no allocation cost
+
+#### What function call it:
+- (reserved for an optional capture toggle; defaults ON)
+
+#### What functions are used in it :
+- (none)
+
+### isCaptureEnabled — Returns whether capture is currently enabled
+
+#### What function call it:
+- (reserved)
+
+#### What functions are used in it :
+- (none)
+
+### beginLoop — Sets the active loop kind so subsequent LLM calls are tagged with the loop that owns them; this is how the shared translateChunkWithContext helper is attributed to the translation / retranslate (manual-step) / mapping / benchmark loop without a parameter threaded through every call site
+
+#### What function call it:
+- js/translator.js (translateViaAiServer, flushBuffer retranslate path, generateStylizationMapWithAI + its finally), js/benchmark.js (runParameterSweepBenchmark + its finally)
+
+#### What functions are used in it :
+- (none)
+
+### logAIInteraction — Captures a single AI interaction entry with the simplified 5-field schema (preset, prompt, response, retryAttempt, outcome); routes to the active loop's buffer under its preset key; no-op when capture is disabled
+
+#### What function call it:
+- js/translator-llm.js (translateChunkWithContext accepted/retried/fallback paths, updateRecentSummary, updateArchivalSummary, assessTranslationQualityWithAI), js/translator.js (generateStylizationMapWithAI phases), js/benchmark.js (gradeCandidateAgent)
+
+#### What functions are used in it :
+- (none)
+
+### markSession — Appends a session-boundary marker (completed/aborted) to the active loop's buffer so run boundaries are visible in the exported file
+
+#### What function call it:
+- js/translator.js (translateViaAiServer finally, generateStylizationMapWithAI finally), js/benchmark.js (runParameterSweepBenchmark finally)
+
+#### What functions are used in it :
+- (none)
+
+### exportPresetAsMarkdown — Renders a loop's preset buffer as an AI-parseable markdown document with per-entry headers, metadata tags, fenced prompt/response blocks, and session-boundary headers
+
+#### What function call it:
+- js/logger.js (flushLoopToDisk)
+
+#### What functions are used in it :
+- (none)
+
+### flushLoopToDisk — Writes every preset file for a loop kind to disk via the serve.py POST /__write_log endpoint into docs/logs/<loopFolder>/<preset>.md; silently skips if the write endpoint is unavailable (plain static server)
+
+#### What function call it:
+- js/translator.js (translateViaAiServer finally, generateStylizationMapWithAI finally), js/benchmark.js (runParameterSweepBenchmark finally)
+
+#### What functions are used in it :
+- js/logger.js (exportPresetAsMarkdown, getPresetsForLoop)
+
+### clearAllLogs — Clears all captured logs across every loop kind and resets the entry sequence
+
+#### What function call it:
+- (reserved)
+
+#### What functions are used in it :
+- (none)
 
 ---
 
@@ -286,13 +360,13 @@ Contains the stylization strip phase (stripLine, shouldStripNameBrackets, applyP
 #### What functions are used in it :
 - js/translator.js (applyPriorityOverride, shouldStripNameBrackets)
 
-### generateStylizationMapWithAI — Analyzes source text to discover stutters/ticks/sounds/punctuation via a 3-phase AI analysis, populating state.pendingDiscoveredMappings
+### generateStylizationMapWithAI — Analyzes source text to discover stutters/ticks/sounds/punctuation via a 3-phase AI analysis, populating state.pendingDiscoveredMappings; sets the active log loop to 'mapping' (via beginLoop), captures each phase prompt/response, and flushes to docs/logs/mapping/*.md + marks the session in its finally
 
 #### What function call it:
 - HTML event handler via main.js window.generateStylizationMapWithAI (HTML Generate Mapping button)
 
 #### What functions are used in it :
-- js/translator.js (applyPriorityOverride, parseMappingOutput), js/ui.js (clearError, renderDiscoveredMappingsUI, showError)
+- js/translator.js (applyPriorityOverride, parseMappingOutput), js/ui.js (clearError, renderDiscoveredMappingsUI, showError), js/logger.js (beginLoop, logAIInteraction, markSession, flushLoopToDisk)
 
 ### stopTranslation — Aborts the active process via the AbortController and sets the abortWarningShown guard so the in-flight catch block surfaces a yellow warning banner naming the cancelled process (translation / mapping / benchmark)
 
@@ -340,7 +414,7 @@ Contains the stylization strip phase (stripLine, shouldStripNameBrackets, applyP
 - HTML event handler via main.js window.translateViaAiServer (HTML Translate button)
 
 #### What functions are used in it :
-- js/translator.js (flushBuffer, stripLine, resolveNamePlate, makeSummaryStateAccessor, reconstructManualStepDisplayBlock, flattenTranslatedLines), js/translator-llm.js (buildTieredContextWindow, translateChunkWithContext, wrapTextToLines), js/ui-manual-step.js (promptUserForManualStep, setCurrentSourceLine, hideCurrentSourceLine), js/ui.js (clearError, showError), js/parser.js (commitTextToRightFile)
+- js/translator.js (flushBuffer, stripLine, resolveNamePlate, makeSummaryStateAccessor, reconstructManualStepDisplayBlock, flattenTranslatedLines), js/translator-llm.js (buildTieredContextWindow, translateChunkWithContext, wrapTextToLines), js/ui-manual-step.js (promptUserForManualStep, setCurrentSourceLine, hideCurrentSourceLine), js/ui.js (clearError, showError), js/parser.js (commitTextToRightFile), js/logger.js (beginLoop, markSession, flushLoopToDisk)
 
 ### flushBuffer (nested in translateViaAiServer) — Flushes the accumulated dialogue buffer through translateChunkWithContext, handles manual-step checkpoints, pushes result into history with speaker prefix
 
@@ -440,7 +514,7 @@ Contains the AI server model-list fetcher, text-wrapping and output-cleaning hel
 - js/translator-llm.js (buildTieredContextWindow, summarizeOldContext)
 
 #### What functions are used in it :
-- js/translator-llm.js (cleanSummaryOutput)
+- js/translator-llm.js (cleanSummaryOutput), js/logger.js (logAIInteraction)
 
 ### updateArchivalSummary — Updates the Tier 3 archival summary by compressing an overflowing scene recap
 
@@ -448,7 +522,7 @@ Contains the AI server model-list fetcher, text-wrapping and output-cleaning hel
 - js/translator-llm.js (buildTieredContextWindow)
 
 #### What functions are used in it :
-- js/translator-llm.js (cleanSummaryOutput)
+- js/translator-llm.js (cleanSummaryOutput), js/logger.js (logAIInteraction)
 
 ### summarizeOldContext — Summarizes older dialogue context lines into a single sentence (backwards-compat wrapper around updateRecentSummary)
 
@@ -472,7 +546,7 @@ Contains the AI server model-list fetcher, text-wrapping and output-cleaning hel
 - js/translator-llm.js (translateChunkWithContext)
 
 #### What functions are used in it :
-- (none)
+- js/logger.js (logAIInteraction)
 
 ### detectContextLeak — Detects whether a prior context line leaked into the translation output (exact + sliding 30-char window match)
 
@@ -488,7 +562,7 @@ Contains the AI server model-list fetcher, text-wrapping and output-cleaning hel
 - js/translator.js (translateViaAiServer, flushBuffer, resolveNamePlate), js/benchmark.js (runParameterSweepBenchmark)
 
 #### What functions are used in it :
-- js/translator-llm.js (assessTranslationQualityWithAI, cleanModelOutput, detectContextLeak, detectRomajiFragment)
+- js/translator-llm.js (assessTranslationQualityWithAI, cleanModelOutput, detectContextLeak, detectRomajiFragment), js/logger.js (logAIInteraction)
 
 ### buildTieredContextWindow — Builds the tiered context window (Raw Tail -> Recent Summary -> Archival Summary) shared by the pipeline and benchmark
 
@@ -912,7 +986,7 @@ Runs a context-lines × raw-limits sweep matrix, translates each cell via the pr
 - HTML event handler via main.js window.runParameterSweepBenchmark (HTML Run Benchmark button)
 
 #### What functions are used in it :
-- js/benchmark.js (gradeTranslatedChunks), js/translator.js (resolveNamePlate), js/translator-llm.js (buildTieredContextWindow, translateChunkWithContext), js/parser.js (extractScriptText), js/ui.js (showError, showWarning)
+- js/benchmark.js (gradeTranslatedChunks), js/translator.js (resolveNamePlate), js/translator-llm.js (buildTieredContextWindow, translateChunkWithContext), js/parser.js (extractScriptText), js/ui.js (showError, showWarning), js/logger.js (beginLoop, markSession, flushLoopToDisk)
 
 ### gradeTranslatedChunks — Splits translated lines into fixed-size chunks, grades each via the auditor, averages the per-chunk scores into one cell score; checks the abort signal between chunks and forwards it to the grader
 
@@ -928,4 +1002,4 @@ Runs a context-lines × raw-limits sweep matrix, translates each cell via the pr
 - js/benchmark.js (gradeTranslatedChunks)
 
 #### What functions are used in it :
-- (none)
+- js/logger.js (logAIInteraction)
