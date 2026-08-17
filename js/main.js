@@ -17,6 +17,10 @@ export const state = {
     // Flag set true while Generate Mapping is actively running, so the strip
     // decision can XOR the mapper context against the manual-step context.
     mapperGenerationActive: false,
+    // Guard set true by stopTranslation so the in-flight catch block surfaces a
+    // warning banner ONLY for a user-initiated Stop, not for a silent abort
+    // triggered by starting another process.
+    abortWarningShown: false,
     knownNamesMap: {},
     manualStepResolver: null,
     // Applied manual-override values. When set (not null), the main translation

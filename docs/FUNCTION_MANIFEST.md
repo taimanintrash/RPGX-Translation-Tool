@@ -294,7 +294,7 @@ Contains the stylization strip phase (stripLine, shouldStripNameBrackets, applyP
 #### What functions are used in it :
 - js/translator.js (applyPriorityOverride, parseMappingOutput), js/ui.js (clearError, renderDiscoveredMappingsUI, showError)
 
-### stopTranslation — Aborts ongoing translation or generation via the active AbortController
+### stopTranslation — Aborts the active process via the AbortController and sets the abortWarningShown guard so the in-flight catch block surfaces a yellow warning banner naming the cancelled process (translation / mapping / benchmark)
 
 #### What function call it:
 - HTML event handler via main.js window.stopTranslation (HTML Stop button)
@@ -500,19 +500,43 @@ Contains the AI server model-list fetcher, text-wrapping and output-cleaning hel
 
 ---
 
-## js/ui.js — Debug modal, stylization-map CRUD, and error banner
+## js/ui.js — Debug modal, stylization-map CRUD, and notification banner (error/success/warning)
 
-Manages the debug modal (open/close/page switching), the stylization map editor (save, order, commit discovered mappings, delete, copy), the discovered-mappings review UI, and the error banner. Re-exports symbols from ui-manual-step.js and ui-layout.js.
+Manages the debug modal (open/close/page switching), the stylization map editor (save, order, commit discovered mappings, delete, copy), the discovered-mappings review UI, and the notification banner (showError red / showSuccess green / showWarning yellow, all sharing #errorBanner). Re-exports symbols from ui-manual-step.js and ui-layout.js.
 
-### showError — Displays an error message banner and logs to console
+### showError — Displays a red error message banner and logs to console
 
 #### What function call it:
-- js/parser.js (loadFiles, saveEditsToMemory, downloadFile, injectTranslationToRight), js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/translator-llm.js (fetchAiModels), js/translator-presets.js (loadSpecificPreset, loadDefaultPreset, mapPresetJson), js/ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, copyStylizationMapToClipboard), js/benchmark.js (runParameterSweepBenchmark)
+- js/parser.js (loadFiles, saveEditsToMemory, downloadFile, injectTranslationToRight), js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/translator-llm.js (fetchAiModels), js/translator-presets.js (loadSpecificPreset, loadDefaultPreset), js/ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings), js/benchmark.js (runParameterSweepBenchmark)
+
+#### What functions are used in it :
+- js/ui.js (setBanner)
+
+### showSuccess — Displays a green success banner and logs to console
+
+#### What function call it:
+- js/parser.js (saveEditsToMemory)
+
+#### What functions are used in it :
+- js/ui.js (setBanner)
+
+### showWarning — Displays a yellow warning banner and logs to console
+
+#### What function call it:
+- js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/benchmark.js (runParameterSweepBenchmark)
+
+#### What functions are used in it :
+- js/ui.js (setBanner)
+
+### setBanner — Applies a banner variant class to #errorBanner, shows it, and sets its text (shared by showError/showSuccess/showWarning)
+
+#### What function call it:
+- js/ui.js (showError, showSuccess, showWarning)
 
 #### What functions are used in it :
 - (none)
 
-### clearError — Clears and hides the error message banner
+### clearError — Clears and hides the message banner (error, success, or warning)
 
 #### What function call it:
 - js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/translator-llm.js (fetchAiModels)
@@ -520,7 +544,7 @@ Manages the debug modal (open/close/page switching), the stylization map editor 
 #### What functions are used in it :
 - (none)
 
-### renderDistinctPresetControls — Renders one custom-upload row per default preset file in default_presets/
+### renderDistinctPresetControls — Renders one custom-upload row per default preset file in default_presets/, each with a display label showing the active preset file name (default or custom)
 
 #### What function call it:
 - js/ui.js (openDebugMenu)
@@ -528,13 +552,13 @@ Manages the debug modal (open/close/page switching), the stylization map editor 
 #### What functions are used in it :
 - js/translator-presets.js (loadSpecificPreset via global window.loadSpecificPreset)
 
-### openDebugMenu — Opens the debug modal and initializes input values from state
+### openDebugMenu — Opens the debug modal and initializes input values from state; disables the Save Map button until the editor is edited
 
 #### What function call it:
 - HTML event handler via main.js window.openDebugMenu (HTML Debug button)
 
 #### What functions are used in it :
-- js/ui.js (updateDebugPageDisplay, renderDistinctPresetControls, renderDiscoveredMappingsUI)
+- js/ui.js (updateDebugPageDisplay, renderDistinctPresetControls, renderDiscoveredMappingsUI, setSaveMapButtonEnabled, initStylizationMapEditorSaveActivation)
 
 ### switchDebugPage — Switches between debug modal pages
 
@@ -568,13 +592,29 @@ Manages the debug modal (open/close/page switching), the stylization map editor 
 #### What functions are used in it :
 - (none)
 
-### saveStylizationMapFromView — Parses and saves the stylization map editor JSON to memory and cache
+### saveStylizationMapFromView — Parses and saves the stylization map editor JSON to memory and cache, then disables the Save Map button
 
 #### What function call it:
 - HTML event handler via main.js window.saveStylizationMapFromView (HTML Save Map button)
 
 #### What functions are used in it :
-- js/ui.js (orderStylizationMap, saveUIStateToCache, showError)
+- js/ui.js (orderStylizationMap, saveUIStateToCache, setSaveMapButtonEnabled, showError)
+
+### setSaveMapButtonEnabled — Enables or disables the Save Map button and toggles its grayed-out style
+
+#### What function call it:
+- js/ui.js (saveStylizationMapFromView, openDebugMenu, initStylizationMapEditorSaveActivation), js/translator.js (generateStylizationMapWithAI)
+
+#### What functions are used in it :
+- (none)
+
+### initStylizationMapEditorSaveActivation — Attaches a one-time input listener to the stylization map editor so any edit reactivates the Save Map button
+
+#### What function call it:
+- js/ui.js (openDebugMenu)
+
+#### What functions are used in it :
+- js/ui.js (setSaveMapButtonEnabled)
 
 ### renderDiscoveredMappingsUI — Renders the HTML container listing discovered stylization mappings pending review
 
@@ -866,15 +906,15 @@ Contains the debug modal drag handler, the generic column/row resizers, the foot
 
 Runs a context-lines × raw-limits sweep matrix, translates each cell via the production pipeline, grades each chunk independently via the AI auditor, and averages the scores into a per-cell report.
 
-### runParameterSweepBenchmark — Runs the multi-dimensional parameter sweep matrix and logs evaluation feedback and scores
+### runParameterSweepBenchmark — Runs the multi-dimensional parameter sweep matrix and logs evaluation feedback and scores; uses an AbortController (silent abort of any running process, signal checks in the sweep loop, try/catch with abort handling)
 
 #### What function call it:
 - HTML event handler via main.js window.runParameterSweepBenchmark (HTML Run Benchmark button)
 
 #### What functions are used in it :
-- js/benchmark.js (gradeTranslatedChunks), js/translator.js (resolveNamePlate), js/translator-llm.js (buildTieredContextWindow, translateChunkWithContext), js/parser.js (extractScriptText), js/ui.js (showError)
+- js/benchmark.js (gradeTranslatedChunks), js/translator.js (resolveNamePlate), js/translator-llm.js (buildTieredContextWindow, translateChunkWithContext), js/parser.js (extractScriptText), js/ui.js (showError, showWarning)
 
-### gradeTranslatedChunks — Splits translated lines into fixed-size chunks, grades each via the auditor, averages the per-chunk scores into one cell score
+### gradeTranslatedChunks — Splits translated lines into fixed-size chunks, grades each via the auditor, averages the per-chunk scores into one cell score; checks the abort signal between chunks and forwards it to the grader
 
 #### What function call it:
 - js/benchmark.js (runParameterSweepBenchmark)
@@ -882,7 +922,7 @@ Runs a context-lines × raw-limits sweep matrix, translates each cell via the pr
 #### What functions are used in it :
 - js/benchmark.js (gradeCandidateAgent)
 
-### gradeCandidateAgent — Acts as an evaluation grading engine that prompts an AI model to score a candidate translation against a reference standard
+### gradeCandidateAgent — Acts as an evaluation grading engine that prompts an AI model to score a candidate translation against a reference standard; passes the abort signal to fetch
 
 #### What function call it:
 - js/benchmark.js (gradeTranslatedChunks)

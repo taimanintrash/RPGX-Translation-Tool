@@ -1,6 +1,7 @@
 import { state } from './main.js';
 import { extractScriptText } from './parser.js';
 import { translateChunkWithContext, buildTieredContextWindow, resolveNamePlate, operationPresets } from './translator.js';
+import { showError, showWarning } from './ui.js';
 
 /**
  * Runs a multi-dimensional parameter sweep matrix to audit translation inconsistency by testing different context lines and raw limits, then logs the evaluation feedback and scores.
@@ -36,6 +37,13 @@ export async function runParameterSweepBenchmark() {
         showError("Provide valid comma-separated sweep numbers for context and raw limits.");
     }
 
+    // Silently abort any currently-running process before starting the sweep.
+    if (state.currentAbortController) {
+        state.currentAbortController.abort();
+        console.log("[Trace:Benchmark] Aborted prior process before starting benchmark sweep.");
+    }
+    state.currentAbortController = new AbortController();
+
     console.log("[Benchmark] Starting parameter sweep matrix...", { contextValues, rawLimitValues, model });
     reportBox.value = "⏳ Running parameter sweep matrix with granular multi-dimensional inconsistency auditing...\n";
     // Respect the debug "Limit Max Lines to Translate" setting from page 1.
@@ -46,8 +54,10 @@ export async function runParameterSweepBenchmark() {
     console.log(`[Benchmark] Using ${lines.length} line(s) (maxLinesLimit=${maxLinesLimit}).`);
     let resultsLog = "";
 
+    try {
     for (let cLine of contextValues) {
         for (let rLimit of rawLimitValues) {
+            if (state.currentAbortController.signal.aborted) throw new Error("Benchmark cancelled by user.");
             console.log(`[Benchmark Run] Evaluating config -> Context Lines: ${cLine}, Raw Limit: ${rLimit}`);
             reportBox.value += `\nTesting Configuration -> Context: ${cLine}, Raw Limit: ${rLimit}...`;
 
@@ -65,6 +75,7 @@ export async function runParameterSweepBenchmark() {
             };
 
             for (let line of lines) {
+                if (state.currentAbortController.signal.aborted) throw new Error("Benchmark cancelled by user.");
                 let trimmed = line.trim();
 
                 if (trimmed.startsWith("<NAME_PLATE>")) {
@@ -90,7 +101,7 @@ export async function runParameterSweepBenchmark() {
 
             // Chunked grading is delegated to the shared helper so the main sweep loop
             // reads top-to-bottom: translate -> grade -> log.
-            let scoreData = await gradeTranslatedChunks(host, model, translatedLines, referenceStandard, cLine, rLimit);
+            let scoreData = await gradeTranslatedChunks(host, model, translatedLines, referenceStandard, cLine, rLimit, state.currentAbortController.signal);
             console.log(`[Benchmark Result] Context: ${cLine}, Raw Limit: ${rLimit} | Score: ${scoreData.overallScore}/100 (avg of ${scoreData.chunkCount} chunk(s))`, scoreData);
 
             resultsLog += `--------------------------------------------------\n`;
@@ -105,6 +116,19 @@ export async function runParameterSweepBenchmark() {
     }
     reportBox.value += `\nInconsistency-focused sweep completed successfully! Check the granular scores and feedback breakdown above.`;
     console.log("[Benchmark] Sweep matrix execution complete.");
+    } catch (err) {
+        if (err.name === "AbortError" || err.message.includes("cancelled")) {
+            // Show the warning banner only for a user-initiated Stop (guard set by
+            // stopTranslation). A silent abort from starting another process shows nothing.
+            if (state.abortWarningShown) showWarning("Benchmark cancelled by user.");
+        } else {
+            showError("Benchmark sweep failed: " + err.message);
+            console.error("[Benchmark] Sweep failed:", err);
+        }
+    } finally {
+        state.currentAbortController = null;
+        state.abortWarningShown = false;
+    }
 }
 
 /**
@@ -114,7 +138,7 @@ export async function runParameterSweepBenchmark() {
  * the averaged score data plus chunkCount and chunkSize for the results log.
  * Called by: benchmark.js (runParameterSweepBenchmark)
  */
-async function gradeTranslatedChunks(host, model, translatedLines, referenceStandard, cLine, rLimit) {
+async function gradeTranslatedChunks(host, model, translatedLines, referenceStandard, cLine, rLimit, signal) {
     // Lines that are control tags or blank pass through untranslated and are grouped with
     // their adjacent dialogue for context.
     const CHUNK_SIZE = Math.max(1, parseInt(document.getElementById("benchmarkChunkSizeInput")?.value, 10) || 5);
@@ -125,7 +149,8 @@ async function gradeTranslatedChunks(host, model, translatedLines, referenceStan
 
     let chunkScores = [];
     for (let ci = 0; ci < translatedChunks.length; ci++) {
-        let chunkScore = await gradeCandidateAgent(host, model, translatedChunks[ci], referenceStandard);
+        if (signal && signal.aborted) throw new Error("Benchmark cancelled by user.");
+        let chunkScore = await gradeCandidateAgent(host, model, translatedChunks[ci], referenceStandard, signal);
         console.log(`[Benchmark Chunk] cell(Context=${cLine}, RawLimit=${rLimit}) chunk ${ci + 1}/${translatedChunks.length} -> Score: ${chunkScore.overallScore}/100`, chunkScore);
         chunkScores.push(chunkScore);
     }
@@ -150,7 +175,7 @@ async function gradeTranslatedChunks(host, model, translatedLines, referenceStan
  *
  * Called by: benchmark.js (runParameterSweepBenchmark)[cite: 7]
  */
-async function gradeCandidateAgent(host, model, candidateText, referenceText) {
+async function gradeCandidateAgent(host, model, candidateText, referenceText, signal) {
     console.log('[Trace:Benchmark] gradeCandidateAgent() grading candidate translation.');
     // The auditor evaluates ONLY the candidate output. No history, raw context, or prompt
     // scaffolding is leaked in. A reference standard is provided solely as a grading anchor
@@ -189,7 +214,8 @@ async function gradeCandidateAgent(host, model, candidateText, referenceText) {
         const res = await fetch(`${host}/v1/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal
         });
 
         if (!res.ok) {

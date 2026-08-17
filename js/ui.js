@@ -18,26 +18,59 @@ export { syncManualStepUIVisibility } from './ui-manual-step.js';
 export { initDraggableModal, initPaneResizer, initAutoNumberInputs } from './ui-layout.js';
 
 /**
- * Displays an error message banner on the user interface and logs it to the console.
+ * Applies a banner variant class to #errorBanner, shows it, and sets its text.
+ * Shared by showError / showSuccess / showWarning so all three reuse the same
+ * #errorBanner element, swapping only the palette class.
+ * Called by: ui.js (showError, showSuccess, showWarning)
+ */
+function setBanner(variantClass, label, msg) {
+    const banner = document.getElementById("errorBanner");
+    if (banner) {
+        banner.classList.remove("banner-success", "banner-warning");
+        if (variantClass) banner.classList.add(variantClass);
+        banner.style.display = "block";
+        banner.textContent = `[${label}]\n` + msg;
+    }
+}
+
+/**
+ * Displays a red error message banner on the user interface and logs it to the console.
  * Called by: parser.js, translator.js, translator-llm.js, translator-presets.js, ui.js
  */
 export function showError(msg) {
     console.log('[Trace:UI] showError():', msg);
-    const banner = document.getElementById("errorBanner");
-    if (banner) {
-        banner.style.display = "block";
-        banner.textContent = "[ERROR]\n" + msg;
-    }
+    setBanner(null, "ERROR", msg);
     console.error("[Error Banner]", msg);
 }
 
 /**
- * Clears and hides the error message banner.
+ * Displays a green success banner on the user interface and logs it to the console.
+ * Called by: parser.js (saveEditsToMemory)
+ */
+export function showSuccess(msg) {
+    console.log('[Trace:UI] showSuccess():', msg);
+    setBanner("banner-success", "SUCCESS", msg);
+    console.log("[Success Banner]", msg);
+}
+
+/**
+ * Displays a yellow warning banner on the user interface and logs it to the console.
+ * Called by: translator.js (generateStylizationMapWithAI, translateViaAiServer), benchmark.js (runParameterSweepBenchmark)
+ */
+export function showWarning(msg) {
+    console.log('[Trace:UI] showWarning():', msg);
+    setBanner("banner-warning", "WARNING", msg);
+    console.warn("[Warning Banner]", msg);
+}
+
+/**
+ * Clears and hides the message banner (works for error, success, and warning variants).
  * Called by: translator-llm.js (fetchAiModels), translator.js (generateStylizationMapWithAI, translateViaAiServer)
  */
 export function clearError() {
     const banner = document.getElementById("errorBanner");
     if (banner) {
+        banner.classList.remove("banner-success", "banner-warning");
         banner.style.display = "none";
         banner.textContent = "";
     }
@@ -72,14 +105,27 @@ export function renderDistinctPresetControls() {
         const input = document.createElement("input");
         input.type = "file";
         input.accept = ".json";
+        input.dataset.operationKey = preset.operationKey;
         input.style.fontSize = "11px";
         input.style.width = "100%";
         input.style.border = "none";
         input.style.marginTop = "2px";
-        input.style.marginBottom = "6px";
+        input.style.marginBottom = "2px";
         input.title = "Override the " + preset.label + " default with a custom JSON (default already loaded from " + preset.file + ")";
         input.onchange = (event) => loadSpecificPreset(preset.operationKey, event);
         cell.appendChild(input);
+
+        // Display label under the file input showing which preset is currently
+        // active. Defaults to the shipped preset file name + " (default)"; updated
+        // to the custom file's name when a user uploads a replacement.
+        const display = document.createElement("div");
+        display.dataset.operationKey = preset.operationKey;
+        display.className = "preset-display";
+        display.style.fontSize = "10px";
+        display.style.color = "#64748b";
+        display.style.marginBottom = "6px";
+        display.textContent = preset.file.split("/").pop() + " (default)";
+        cell.appendChild(display);
 
         container.appendChild(cell);
     });
@@ -101,7 +147,25 @@ export function openDebugMenu() {
     document.getElementById("stylizationModeSelect").value = state.stylizationMode;
     document.getElementById("mapperStripBracketsCheckbox").checked = state.mapperStripBrackets;
     document.getElementById("stylizationMapEditor").value = JSON.stringify(state.heavyStylizationMap, null, 4);
+    // The map is freshly loaded from state, so there are no unsaved edits: start
+    // the Save Map button disabled and grayed out. Editing the textarea or
+    // running Generate Mapping reactivates it.
+    setSaveMapButtonEnabled(false);
+    initStylizationMapEditorSaveActivation();
     renderDiscoveredMappingsUI();
+}
+
+/**
+ * Attaches a one-time input listener to the stylization map editor textarea so any edit
+ * reactivates the Save Map button. Guarded with a dataset flag so repeated openDebugMenu
+ * calls do not stack duplicate listeners.
+ * Called by: ui.js (openDebugMenu)
+ */
+export function initStylizationMapEditorSaveActivation() {
+    const editor = document.getElementById("stylizationMapEditor");
+    if (!editor || editor.dataset.saveActivationWired === "1") return;
+    editor.dataset.saveActivationWired = "1";
+    editor.addEventListener("input", () => setSaveMapButtonEnabled(true));
 }
 
 /**
@@ -193,10 +257,29 @@ export function saveStylizationMapFromView() {
         state.heavyStylizationMap = orderStylizationMap(parsedMap);
         document.getElementById("stylizationMapEditor").value = JSON.stringify(state.heavyStylizationMap, null, 4);
         saveUIStateToCache();
-        showError("Stylization mapping successfully saved to variable and local cache!");
+        // Disable + gray out the Save Map button after a successful save. It
+        // reactivates when the user edits the textarea or Generate Mapping finishes.
+        setSaveMapButtonEnabled(false);
     } catch (e) {
         showError("Error: Invalid JSON format. Please fix any syntax or comma errors before saving.");
         console.error('[Trace:UI] saveStylizationMapFromView() parse failed:', e);
+    }
+}
+
+/**
+ * Enables or disables the Save Map button and toggles its grayed-out style.
+ * Called by: ui.js (saveStylizationMapFromView, openDebugMenu, stylizationMapEditor input handler)
+ */
+export function setSaveMapButtonEnabled(enabled) {
+    const btn = document.getElementById("saveStylizationMapBtn");
+    if (!btn) return;
+    btn.disabled = !enabled;
+    if (enabled) {
+        btn.style.opacity = "1";
+        btn.style.cursor = "pointer";
+    } else {
+        btn.style.opacity = "0.5";
+        btn.style.cursor = "not-allowed";
     }
 }
 
@@ -328,7 +411,6 @@ export function commitApprovedMappingsToMap() {
         state.pendingDiscoveredMappings = state.pendingDiscoveredMappings.filter(item => !item.selected);
         renderDiscoveredMappingsUI();
         saveUIStateToCache();
-        showError("Selected mappings successfully added to the Stylization Map!");
     } catch (e) {
         showError("Error parsing current Stylization Map JSON editor content. Fix syntax before committing.");
         console.error('[Trace:UI] commitApprovedMappingsToMap() parse failed:', e);
@@ -355,7 +437,6 @@ export async function copyStylizationMapToClipboard() {
     const mapText = document.getElementById("stylizationMapEditor").value;
     try {
         await navigator.clipboard.writeText(mapText);
-        showError("Stylization mapping copied to clipboard!");
     } catch (err) {
         showError("Failed to copy mapping to clipboard: " + err.message);
         console.error('[Trace:UI] copyStylizationMapToClipboard() failed:', err);
