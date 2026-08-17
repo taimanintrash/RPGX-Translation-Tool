@@ -29,6 +29,12 @@
     --error-bg: #fef2f2;
     --error-text: #b91c1c;
     --error-border: #f87171;
+    --success-bg: #f0fdf4;
+    --success-text: #15803d;
+    --success-border: #4ade80;
+    --warning-bg: #fffbeb;
+    --warning-text: #b45309;
+    --warning-border: #fbbf24;
     --info-blue-bg: #eff6ff;
     --info-blue-border: #bfdbfe;
     --loading-color: #8b5cf6;
@@ -66,6 +72,12 @@
     --error-bg: #2a1414;
     --error-text: #fca5a5;
     --error-border: #991b1b;
+    --success-bg: #14291c;
+    --success-text: #86efac;
+    --success-border: #22c55e;
+    --warning-bg: #2a2114;
+    --warning-text: #fcd34d;
+    --warning-border: #d97706;
     --info-blue-bg: #1e3a8a;
     --info-blue-border: #1d4ed8;
     --loading-color: #c4b5fd;
@@ -685,6 +697,22 @@ button.debug-btn:hover {
     display: none;
     margin-top: 4px;
     box-shadow: 0 1px 3px var(--shadow-color);
+}
+
+/* Success banner (green): set on #errorBanner by showSuccess() via the
+   .banner-success class, which overrides the base .error-banner palette. */
+.banner-success {
+    color: var(--success-text);
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
+}
+
+/* Warning banner (yellow): set on #errorBanner by showWarning() via the
+   .banner-warning class, which overrides the base .error-banner palette. */
+.banner-warning {
+    color: var(--warning-text);
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
 }
 
 #loading-status {

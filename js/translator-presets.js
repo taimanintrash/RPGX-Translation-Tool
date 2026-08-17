@@ -82,7 +82,22 @@ function mapPresetJson(operationKey, presetJson, sourceName) {
     }
 
     operationPresets[operationKey] = mappedConfig;
-    showError(`Preset for [${operationKey.toUpperCase()}] successfully loaded from "${presetJson.name || sourceName}"!`);
+    // Update the file-input display text to the loaded file's name instead of
+    // surfacing a banner. The preset loads into the cache replacing the old one;
+    // the cache retains its key so prompt calls don't need editing.
+    updatePresetDisplayText(operationKey, presetJson.name || sourceName);
+    console.log(`[Trace:Preset] Preset for [${operationKey.toUpperCase()}] loaded from "${presetJson.name || sourceName}".`);
+}
+
+/**
+ * Updates the preset file-input display label to show the loaded file's name.
+ * The display elements are created by renderDistinctPresetControls() keyed by
+ * data-operation-key, so this locates the matching one and sets its text.
+ * Called by: translator-presets.js (mapPresetJson)
+ */
+function updatePresetDisplayText(operationKey, loadedName) {
+    const display = document.querySelector(`.preset-display[data-operation-key="${operationKey}"]`);
+    if (display) display.textContent = loadedName;
 }
 
 /**

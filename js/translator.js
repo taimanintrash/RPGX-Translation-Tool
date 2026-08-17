@@ -5,7 +5,7 @@
 // from ./translator.js (main.js, benchmark.js, ui.js) keep resolving unchanged.
 
 import { state } from './main.js';
-import { showError, clearError, promptUserForNameTranslation, promptUserForManualStep, renderDiscoveredMappingsUI, setCurrentSourceLine, hideCurrentSourceLine } from './ui.js';
+import { showError, showWarning, clearError, setSaveMapButtonEnabled, promptUserForNameTranslation, promptUserForManualStep, renderDiscoveredMappingsUI, setCurrentSourceLine, hideCurrentSourceLine } from './ui.js';
 import { commitTextToRightFile } from './parser.js';
 import { operationPresets } from './translator-presets.js';
 import { translateChunkWithContext, buildTieredContextWindow, wrapTextToLines } from './translator-llm.js';
@@ -210,6 +210,11 @@ export async function generateStylizationMapWithAI() {
     if (!model) showError("Select an active model first.");
     if (!sourceText.trim()) showError("Source 1 text area is empty. Load/select a script ID first.");
 
+    // Silently abort any currently-running process before starting a new one.
+    if (state.currentAbortController) {
+        state.currentAbortController.abort();
+        console.log("[Trace:Stylization] Aborted prior process before starting mapping generation.");
+    }
     state.currentAbortController = new AbortController();
     state.mapperGenerationActive = true;
 
@@ -366,13 +371,22 @@ export async function generateStylizationMapWithAI() {
         if (discoveredArray.length > 0) {
             state.pendingDiscoveredMappings = discoveredArray;
             renderDiscoveredMappingsUI();
-            showError("Stylization mapping generated! Check the review section in the Debug Menu to edit or select items.");
+            // Surface completion on the loading-status progress bar instead of the banner.
+            if (loadingStatus) {
+                loadingStatus.style.display = "flex";
+                loadingStatus.innerHTML = `Stylization mapping generated! ${discoveredArray.length} candidate(s) found. Review them in the Debug Menu.`;
+            }
+            // Generate Mapping finished, so re-arm the Save Map button for the user
+            // to commit any edits they make to the discovered map.
+            setSaveMapButtonEnabled(true);
         } else {
             throw new Error("Model did not return valid text lines in the format \"key\":\"value\".");
         }
     } catch (err) {
         if (err.name === "AbortError" || err.message.includes("cancelled")) {
-            console.warn("[Mapping Generation] Successfully aborted by user.");
+            // Show the warning banner only for a user-initiated Stop (guard set by
+            // stopTranslation). A silent abort from starting another process shows nothing.
+            if (state.abortWarningShown) showWarning("Mapping generation cancelled by user.");
         } else {
             showError("Mapping generation failed: " + err.message);
             console.error("[Mapping Generation] Failed:", err);
@@ -383,6 +397,7 @@ export async function generateStylizationMapWithAI() {
         if (progressBar) progressBar.style.display = "none";
         state.currentAbortController = null;
         state.mapperGenerationActive = false;
+        state.abortWarningShown = false;
     }
 }
 
@@ -392,6 +407,10 @@ export async function generateStylizationMapWithAI() {
  */
 export function stopTranslation() {
     if (state.currentAbortController) {
+        // Guard so the in-flight catch block knows this was a user-initiated Stop
+        // (and should surface a warning banner) rather than a silent abort from
+        // starting another process (which shows nothing).
+        state.abortWarningShown = true;
         state.currentAbortController.abort();
         console.log("[Process] Abort signal sent by user.");
     }
@@ -546,6 +565,11 @@ export async function translateViaAiServer() {
     let fullText = outputLeft.value;
 
     if (!fullText.trim()) showError("No source text to translate.");
+    // Silently abort any currently-running process before starting a new one.
+    if (state.currentAbortController) {
+        state.currentAbortController.abort();
+        console.log("[Trace:Translation] Aborted prior process before starting translation.");
+    }
     state.currentAbortController = new AbortController();
 
     outputRight.value = "";
@@ -760,7 +784,9 @@ export async function translateViaAiServer() {
         if (progressBar) progressBar.style.display = "none";
 
         if (error.name === "AbortError" || error.message.includes("cancelled")) {
-            console.warn("[Translation] Process successfully aborted by user.");
+            // Show the warning banner only for a user-initiated Stop (guard set by
+            // stopTranslation). A silent abort from starting another process shows nothing.
+            if (state.abortWarningShown) showWarning("Translation cancelled by user.");
         } else {
             showError(error.message);
             console.error("[Translation] Process failed:", error);
@@ -771,5 +797,6 @@ export async function translateViaAiServer() {
         // override values. The next translation reads from .translate-config again.
         state.appliedContextLines = null;
         state.appliedRawLimit = null;
+        state.abortWarningShown = false;
     }
 }

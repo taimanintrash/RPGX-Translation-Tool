@@ -1,6 +1,6 @@
 import { state } from './main.js';
 import { saveFilesToCache, saveUIStateToCache } from './database.js';
-import { showError } from './ui.js';
+import { showError, showSuccess } from './ui.js';
 
 /**
  * Handles the file selection event via FileReader, reads file content asynchronously, and passes it to JSON parsing[cite: 7].
@@ -305,7 +305,7 @@ export function saveEditsToMemory() {
         fileObj.data[key] = lines;
     }
     saveFilesToCache(state.loadedFilesRegistry);
-    showError("Edits saved successfully!");
+    showSuccess("Edits saved successfully!");
 }
 
 /**
