@@ -5,8 +5,8 @@ import { showError, showWarning } from './ui.js';
 import { beginLoop, logAIInteraction, markSession, flushLoopToDisk } from './logger.js';
 
 /**
- * Runs a multi-dimensional parameter sweep matrix to audit translation inconsistency by testing different context lines and raw limits, then logs the evaluation feedback and scores.
- * Called by: main.js[cite: 7]
+ * Runs the multi-dimensional parameter sweep matrix using an AbortController for silent abort, logging evaluation feedback and scores per cell
+ * Called by: HTML event handler via main.js window.runParameterSweepBenchmark (HTML Run Benchmark button)
  */
 export async function runParameterSweepBenchmark() {
     console.log('[Trace:Benchmark] runParameterSweepBenchmark() invoked.');
@@ -186,11 +186,8 @@ async function gradeTranslatedChunks(host, model, translatedLines, referenceStan
 }
 
 /**
- * Acts as an evaluation grading engine that prompts an AI model to score a candidate translation against a reference standard across gender consistency, semantic fidelity, and conversational flow.
- *
- * The auditor sees ONLY the candidate translated text. Context history, raw context, and prompt scaffolding are never passed to the grader so the score reflects the translation output alone.
- *
- * Called by: benchmark.js (runParameterSweepBenchmark)[cite: 7]
+ * Acts as an evaluation grading engine that prompts an AI model to score a candidate translation against a reference standard across gender, semantic, and flow criteria, forwarding the abort signal to fetch
+ * Called by: js/benchmark.js (gradeTranslatedChunks)
  */
 async function gradeCandidateAgent(host, model, candidateText, referenceText, signal) {
     console.log('[Trace:Benchmark] gradeCandidateAgent() grading candidate translation.');

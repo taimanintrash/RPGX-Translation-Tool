@@ -141,9 +141,8 @@ function applyTheme(theme) {
 }
 
 /**
- * Re-applies the inline status colors to script-select options after a theme change,
- * since native <option> elements cannot be restyled via CSS classes.
- * Called by: main.js (applyTheme)
+ * Re-applies inline status colors to script-select options after a theme change (native option elements can't be restyled via CSS classes)
+ * Called by: js/main.js (applyTheme)
  */
 function recolorScriptSelectOptions() {
     const sel = document.getElementById('scriptSelect');

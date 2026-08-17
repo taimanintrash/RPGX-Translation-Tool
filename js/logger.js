@@ -69,9 +69,8 @@ let entrySequence = 0;
 const WRITE_ENDPOINT = '/__write_log';
 
 /**
- * Enables or disables capture. When disabled, logging calls become no-ops so
- * the production pipeline pays no allocation cost.
- * Called by: ui.js (logging toggle checkbox), main.js (init restore)
+ * Enables or disables AI-interaction capture; when disabled, logging calls are no-ops so the production pipeline pays no allocation cost
+ * Called by: (reserved for an optional capture toggle; defaults ON)
  */
 export function setCaptureEnabled(enabled) {
     captureEnabled = !!enabled;
@@ -87,15 +86,8 @@ export function isCaptureEnabled() {
 }
 
 /**
- * Sets the active loop kind so subsequent LLM calls are tagged with the loop
- * that owns them. This is how a single shared LLM helper (translateChunkWithContext)
- * is attributed to the translation loop, the manual-step retranslate loop, the
- * mapping generation loop, or the benchmark loop without threading a parameter
- * through every call site.
- *
- * Called by: translator.js (translateViaAiServer, flushBuffer retranslate,
- * generateStylizationMapWithAI), benchmark.js (runParameterSweepBenchmark)
- * @param {string} kind - one of LOOP_KINDS
+ * Sets the active loop kind so subsequent LLM calls are tagged with the loop that owns them, defaulting to 'translation' for unknown kinds
+ * Called by: js/translator.js (translateViaAiServer, flushBuffer retranslate path, generateStylizationMapWithAI + its finally), js/benchmark.js (runParameterSweepBenchmark + its finally)
  */
 export function beginLoop(kind) {
     if (!LOOP_KINDS.includes(kind)) {
@@ -115,19 +107,8 @@ export function getActiveLoopKind() {
 }
 
 /**
- * Captures a single AI interaction entry with the simplified 5-field schema.
- * The entry is routed to the active loop's buffer under its preset key and
- * assigned a monotonic sequence number. When capture is disabled this is a no-op.
- *
- * Called by: translator-llm.js (translateChunkWithContext, updateRecentSummary,
- * updateArchivalSummary, assessTranslationQualityWithAI), translator.js
- * (generateStylizationMapWithAI phases), benchmark.js (gradeCandidateAgent)
- * @param {Object} params
- * @param {string} params.preset - the operation preset key (jpEn, retry, namePlate, stylizationTicks, benchmark, validator, recentSummary, etc.)
- * @param {string} params.prompt - the full prompt content sent to the LLM
- * @param {string} params.response - the cleaned response received from the LLM
- * @param {number} [params.retryAttempt] - 1-based attempt number (1 = first try, not a retry)
- * @param {string} [params.outcome] - 'accepted' | 'retried' | 'fallback' | 'generated' | 'graded'
+ * Captures a single AI-interaction entry with the 5-field schema (preset, prompt, response, retryAttempt, outcome), routing it to the active loop's buffer under its preset key with a rolling cap; no-op when capture is disabled
+ * Called by: js/translator-llm.js (translateChunkWithContext accepted/retried/fallback paths, updateRecentSummary, updateArchivalSummary, assessTranslationQualityWithAI), js/translator.js (generateStylizationMapWithAI phases), js/benchmark.js (gradeCandidateAgent)
  */
 export function logAIInteraction({ preset, prompt, response, retryAttempt = 1, outcome = '' }) {
     if (!captureEnabled) return;
@@ -155,16 +136,8 @@ export function logAIInteraction({ preset, prompt, response, retryAttempt = 1, o
 }
 
 /**
- * Appends a session marker to the active loop's buffers. Used at the end of a
- * run (completed or aborted) so a reader can see run boundaries in the file.
- * The marker is written as a synthetic entry with outcome 'session-end' /
- * 'session-abort' and an empty prompt/response, rendered as a header in the
- * markdown export.
- *
- * Called by: translator.js (translateViaAiServer finally, generateStylizationMapWithAI
- * finally), benchmark.js (runParameterSweepBenchmark finally)
- * @param {string} status - 'completed' | 'aborted'
- * @param {string} [note] - optional context (e.g. which loop ran)
+ * Appends a session-boundary marker (completed/aborted) to the active loop's buffer under the reserved __session__ preset key so run boundaries render as headers in the exported file
+ * Called by: js/translator.js (translateViaAiServer finally, generateStylizationMapWithAI finally), js/benchmark.js (runParameterSweepBenchmark finally)
  */
 export function markSession(status, note = '') {
     if (!captureEnabled) return;
@@ -189,15 +162,8 @@ export function markSession(status, note = '') {
 }
 
 /**
- * Renders a loop's preset buffer as an AI-parseable markdown document with
- * per-entry headers, metadata tags, and fenced prompt/response blocks. Designed
- * so an AI agent can read top-to-bottom to grade translation quality and
- * prompt effectiveness per preset.
- *
- * Called by: logger.js (flushLoopToDisk)
- * @param {string} kind - one of LOOP_KINDS
- * @param {string} presetKey - the preset whose entries to render
- * @returns {string} markdown text
+ * Renders a loop's preset buffer as an AI-parseable markdown document with per-entry headers, metadata tags, fenced prompt/response blocks, and session-boundary headers
+ * Called by: js/logger.js (flushLoopToDisk)
  */
 export function exportPresetAsMarkdown(kind, presetKey) {
     if (!LOOP_KINDS.includes(kind)) return '';
@@ -243,11 +209,8 @@ export function exportPresetAsMarkdown(kind, presetKey) {
 }
 
 /**
- * Returns the list of preset keys that have captured entries for a loop kind,
- * so the flush helper knows which files to write.
- * Called by: logger.js (flushLoopToDisk)
- * @param {string} kind - one of LOOP_KINDS
- * @returns {Array<string>}
+ * Returns the list of preset keys that have captured entries for a loop kind, so the flush helper knows which files to write
+ * Called by: js/logger.js (flushLoopToDisk)
  */
 export function getPresetsForLoop(kind) {
     if (!LOOP_KINDS.includes(kind)) return [];
@@ -255,13 +218,8 @@ export function getPresetsForLoop(kind) {
 }
 
 /**
- * Writes every preset file for a single loop kind to disk via the serve.py
- * write endpoint. Each preset becomes docs/logs/<loopFolder>/<preset>.md.
- * Silently skips if the write endpoint is unavailable (e.g. running under a
- * plain static server with no write support) so the app never breaks.
- *
- * Called by: translator.js / benchmark.js finally blocks at run end.
- * @param {string} kind - one of LOOP_KINDS
+ * Writes every preset file for a single loop kind to disk via the serve.py POST /__write_log endpoint into docs/logs/<loopFolder>/<preset>.md, silently skipping when the write endpoint is unavailable
+ * Called by: js/translator.js (translateViaAiServer finally, generateStylizationMapWithAI finally), js/benchmark.js (runParameterSweepBenchmark finally)
  */
 export async function flushLoopToDisk(kind) {
     if (!LOOP_KINDS.includes(kind)) return;
@@ -285,8 +243,8 @@ export async function flushLoopToDisk(kind) {
 }
 
 /**
- * Clears all captured logs across every loop kind and resets the sequence.
- * Called by: ui.js (Clear Logs button) — retained for the optional capture toggle.
+ * Clears all captured logs across every loop kind and resets the entry sequence counter
+ * Called by: (reserved)
  */
 export function clearAllLogs() {
     for (const kind of LOOP_KINDS) logs[kind] = {};

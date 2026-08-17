@@ -3,8 +3,8 @@ import { saveFilesToCache, saveUIStateToCache } from './database.js';
 import { showError, showSuccess } from './ui.js';
 
 /**
- * Handles the file selection event via FileReader, reads file content asynchronously, and passes it to JSON parsing[cite: 7].
- * Called by: HTML event handler / main.js[cite: 7]
+ * Handles the file-selection event via FileReader, reads each file asynchronously, parses it to JSON, and adds/updates it in the loaded-files registry
+ * Called by: HTML event handler via main.js window.loadFiles (HTML file input)
  */
 export function loadFiles(event) {
     console.log(`[Trace:Files] loadFiles() invoked with ${event.target.files.length} file(s).`);
@@ -41,8 +41,8 @@ export function loadFiles(event) {
 }
 
 /**
- * Checks if all asynchronous file reading operations have finished, then triggers application state refresh and caching[cite: 7].
- * Called by: parser.js (loadFiles)[cite: 7]
+ * When all asynchronous file reads complete, refreshes application state and persists the file registry and UI state to cache
+ * Called by: js/parser.js (loadFiles)
  */
 export function checkFinishedReads(pendingReads) {
     if (pendingReads === 0) {
@@ -54,8 +54,8 @@ export function checkFinishedReads(pendingReads) {
 }
 
 /**
- * Removes a specified file from the loaded files registry, updates the application state, and updates the cache[cite: 7].
- * Called by: HTML event handler / main.js[cite: 7]
+ * Removes a file from the loaded-files registry by name, then refreshes application state and re-caches the registry and UI state
+ * Called by: HTML event handler via main.js window.removeFiles (HTML remove button)
  */
 export function removeFile(fileName) {
     console.log(`[Trace:Files] removeFile("${fileName}") invoked.`);
@@ -66,8 +66,8 @@ export function removeFile(fileName) {
 }
 
 /**
- * Safely parses text content into a JSON object, attempting alternative regex extraction if standard parsing fails[cite: 7].
- * Called by: parser.js (loadFiles)[cite: 7]
+ * Parses file content into JSON, falling back to a regex extraction of the first {...} block when standard JSON.parse fails
+ * Called by: js/parser.js (loadFiles)
  */
 export function parseContentToJSON(content, fileName) {
     try { return JSON.parse(content); } catch (e1) { console.warn(`[Trace:Files] Standard JSON.parse failed for "${fileName}", trying regex extraction.`); }
@@ -79,8 +79,8 @@ export function parseContentToJSON(content, fileName) {
 }
 
 /**
- * Refreshes all core user interface elements including file lists, dropdowns, and comparison views[cite: 7].
- * Called by: parser.js and main.js[cite: 7]
+ * Refreshes all core UI elements after a file-registry change: the file list, file dropdowns, master ID list, benchmark dropdown, and comparison views
+ * Called by: js/parser.js (checkFinishedReads, removeFile), js/main.js (DOMContentLoaded)
  */
 export function refreshApplicationState() {
     console.log('[Trace:UI] refreshApplicationState() invoked.');
@@ -92,8 +92,8 @@ export function refreshApplicationState() {
 }
 
 /**
- * Updates the visual tag list displaying all currently loaded files and global warning indicators[cite: 7].
- * Called by: parser.js (refreshApplicationState)[cite: 7]
+ * Renders the loaded-files tag list in the sidebar and toggles the global warning shown when fewer than two files are loaded
+ * Called by: js/parser.js (refreshApplicationState)
  */
 export function updateFileListUI() {
     const listBox = document.getElementById("fileListBox");
@@ -109,8 +109,8 @@ export function updateFileListUI() {
 }
 
 /**
- * Populates the source file selection dropdowns on the UI[cite: 7].
- * Called by: parser.js (refreshApplicationState)[cite: 7]
+ * Populates the left/right source-file dropdowns from the loaded-files registry, restoring prior selections and avoiding identical left/right choices
+ * Called by: js/parser.js (refreshApplicationState)
  */
 export function updateFileDropdowns() {
     const selectLeft = document.getElementById("fileSelectLeft");
@@ -131,8 +131,8 @@ export function updateFileDropdowns() {
 }
 
 /**
- * Populates the reference file selection dropdown specific to the benchmark suite[cite: 7].
- * Called by: parser.js (refreshApplicationState)[cite: 7]
+ * Populates the benchmark reference-file dropdown from the loaded-files registry, restoring the prior selection, then refreshes the scene dropdown
+ * Called by: js/parser.js (refreshApplicationState)
  */
 export function updateBenchmarkFileDropdown() {
     const refFileSelect = document.getElementById("benchmarkRefFileSelect");
@@ -150,8 +150,8 @@ export function updateBenchmarkFileDropdown() {
 }
 
 /**
- * Populates the scene ID dropdown based on the selected reference file for benchmarking[cite: 7].
- * Called by: parser.js (updateBenchmarkFileDropdown)[cite: 7]
+ * Populates the benchmark reference-scene dropdown from the keys of the selected reference file, restoring the prior scene selection
+ * Called by: HTML event handler via main.js window.updateBenchmarkSceneDropdown (HTML dropdown onchange)
  */
 export function updateBenchmarkSceneDropdown() {
     const refFileSelect = document.getElementById("benchmarkRefFileSelect");
@@ -175,8 +175,8 @@ export function updateBenchmarkSceneDropdown() {
 }
 
 /**
- * Updates the master script ID selection dropdown with unique keys across all loaded files[cite: 7].
- * Called by: parser.js (refreshApplicationState, commitTextToRightFile)[cite: 7]
+ * Populates the master script-ID dropdown (desktop and mobile) with the unique keys across all loaded files, marking each with a completeness symbol and file count
+ * Called by: js/parser.js (refreshApplicationState, commitTextToRightFile)
  */
 export function updateMasterIDList() {
     const selectElement = document.getElementById("scriptSelect");
@@ -219,15 +219,14 @@ export function updateMasterIDList() {
 }
 
 /**
- * Event handler triggered when a new script ID is selected, updating comparison views and saving state[cite: 7].
- * Called by: HTML event handler / main.js[cite: 7]
+ * Event handler for script-ID selection: re-renders the comparison views and persists UI state
+ * Called by: HTML event handler via main.js window.onSelectID (HTML select onchange)
  */
 export function onSelectID() { renderComparisonViews(); saveUIStateToCache(); }
 
 /**
- * Event handler triggered when a new script ID is selected from the mobile dropdown.
- * Syncs the main select element and triggers the standard update.
- * Called by: main.js (window.onSelectIDMobile wiring for HTML onchange)
+ * Event handler for mobile script-ID selection: syncs the main select element to the mobile selection and delegates to the standard ID handler
+ * Called by: HTML event handler via main.js window.onSelectIDMobile (HTML mobile select onchange)
  */
 export function onSelectIDMobile() {  
     const mobileSelect = document.getElementById("scriptSelectMobile");
@@ -239,14 +238,14 @@ export function onSelectIDMobile() {
 }
 
 /**
- * Event handler triggered when comparison file selections change, updating views and saving state[cite: 7].
- * Called by: HTML event handler / main.js[cite: 7]
+ * Event handler for left/right file-selection change: re-renders the comparison views and persists UI state
+ * Called by: HTML event handler via main.js window.onCompareSelectionChange (HTML select onchange)
  */
 export function onCompareSelectionChange() { renderComparisonViews(); saveUIStateToCache(); }
 
 /**
- * Extracts and populates text content for the left and right comparison text areas based on current selections[cite: 7].
- * Called by: parser.js and main.js[cite: 7]
+ * Renders the left (source) and right (target) comparison text areas for the selected script ID using the currently chosen left/right files
+ * Called by: js/parser.js (onSelectID, onCompareSelectionChange), js/main.js (DOMContentLoaded)
  */
 export function renderComparisonViews() {
     const selectElement = document.getElementById("scriptSelect");
@@ -265,8 +264,8 @@ export function renderComparisonViews() {
 }
 
 /**
- * Extracts raw text blocks or script lines safely from a data object using specific key paths or fallback structures[cite: 7].
- * Called by: parser.js and benchmark.js[cite: 7]
+ * Extracts the script text for a given key from a file data object, following the SCRIPTS.PART1.TRANSLATIONS/SCRIPT structure with array and JSON-stringification fallbacks
+ * Called by: js/parser.js (renderComparisonViews), js/benchmark.js (runParameterSweepBenchmark)
  */
 export function extractScriptText(dataObj, key) {
     if (!dataObj[key]) return "[ID not found]";
@@ -282,8 +281,8 @@ export function extractScriptText(dataObj, key) {
 }
 
 /**
- * Saves manual edits made in the left text area back into the respective file registry object in memory[cite: 7].
- * Called by: HTML event handler / main.js[cite: 7]
+ * Saves manual edits from the left text area back into the corresponding script-ID entry of the selected file in the registry, then re-caches the registry
+ * Called by: HTML event handler via main.js window.saveEditsToMemory (HTML save button)
  */
 export function saveEditsToMemory() {
     console.log('[Trace:Files] saveEditsToMemory() invoked.');
@@ -309,8 +308,8 @@ export function saveEditsToMemory() {
 }
 
 /**
- * Commits line arrays into the target file registry object, updates views, and caches changes[cite: 7].
- * Called by: parser.js and translator.js[cite: 7]
+ * Writes a line array into the selected script-ID entry of the target file registry object (creating the SCRIPTS/PART1/TRANSLATIONS structure if missing), then re-renders views, updates the ID list, and re-caches
+ * Called by: js/translator.js (translateViaAiServer)
  */
 export function commitTextToRightFile(fileObj, key, linesArray) {
     console.log(`[Trace:Files] commitTextToRightFile(key="${key}", lines=${linesArray.length}) invoked.`);
@@ -331,8 +330,8 @@ export function commitTextToRightFile(fileObj, key, linesArray) {
 }
 
 /**
- * Injects the text currently in the left output area into the right target file registry[cite: 7].
- * Called by: HTML event handler / main.js[cite: 7]
+ * Takes the current right-hand text area content and commits it into the selected script-ID entry of the right-hand target file, creating the entry structure if missing
+ * Called by: HTML event handler via main.js window.injectTranslationToRight (HTML inject button)
  */
 export function injectTranslationToRight() {
     console.log('[Trace:Files] injectTranslationToRight() invoked.');
@@ -348,8 +347,8 @@ export function injectTranslationToRight() {
 }
 
 /**
- * Generates and triggers a browser download for a JSON file export of the specified registry item[cite: 7].
- * Called by: HTML event handler / main.js[cite: 7]
+ * Generates a JSON Blob from the selected registry item and triggers a browser download of it as updated_<filename>
+ * Called by: HTML event handler via main.js window.downloadFile (HTML download button)
  */
 export function downloadFile(idx) {
     console.log(`[Trace:Files] downloadFile(idx="${idx}") invoked.`);

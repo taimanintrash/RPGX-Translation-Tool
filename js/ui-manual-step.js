@@ -9,10 +9,8 @@ import { saveUIStateToCache } from './database.js';
 import { buildTieredContextWindow } from './translator.js';
 
 /**
- * Displays a modal prompt to let the user review or modify character name translations interactively.
- * Returns a promise resolving to the user-approved name. Auto-skips the modal (resolving to the AI
- * translation) when state.autoSkipNameModal is set, and rejects on user abort.
- * Called by: translator.js (resolveNamePlate)
+ * Displays a modal prompt to review or modify a character name translation, returning a promise that resolves to the user-approved name; auto-skips the modal (resolving to the AI translation) when state.autoSkipNameModal is set and rejects on user abort
+ * Called by: js/translator.js (resolveNamePlate)
  */
 export function promptUserForNameTranslation(originalName, aiTranslatedName) {
     console.log(`[Trace:UI] promptUserForNameTranslation("${originalName}") invoked; autoSkip=${state.autoSkipNameModal}.`);
@@ -44,8 +42,8 @@ export function promptUserForNameTranslation(originalName, aiTranslatedName) {
 }
 
 /**
- * Resolves the active name translation modal promise with the user's input value.
- * Called by: main.js (window.resolveNameModal wiring for HTML Confirm button)
+ * Resolves the active name-translation modal promise with the user's input value and clears the resolver
+ * Called by: HTML event handler via main.js window.resolveNameModal (HTML Confirm button)
  */
 export function resolveNameModal() {
     const transInput = document.getElementById("modalInputName").value.trim();
@@ -56,8 +54,8 @@ export function resolveNameModal() {
 }
 
 /**
- * Closes the name translation modal and passes an empty fallback value to the resolver.
- * Called by: main.js (window.closeNameModal wiring for HTML Cancel button)
+ * Closes the name-translation modal and resolves its promise with an empty fallback value, clearing the resolver
+ * Called by: HTML event handler via main.js window.closeNameModal (HTML Cancel button)
  */
 export function closeNameModal() {
     const overlay = document.getElementById("nameModalOverlay");
@@ -69,11 +67,8 @@ export function closeNameModal() {
 }
 
 /**
- * Recomputes the context-preview dropdown from the stored full history + current step settings.
- * Replays the entire history through buildTieredContextWindow to reconstruct the tiered summaries
- * (Raw Tail -> Recent Summary -> Archival Summary) so the manual override preview reflects the
- * actual production state rather than a stale snapshot. Returns the recomputed summaryState.
- * Called by: ui-manual-step.js (promptUserForManualStep, applyStepContextSettings)
+ * Recomputes the context-preview dropdown from the stored full history and current step settings by replaying the history through buildTieredContextWindow so the manual-override preview reflects the actual production state; returns the recomputed summaryState
+ * Called by: js/ui-manual-step.js (promptUserForManualStep, applyStepContextSettings, handleContextLinesChange)
  */
 async function refreshStepContextPreview(currentContextWindow) {
     const ctxLines = parseInt(document.getElementById("stepContextLinesInput")?.value) || state._stepMaxCtxDefault || 0;
@@ -127,10 +122,8 @@ async function refreshStepContextPreview(currentContextWindow) {
 }
 
 /**
- * Synchronizes the visibility of the manual step override toolbar (and the source-pane label/actions)
- * based on whether manual step-by-step mode is enabled. The current source line box stays permanently
- * visible above the toolbar regardless of mode.
- * Called by: ui.js (closeDebugMenu, syncManualStepModeLive), main.js (init)
+ * Synchronizes the visibility of the manual-step override toolbar and the source-pane label/actions based on whether manual step-by-step mode is enabled; the current source-line box stays permanently visible regardless of mode
+ * Called by: js/ui.js (closeDebugMenu, syncManualStepModeLive), js/main.js (DOMContentLoaded)
  */
 export function syncManualStepUIVisibility() {
     const msToolbar = document.getElementById("manualStepToolbar");
@@ -148,8 +141,8 @@ export function syncManualStepUIVisibility() {
 }
 
 /**
- * Toggles manual step mode live when the debug modal checkbox changes state.
- * Called by: main.js (window.syncManualStepModeLive wiring for HTML checkbox onchange)
+ * Toggles manual step-by-step mode live when the debug-modal checkbox changes, updating visibility and persisting UI state
+ * Called by: HTML event handler via main.js window.syncManualStepModeLive (HTML checkbox onchange)
  */
 export function syncManualStepModeLive(enabled) {
     state.manualStepByStepMode = !!enabled;
@@ -158,10 +151,8 @@ export function syncManualStepModeLive(enabled) {
 }
 
 /**
- * Reads both bracket-strip checkboxes into state. Called live whenever either
- * checkbox toggles (onchange), so the strip-phase XOR decision reflects the
- * current UI without needing to close the debug menu.
- * Called by: main.js (window.syncBracketStripToggles wiring for HTML onchange handlers on the two bracket-strip checkboxes)
+ * Reads both bracket-strip checkboxes into state live so the strip-phase XOR decision reflects the current UI without needing to close the debug menu
+ * Called by: HTML event handler via main.js window.syncBracketStripToggles (HTML checkbox onchange)
  */
 export function syncBracketStripToggles() {
     const mapperBox = document.getElementById("mapperStripBracketsCheckbox");
@@ -180,9 +171,8 @@ export function setCurrentSourceLine(text) {
 }
 
 /**
- * Clears the source line text when translation ends so the placeholder shows.
- * The element itself stays visible permanently.
- * Called by: translator.js (translateViaAiServer completion)
+ * Clears the source-line text when translation ends so the placeholder shows; the element itself stays visible
+ * Called by: js/translator.js (translateViaAiServer completion)
  */
 export function hideCurrentSourceLine() {
     const box = document.getElementById("stepSourceText");
@@ -190,10 +180,8 @@ export function hideCurrentSourceLine() {
 }
 
 /**
- * Handles a context-lines input change: a destructive recompute that confirms before
- * applying (since it recomputes summaries and the context window). Restores the old
- * value if the user cancels the confirmation.
- * Called by: ui-manual-step.js (promptUserForManualStep input listener)
+ * Handles a context-lines input change as a destructive recompute that confirms before applying (it recomputes summaries and the context window), restoring the old value if the user cancels
+ * Called by: js/ui-manual-step.js (promptUserForManualStep input listener)
  */
 function handleContextLinesChange(inputEl, oldVal) {
     if (window.confirm("Changing context settings will recompute the active summaries and context window. Are you sure?")) {
@@ -205,10 +193,8 @@ function handleContextLinesChange(inputEl, oldVal) {
 }
 
 /**
- * Handles a raw-lines input change: reshapes the raw tail display directly (no summary
- * recalculation, which only happens on context-lines change). Updates the raw context box
- * to show the most recent `rawLimit` history lines.
- * Called by: ui-manual-step.js (promptUserForManualStep input listener)
+ * Handles a raw-lines input change by reshaping the raw-tail display directly to show the most recent rawLimit history lines, with no summary recalculation
+ * Called by: js/ui-manual-step.js (promptUserForManualStep input listener)
  */
 function handleRawLinesChange(inputEl) {
     inputEl.dataset.oldValue = inputEl.value;
@@ -223,11 +209,8 @@ function handleRawLinesChange(inputEl) {
 }
 
 /**
- * Opens the manual step toolbar to allow step-by-step translation evaluation and editing.
- * Stores the full history and summary context on state so the preview can recompute live,
- * syncs the override inputs to the current .translate-config values, and resolves the
- * returned promise with the chosen action (continue/retranslate) plus any manual summary edits.
- * Called by: translator.js (translateViaAiServer flushBuffer manual-step loop)
+ * Opens the manual-step toolbar for step-by-step translation evaluation and editing, storing the full history and summary context on state so the preview can recompute live, syncing the override inputs, and resolving with the chosen action (continue/retranslate) plus any manual summary edits
+ * Called by: js/translator.js (translateViaAiServer flushBuffer manual-step loop)
  */
 export function promptUserForManualStep(currentChunkText, currentContextWindow, fullHistory, summaryContext, maxContextLinesDefault, rawLimitDefault) {
     console.log('[Trace:UI] promptUserForManualStep() invoked; source + context populated.');
@@ -300,9 +283,8 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
 }
 
 /**
- * Resolves the manual step prompt indicating a continue action, capturing the current
- * context/raw input values and any manual summary-box edits.
- * Called by: main.js (window.resolveManualStepContinue wiring for HTML Continue button)
+ * Resolves the manual-step prompt with a continue action, capturing the current context/raw input values and any manual summary-box edits
+ * Called by: HTML event handler via main.js window.resolveManualStepContinue (HTML Continue button)
  */
 export function resolveManualStepContinue() {
     const contextCount = parseInt(document.getElementById("stepContextLinesInput").value) || 0;
@@ -317,10 +299,8 @@ export function resolveManualStepContinue() {
 }
 
 /**
- * Applies the manual override context/raw values to shared state and recomputes summaries
- * from history, storing the resulting summary state so a subsequent retranslate reuses it
- * instead of triggering a fresh recalc.
- * Called by: main.js (window.applyStepContextSettings wiring for HTML Apply button)
+ * Applies the manual-override context/raw values to shared state and recomputes summaries from history, storing the resulting summary state so a subsequent retranslate reuses it instead of triggering a fresh recalc
+ * Called by: HTML event handler via main.js window.applyStepContextSettings (HTML Apply button)
  */
 export async function applyStepContextSettings() {
     console.log('[Trace:UI] applyStepContextSettings() invoked.');
@@ -343,10 +323,8 @@ export async function applyStepContextSettings() {
 }
 
 /**
- * Resolves the manual step prompt indicating that a re-translation pass is required,
- * capturing the current context/raw input values and any manual summary-box edits so they
- * update the internal summary variables before the retranslate rebuilds the context window.
- * Called by: main.js (window.triggerStepRetranslation wiring for HTML Retranslate button)
+ * Resolves the manual-step prompt with a retranslate action, capturing the current context/raw input values and any manual summary-box edits so they update the internal summary variables before the retranslate rebuilds the context window
+ * Called by: HTML event handler via main.js window.triggerStepRetranslation (HTML Retranslate button)
  */
 export async function triggerStepRetranslation() {
     const contextCount = parseInt(document.getElementById("stepContextLinesInput").value) || 0;
@@ -361,9 +339,8 @@ export async function triggerStepRetranslation() {
 }
 
 /**
- * Reads the current (possibly user-edited) archival and recent summary boxes.
- * Returns null when neither box exists so callers can skip writing anything back.
- * Called by: ui-manual-step.js (resolveManualStepContinue, triggerStepRetranslation)
+ * Reads the current (possibly user-edited) archival and recent summary boxes, returning null when neither box exists so callers can skip writing anything back
+ * Called by: js/ui-manual-step.js (resolveManualStepContinue, triggerStepRetranslation)
  */
 function readManualSummaryEdits() {
     const archivalBox = document.getElementById("stepArchivalSummaryText");
