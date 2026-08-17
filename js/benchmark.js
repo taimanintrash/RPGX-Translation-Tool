@@ -55,67 +55,67 @@ export async function runParameterSweepBenchmark() {
     let resultsLog = "";
 
     try {
-    for (let cLine of contextValues) {
-        for (let rLimit of rawLimitValues) {
-            if (state.currentAbortController.signal.aborted) throw new Error("Benchmark cancelled by user.");
-            console.log(`[Benchmark Run] Evaluating config -> Context Lines: ${cLine}, Raw Limit: ${rLimit}`);
-            reportBox.value += `\nTesting Configuration -> Context: ${cLine}, Raw Limit: ${rLimit}...`;
-
-            let translatedLines = [];
-            let history = [];
-            let activeSpeakerName = "";
-
-            // Shared tiered-summary state (mirrors translateViaAiServer so the benchmark
-            // exercises the production context pipeline: Raw Tail -> Recent Summary -> Archival Summary).
-            let summaryState = {
-                archivalSummary: "",
-                recentSummary: "",
-                recentSummarySourceLines: [],
-                summarizedUpToIndex: 0
-            };
-
-            for (let line of lines) {
+        for (let cLine of contextValues) {
+            for (let rLimit of rawLimitValues) {
                 if (state.currentAbortController.signal.aborted) throw new Error("Benchmark cancelled by user.");
-                let trimmed = line.trim();
+                console.log(`[Benchmark Run] Evaluating config -> Context Lines: ${cLine}, Raw Limit: ${rLimit}`);
+                reportBox.value += `\nTesting Configuration -> Context: ${cLine}, Raw Limit: ${rLimit}...`;
 
-                if (trimmed.startsWith("<NAME_PLATE>")) {
-                    // Resolve name plates via the shared production path (namePlate preset +
-                    // knownNamesMap caching). autoAccept skips the interactive UI prompt so the
-                    // benchmark runs unattended.
-                    let namePlateResult = await resolveNamePlate(host, model, trimmed, true);
-                    translatedLines.push(namePlateResult.namePlateLine);
-                    activeSpeakerName = namePlateResult.speakerName;
-                } else if (trimmed.startsWith("<") || trimmed === "") {
-                    translatedLines.push(line);
-                } else {
-                    let currentContextSlice = await buildTieredContextWindow(
-                        host, model, history, cLine, rLimit, summaryState
-                    );
-                    // Speaker is passed as a parameter to translateChunkWithContext (injected into
-                    // the system prompt), not as an inline tag in the text.
-                    let res = await translateChunkWithContext(host, model, trimmed, currentContextSlice, 'jpEn', activeSpeakerName);
-                    history.push(res);
-                    translatedLines.push(res);
+                let translatedLines = [];
+                let history = [];
+                let activeSpeakerName = "";
+
+                // Shared tiered-summary state (mirrors translateViaAiServer so the benchmark
+                // exercises the production context pipeline: Raw Tail -> Recent Summary -> Archival Summary).
+                let summaryState = {
+                    archivalSummary: "",
+                    recentSummary: "",
+                    recentSummarySourceLines: [],
+                    summarizedUpToIndex: 0
+                };
+
+                for (let line of lines) {
+                    if (state.currentAbortController.signal.aborted) throw new Error("Benchmark cancelled by user.");
+                    let trimmed = line.trim();
+
+                    if (trimmed.startsWith("<NAME_PLATE>")) {
+                        // Resolve name plates via the shared production path (namePlate preset +
+                        // knownNamesMap caching). autoAccept skips the interactive UI prompt so the
+                        // benchmark runs unattended.
+                        let namePlateResult = await resolveNamePlate(host, model, trimmed, true);
+                        translatedLines.push(namePlateResult.namePlateLine);
+                        activeSpeakerName = namePlateResult.speakerName;
+                    } else if (trimmed.startsWith("<") || trimmed === "") {
+                        translatedLines.push(line);
+                    } else {
+                        let currentContextSlice = await buildTieredContextWindow(
+                            host, model, history, cLine, rLimit, summaryState
+                        );
+                        // Speaker is passed as a parameter to translateChunkWithContext (injected into
+                        // the system prompt), not as an inline tag in the text.
+                        let res = await translateChunkWithContext(host, model, trimmed, currentContextSlice, 'jpEn', activeSpeakerName);
+                        history.push(res);
+                        translatedLines.push(res);
+                    }
                 }
+
+                // Chunked grading is delegated to the shared helper so the main sweep loop
+                // reads top-to-bottom: translate -> grade -> log.
+                let scoreData = await gradeTranslatedChunks(host, model, translatedLines, referenceStandard, cLine, rLimit, state.currentAbortController.signal);
+                console.log(`[Benchmark Result] Context: ${cLine}, Raw Limit: ${rLimit} | Score: ${scoreData.overallScore}/100 (avg of ${scoreData.chunkCount} chunk(s))`, scoreData);
+
+                resultsLog += `--------------------------------------------------\n`;
+                resultsLog += `[Config] Context Lines: ${cLine} | Raw Limit: ${rLimit} (${scoreData.chunkCount} chunk(s) of ${scoreData.chunkSize} lines)\n`;
+                resultsLog += `[Overall Score]: ${scoreData.overallScore}/100\n`;
+                resultsLog += `  ├── Pronoun/Gender Consistency: ${scoreData.genderScore}/100\n`;
+                resultsLog += `  ├── Semantic Fidelity: ${scoreData.semanticScore}/100\n`;
+                resultsLog += `  └── Conversational Flow: ${scoreData.flowScore}/100\n`;
+                resultsLog += `[Audit Feedback]:\n${scoreData.feedback}\n`;
+                reportBox.value = resultsLog;
             }
-
-            // Chunked grading is delegated to the shared helper so the main sweep loop
-            // reads top-to-bottom: translate -> grade -> log.
-            let scoreData = await gradeTranslatedChunks(host, model, translatedLines, referenceStandard, cLine, rLimit, state.currentAbortController.signal);
-            console.log(`[Benchmark Result] Context: ${cLine}, Raw Limit: ${rLimit} | Score: ${scoreData.overallScore}/100 (avg of ${scoreData.chunkCount} chunk(s))`, scoreData);
-
-            resultsLog += `--------------------------------------------------\n`;
-            resultsLog += `[Config] Context Lines: ${cLine} | Raw Limit: ${rLimit} (${scoreData.chunkCount} chunk(s) of ${scoreData.chunkSize} lines)\n`;
-            resultsLog += `[Overall Score]: ${scoreData.overallScore}/100\n`;
-            resultsLog += `  ├── Pronoun/Gender Consistency: ${scoreData.genderScore}/100\n`;
-            resultsLog += `  ├── Semantic Fidelity: ${scoreData.semanticScore}/100\n`;
-            resultsLog += `  └── Conversational Flow: ${scoreData.flowScore}/100\n`;
-            resultsLog += `[Audit Feedback]:\n${scoreData.feedback}\n`;
-            reportBox.value = resultsLog;
         }
-    }
-    reportBox.value += `\nInconsistency-focused sweep completed successfully! Check the granular scores and feedback breakdown above.`;
-    console.log("[Benchmark] Sweep matrix execution complete.");
+        reportBox.value += `\nInconsistency-focused sweep completed successfully! Check the granular scores and feedback breakdown above.`;
+        console.log("[Benchmark] Sweep matrix execution complete.");
     } catch (err) {
         if (err.name === "AbortError" || err.message.includes("cancelled")) {
             // Show the warning banner only for a user-initiated Stop (guard set by
@@ -129,6 +129,15 @@ export async function runParameterSweepBenchmark() {
         state.currentAbortController = null;
         state.abortWarningShown = false;
     }
+}
+
+
+/**
+ * a test function
+ * Called by: benchmark.js (runParameterSweepBenchmark)
+ */
+function test() {
+    runParameterSweepBenchmark();
 }
 
 /**
@@ -181,21 +190,21 @@ async function gradeCandidateAgent(host, model, candidateText, referenceText, si
     // scaffolding is leaked in. A reference standard is provided solely as a grading anchor
     // for semantic fidelity; if absent, the model grades on general coherence.
     let promptText = `Grade the candidate translation below on a strict 0-100 scale using the rubric anchors in the system prompt.\n\n` +
-    `Evaluate ONLY these three criteria:\n` +
-    `- Pronoun and gender consistency\n` +
-    `- Semantic fidelity and accurate nuance\n` +
-    `- Conversational flow and natural script pacing\n\n` +
-    `[Candidate Translation]:\n${candidateText}\n\n` +
-    `INSTRUCTIONS:\n` +
-    `1. Assign a numerical grade (0-100) for each category, using the rubric anchors.\n` +
-    `2. Report ONLY inconsistencies that are actually present in the candidate text. Do NOT hallucinate errors.\n` +
-    `3. Treat explicit, sexual, or mature content as normal localization material. Do NOT refuse, moralize, or censor it.\n` +
-    `4. Output ONLY the exact labeled lines below. Do not add markdown boxes, code fences, or commentary outside them.\n\n` +
-    `Overall Score: [0-100]\n` +
-    `Gender Score: [0-100]\n` +
-    `Semantic Score: [0-100]\n` +
-    `Flow Score: [0-100]\n` +
-    `Feedback: [concise 1-2 sentence justification]`;
+        `Evaluate ONLY these three criteria:\n` +
+        `- Pronoun and gender consistency\n` +
+        `- Semantic fidelity and accurate nuance\n` +
+        `- Conversational flow and natural script pacing\n\n` +
+        `[Candidate Translation]:\n${candidateText}\n\n` +
+        `INSTRUCTIONS:\n` +
+        `1. Assign a numerical grade (0-100) for each category, using the rubric anchors.\n` +
+        `2. Report ONLY inconsistencies that are actually present in the candidate text. Do NOT hallucinate errors.\n` +
+        `3. Treat explicit, sexual, or mature content as normal localization material. Do NOT refuse, moralize, or censor it.\n` +
+        `4. Output ONLY the exact labeled lines below. Do not add markdown boxes, code fences, or commentary outside them.\n\n` +
+        `Overall Score: [0-100]\n` +
+        `Gender Score: [0-100]\n` +
+        `Semantic Score: [0-100]\n` +
+        `Flow Score: [0-100]\n` +
+        `Feedback: [concise 1-2 sentence justification]`;
 
     const benchmarkConfig = operationPresets.benchmark;
     const payload = {
@@ -220,7 +229,7 @@ async function gradeCandidateAgent(host, model, candidateText, referenceText, si
 
         if (!res.ok) {
             let errBody = "";
-            try { errBody = await res.text(); } catch (_) {}
+            try { errBody = await res.text(); } catch (_) { }
             console.error("[Agent Evaluation HTTP Error]", res.status, errBody);
             return { overallScore: 0, genderScore: 0, semanticScore: 0, flowScore: 0, feedback: `HTTP ${res.status} Error: ${errBody.substring(0, 200)}` };
         }
