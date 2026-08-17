@@ -9,6 +9,7 @@
 import { state } from './main.js';
 import { clearError, showError } from './ui.js';
 import { operationPresets } from './translator-presets.js';
+import { logAIInteraction } from './logger.js';
 
 /**
  * Queries available local AI Server model endpoints and populates the model selection dropdown list.
@@ -193,6 +194,13 @@ export async function updateRecentSummary(host, model, currentRecentSummary, new
         const raw = data.choices?.[0]?.message?.content || "";
         const cleaned = cleanSummaryOutput(raw);
         console.log(`[Trace:Summary:Recent] Updated recent summary: "${cleaned}"`);
+        logAIInteraction({
+            preset: 'recentSummary',
+            prompt: promptText,
+            response: cleaned,
+            retryAttempt: 1,
+            outcome: 'generated'
+        });
         return cleaned || currentRecentSummary || "Ongoing scene dialogue.";
     } catch (e) {
         console.warn("[Trace:Summary:Recent] Failed to update recent summary:", e);
@@ -253,6 +261,13 @@ export async function updateArchivalSummary(host, model, currentArchivalSummary,
         const raw = data.choices?.[0]?.message?.content || "";
         const cleaned = cleanSummaryOutput(raw);
         console.log(`[Trace:Summary:Archival] Updated archival summary: "${cleaned}"`);
+        logAIInteraction({
+            preset: 'archivalSummary',
+            prompt: promptText,
+            response: cleaned,
+            retryAttempt: 1,
+            outcome: 'generated'
+        });
         return cleaned || currentArchivalSummary || recentSummaryToArchive;
     } catch (e) {
         console.warn("[Trace:Summary:Archival] Failed to update archival summary:", e);
@@ -340,6 +355,13 @@ export async function assessTranslationQualityWithAI(host, model, translatedText
         if (!res.ok) return true; // Fail open
         const data = await res.json();
         const content = (data.choices?.[0]?.message?.content || "").trim();
+        logAIInteraction({
+            preset: 'validator',
+            prompt: promptText,
+            response: content,
+            retryAttempt: 1,
+            outcome: content.toUpperCase().includes('FAIL') ? 'fail-verdict' : 'pass-verdict'
+        });
         // Qwen2.5-3B often returns prose, lowercase, trailing punctuation, or echoes the
         // instruction text ("Return 'FAIL' if..."). Treat the validator as advisory: only
         // a clean, standalone FAIL verdict (possibly with minor surrounding punctuation)
@@ -473,6 +495,13 @@ export async function translateChunkWithContext(host, model, chunkText, previous
         console.log(`[Trace:Translate:Response] cleaned: ${cleanedResult}`);
 
         if (isFallbackRun) {
+            logAIInteraction({
+                preset: presetType,
+                prompt: promptText,
+                response: cleanedResult,
+                retryAttempt: attempts,
+                outcome: 'fallback'
+            });
             return `[MANUAL_OVERRIDE_NEEDED] ${cleanedResult}`;
         }
 
@@ -527,9 +556,23 @@ export async function translateChunkWithContext(host, model, chunkText, previous
             } else {
                 console.log(`[Trace:Translate:Pass] Output passed all checks (no Japanese, no romaji fragment, no context leak, AI validation ${validatorVerdict}). Accepting translation.`);
             }
+            logAIInteraction({
+                preset: presetType,
+                prompt: promptText,
+                response: cleanedResult,
+                retryAttempt: attempts,
+                outcome: 'accepted'
+            });
             return cleanedResult;
         }
         console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, romajiFragment=${romajiFragment ? `'${romajiFragment}'` : 'none'}, hasOldContext=${hasOldContext}, aiHardFail=${failedAiHardCheck}). Dropping oldest context and retrying.`);
+        logAIInteraction({
+            preset: presetType,
+            prompt: promptText,
+            response: cleanedResult,
+            retryAttempt: attempts,
+            outcome: 'retried'
+        });
         if (currentContext.length > 0) currentContext.shift();
     }
 }

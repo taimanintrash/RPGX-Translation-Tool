@@ -15,3 +15,6 @@ AGENTS.md
 node_modules/
 
 .env
+
+# Generated AI interaction logs (runtime output from serve.py write endpoint)
+docs/logs/

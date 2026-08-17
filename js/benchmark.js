@@ -2,6 +2,7 @@ import { state } from './main.js';
 import { extractScriptText } from './parser.js';
 import { translateChunkWithContext, buildTieredContextWindow, resolveNamePlate, operationPresets } from './translator.js';
 import { showError, showWarning } from './ui.js';
+import { beginLoop, logAIInteraction, markSession, flushLoopToDisk } from './logger.js';
 
 /**
  * Runs a multi-dimensional parameter sweep matrix to audit translation inconsistency by testing different context lines and raw limits, then logs the evaluation feedback and scores.
@@ -43,6 +44,7 @@ export async function runParameterSweepBenchmark() {
         console.log("[Trace:Benchmark] Aborted prior process before starting benchmark sweep.");
     }
     state.currentAbortController = new AbortController();
+    beginLoop('benchmark');
 
     console.log("[Benchmark] Starting parameter sweep matrix...", { contextValues, rawLimitValues, model });
     reportBox.value = "⏳ Running parameter sweep matrix with granular multi-dimensional inconsistency auditing...\n";
@@ -127,7 +129,13 @@ export async function runParameterSweepBenchmark() {
         }
     } finally {
         state.currentAbortController = null;
+        // Flush benchmark-loop logs to disk (docs/logs/benchmark/*.md) and mark the
+        // session boundary. Benchmark logs are kept separate from the main
+        // translation loop so auditor interactions are not mixed in.
+        markSession(state.abortWarningShown ? 'aborted' : 'completed', 'benchmark sweep run');
+        await flushLoopToDisk('benchmark');
         state.abortWarningShown = false;
+        beginLoop('translation');
     }
 }
 
@@ -243,13 +251,21 @@ async function gradeCandidateAgent(host, model, candidateText, referenceText, si
         const flowMatch = content.match(/(?:Flow Score|Conversational Flow|Flow)[:\s]*(\d+)/i);
         const feedbackMatch = content.match(/(?:Feedback|Audit Feedback)[:\s]*([\s\S]*)/i);
 
-        return {
+        const graderScores = {
             overallScore: overallMatch ? parseInt(overallMatch[1], 10) : 50,
             genderScore: genderMatch ? parseInt(genderMatch[1], 10) : 50,
             semanticScore: semanticMatch ? parseInt(semanticMatch[1], 10) : 50,
             flowScore: flowMatch ? parseInt(flowMatch[1], 10) : 50,
             feedback: feedbackMatch ? feedbackMatch[1].trim() : content.trim()
         };
+        logAIInteraction({
+            preset: 'benchmark',
+            prompt: promptText,
+            response: `Overall:${graderScores.overallScore} Gender:${graderScores.genderScore} Semantic:${graderScores.semanticScore} Flow:${graderScores.flowScore} | ${graderScores.feedback}`,
+            retryAttempt: 1,
+            outcome: 'graded'
+        });
+        return graderScores;
     } catch (e) {
         console.error("[Agent Evaluation Error]:", e);
         return { overallScore: 50, genderScore: 50, semanticScore: 50, flowScore: 50, feedback: "Failed to process evaluation output via text parser." };
