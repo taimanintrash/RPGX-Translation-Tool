@@ -43,10 +43,8 @@ export const defaultPresetManifest = [
 ];
 
 /**
- * Maps a parsed preset JSON object onto an operation-specific configuration object,
- * logging (not error-bannering) the result. Used by the silent default-preset loader path
- * so startup does not spam the error banner for every loaded default.
- * Called by: translator-presets.js (loadAllDefaultPresets)
+ * Maps a preset JSON object into the operationPresets config for an operation key (resolving temperature/systemPrompt, including operation.fields) without updating any UI display
+ * Called by: js/translator-presets.js (loadAllDefaultPresets)
  */
 function mapPresetJsonQuiet(operationKey, presetJson, sourceName) {
     let mappedConfig = {
@@ -64,9 +62,8 @@ function mapPresetJsonQuiet(operationKey, presetJson, sourceName) {
 }
 
 /**
- * Maps a parsed preset JSON object onto an operation-specific configuration object,
- * then surfaces a success banner. Used by the interactive (file-upload) preset path.
- * Called by: translator-presets.js (loadSpecificPreset, loadDefaultPreset)
+ * Maps a preset JSON object into the operationPresets config for an operation key (resolving temperature/systemPrompt, including operation.fields) and updates the preset file-input display label with the loaded file's name
+ * Called by: js/translator-presets.js (loadSpecificPreset, loadDefaultPreset)
  */
 function mapPresetJson(operationKey, presetJson, sourceName) {
     let mappedConfig = {
@@ -90,10 +87,8 @@ function mapPresetJson(operationKey, presetJson, sourceName) {
 }
 
 /**
- * Updates the preset file-input display label to show the loaded file's name.
- * The display elements are created by renderDistinctPresetControls() keyed by
- * data-operation-key, so this locates the matching one and sets its text.
- * Called by: translator-presets.js (mapPresetJson)
+ * Updates the preset file-input display label to show the loaded file's name, locating the matching display element by data-operation-key
+ * Called by: js/translator-presets.js (mapPresetJson)
  */
 function updatePresetDisplayText(operationKey, loadedName) {
     const display = document.querySelector(`.preset-display[data-operation-key="${operationKey}"]`);
@@ -101,8 +96,8 @@ function updatePresetDisplayText(operationKey, loadedName) {
 }
 
 /**
- * Loads and maps preset configurations from an uploaded JSON file for a specified operation type.
- * Called by: main.js (window.loadSpecificPreset wiring for HTML file-upload onchange handlers)
+ * Loads and applies a user-uploaded preset JSON file for a specified operation type via FileReader and mapPresetJson
+ * Called by: HTML event handler via main.js window.loadSpecificPreset (HTML file-upload onchange), js/ui.js (renderDistinctPresetControls via global window.loadSpecificPreset)
  */
 export function loadSpecificPreset(operationKey, event) {
     console.log(`[Trace:Preset] loadSpecificPreset(operationKey="${operationKey}") invoked.`);
@@ -124,8 +119,8 @@ export function loadSpecificPreset(operationKey, event) {
 }
 
 /**
- * Fetches a shipped default preset JSON from the `default_presets/` directory and applies it to the matching operation.
- * Called by: main.js (window.loadDefaultPreset wiring for HTML default-preset buttons)
+ * Fetches and applies the registered default preset JSON file for an operation key from default_presets/, reporting an error if the fetch fails (requires HTTP serving)
+ * Called by: HTML event handler via main.js window.loadDefaultPreset (HTML default-preset button)
  */
 export async function loadDefaultPreset(operationKey) {
     console.log(`[Trace:Preset] loadDefaultPreset(operationKey="${operationKey}") invoked.`);
@@ -146,9 +141,8 @@ export async function loadDefaultPreset(operationKey) {
 }
 
 /**
- * Loads every shipped default preset from `default_presets/` into `operationPresets` so the translation
- * prompts have their default configuration available in memory without any user action.
- * Called by: main.js (DOMContentLoaded init)
+ * Fetches and applies all registered default preset files via Promise.allSettled, using the quiet mapper and reporting a warning if some or all presets fail to load
+ * Called by: js/main.js (DOMContentLoaded)
  */
 export async function loadAllDefaultPresets() {
     const results = await Promise.allSettled(

@@ -1,8 +1,8 @@
 import { state } from './main.js';
 
 /**
- * Opens or initializes the IndexedDB database used for caching application state and loaded files[cite: 7].
- * Called by: database.js (saveFilesToCache, loadFilesFromCache, saveUIStateToCache, loadUIStateFromCache)[cite: 7]
+ * Opens (or creates) the IndexedDB database and object store at version 6, resolving with the db handle
+ * Called by: js/database.js (saveFilesToCache, loadFilesFromCache, saveUIStateToCache, loadUIStateFromCache)
  */
 export function openDatabase() {
     return new Promise((resolve, reject) => {
@@ -17,8 +17,8 @@ export function openDatabase() {
 }
 
 /**
- * Saves the current registry of loaded files into IndexedDB storage[cite: 7].
- * Called by: parser.js (checkFinishedReads, removeFile, saveEditsToMemory, commitTextToRightFile)[cite: 7]
+ * Persists the loaded-files registry to IndexedDB under the cachedFilesRegistry key
+ * Called by: js/parser.js (checkFinishedReads, removeFile, saveEditsToMemory, commitTextToRightFile)
  */
 export async function saveFilesToCache(registry) {
     console.log(`[Trace:Cache] saveFilesToCache(${registry ? registry.length : 0} files) invoked.`);
@@ -30,8 +30,8 @@ export async function saveFilesToCache(registry) {
 }
 
 /**
- * Retrieves the cached file registry from IndexedDB[cite: 7].
- * Called by: main.js[cite: 7]
+ * Retrieves the cached file registry from IndexedDB.
+ * Called by: main.js
  */
 export async function loadFilesFromCache() {
     console.log('[Trace:Cache] loadFilesFromCache() invoked.');
@@ -47,8 +47,8 @@ export async function loadFilesFromCache() {
 }
 
 /**
- * Saves the current user interface options and settings values into IndexedDB[cite: 7].
- * Called by: parser.js, ui.js, and database.js[cite: 7]
+ * Persists the current UI settings (dropdowns, debug flags, stylization map, bracket toggles) to IndexedDB under the cachedUIState key
+ * Called by: js/parser.js (onSelectID, onCompareSelectionChange), js/ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap), js/ui-manual-step.js (syncManualStepModeLive)
  */
 export async function saveUIStateToCache() {
     console.log('[Trace:Cache] saveUIStateToCache() invoked.');
@@ -73,8 +73,8 @@ export async function saveUIStateToCache() {
 }
 
 /**
- * Retrieves cached user interface state settings from IndexedDB[cite: 7].
- * Called by: main.js[cite: 7]
+ * Retrieves the cached UI state object from IndexedDB, returning null on failure
+ * Called by: js/main.js (DOMContentLoaded)
  */
 export async function loadUIStateFromCache() {
     console.log('[Trace:Cache] loadUIStateFromCache() invoked.');

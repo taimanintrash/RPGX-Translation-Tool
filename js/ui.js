@@ -18,10 +18,8 @@ export { syncManualStepUIVisibility } from './ui-manual-step.js';
 export { initDraggableModal, initPaneResizer, initAutoNumberInputs } from './ui-layout.js';
 
 /**
- * Applies a banner variant class to #errorBanner, shows it, and sets its text.
- * Shared by showError / showSuccess / showWarning so all three reuse the same
- * #errorBanner element, swapping only the palette class.
- * Called by: ui.js (showError, showSuccess, showWarning)
+ * Displays the error/success/warning banner with a variant class, label, and message
+ * Called by: js/ui.js (showError, showSuccess, showWarning)
  */
 function setBanner(variantClass, label, msg) {
     const banner = document.getElementById("errorBanner");
@@ -34,8 +32,8 @@ function setBanner(variantClass, label, msg) {
 }
 
 /**
- * Displays a red error message banner on the user interface and logs it to the console.
- * Called by: parser.js, translator.js, translator-llm.js, translator-presets.js, ui.js
+ * Displays an error banner with the given message and logs it to the console
+ * Called by: js/parser.js (loadFiles, saveEditsToMemory, downloadFile, injectTranslationToRight), js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/translator-llm.js (fetchAiModels), js/translator-presets.js (loadSpecificPreset, loadDefaultPreset), js/ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings), js/benchmark.js (runParameterSweepBenchmark)
  */
 export function showError(msg) {
     console.log('[Trace:UI] showError():', msg);
@@ -44,8 +42,8 @@ export function showError(msg) {
 }
 
 /**
- * Displays a green success banner on the user interface and logs it to the console.
- * Called by: parser.js (saveEditsToMemory)
+ * Displays a success banner with the given message and logs it to the console
+ * Called by: js/parser.js (saveEditsToMemory)
  */
 export function showSuccess(msg) {
     console.log('[Trace:UI] showSuccess():', msg);
@@ -54,8 +52,8 @@ export function showSuccess(msg) {
 }
 
 /**
- * Displays a yellow warning banner on the user interface and logs it to the console.
- * Called by: translator.js (generateStylizationMapWithAI, translateViaAiServer), benchmark.js (runParameterSweepBenchmark)
+ * Displays a warning banner with the given message and logs it to the console
+ * Called by: js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/benchmark.js (runParameterSweepBenchmark)
  */
 export function showWarning(msg) {
     console.log('[Trace:UI] showWarning():', msg);
@@ -64,8 +62,8 @@ export function showWarning(msg) {
 }
 
 /**
- * Clears and hides the message banner (works for error, success, and warning variants).
- * Called by: translator-llm.js (fetchAiModels), translator.js (generateStylizationMapWithAI, translateViaAiServer)
+ * Hides and clears the error/success/warning banner
+ * Called by: js/translator.js (generateStylizationMapWithAI, translateViaAiServer), js/translator-llm.js (fetchAiModels)
  */
 export function clearError() {
     const banner = document.getElementById("errorBanner");
@@ -77,11 +75,8 @@ export function clearError() {
 }
 
 /**
- * Dynamically renders one custom-upload row per available default preset file in `default_presets/`.
- * The defaults themselves are already loaded into memory on startup; these controls let a user
- * upload a custom JSON to override any operation tier in memory. The number of rows scales with
- * the entries in `defaultPresetManifest`.
- * Called by: ui.js (openDebugMenu)
+ * Renders one file-input row per registered default preset into the distinct-presets container, wiring each to its loadSpecificPreset handler
+ * Called by: js/ui.js (openDebugMenu)
  */
 export function renderDistinctPresetControls() {
     console.log(`[Trace:UI] renderDistinctPresetControls() rendering ${defaultPresetManifest.length} preset row(s).`);
@@ -132,8 +127,8 @@ export function renderDistinctPresetControls() {
 }
 
 /**
- * Opens the debug modal overlay and initializes input values and UI page elements from state.
- * Called by: main.js (window.openDebugMenu wiring for HTML Debug button)
+ * Opens the debug modal: resets to page 1, syncs all debug inputs from state, renders the preset controls and discovered mappings, and disables the Save Map button
+ * Called by: HTML event handler via main.js window.openDebugMenu (HTML Debug button)
  */
 export function openDebugMenu() {
     console.log('[Trace:UI] openDebugMenu() invoked.');
@@ -156,10 +151,8 @@ export function openDebugMenu() {
 }
 
 /**
- * Attaches a one-time input listener to the stylization map editor textarea so any edit
- * reactivates the Save Map button. Guarded with a dataset flag so repeated openDebugMenu
- * calls do not stack duplicate listeners.
- * Called by: ui.js (openDebugMenu)
+ * Wires the stylization-map editor textarea to reactivate the Save Map button on input (idempotent)
+ * Called by: js/ui.js (openDebugMenu)
  */
 export function initStylizationMapEditorSaveActivation() {
     const editor = document.getElementById("stylizationMapEditor");
@@ -169,8 +162,8 @@ export function initStylizationMapEditorSaveActivation() {
 }
 
 /**
- * Switches between different pages within the debug modal interface.
- * Called by: main.js (window.switchDebugPage wiring for HTML prev/next buttons)
+ * Moves the debug modal's current page by a direction delta, clamped to pages 1-2, and updates the page display
+ * Called by: HTML event handler via main.js window.switchDebugPage (HTML prev/next buttons)
  */
 export function switchDebugPage(direction) {
     state.currentDebugPage += direction;
@@ -180,8 +173,8 @@ export function switchDebugPage(direction) {
 }
 
 /**
- * Updates the visibility of sections and button states for the current debug page view.
- * Called by: ui.js (openDebugMenu, switchDebugPage)
+ * Shows/hides debug page 1 vs page 2 and updates the title and prev/next button visibility based on the current page
+ * Called by: js/ui.js (openDebugMenu, switchDebugPage)
  */
 export function updateDebugPageDisplay() {
     const page1 = document.getElementById("debugPage1");
@@ -206,10 +199,8 @@ export function updateDebugPageDisplay() {
 }
 
 /**
- * Saves configuration changes from the debug modal inputs and closes the debug overlay.
- * Reorders the stylization map (names first, then by key length desc) so the saved JSON matches
- * what is visible in the editor, and persists the full UI state to the IndexedDB cache.
- * Called by: main.js (window.closeDebugMenu wiring for HTML Save & Close button)
+ * Saves all debug-modal settings (limits, flags, stylization map) into state, parses and reorders the map, closes the overlay, and persists UI state to cache
+ * Called by: HTML event handler via main.js window.closeDebugMenu (HTML Save & Close button)
  */
 export function closeDebugMenu() {
     console.log('[Trace:UI] closeDebugMenu() saving settings and closing.');
@@ -238,16 +229,16 @@ export function closeDebugMenu() {
 }
 
 /**
- * Closes the debug modal overlay without saving input changes.
- * Called by: main.js (window.closeDebugMenuWithoutSaving wiring for HTML Cancel button)
+ * Closes the debug modal overlay without persisting any settings changes
+ * Called by: HTML event handler via main.js window.closeDebugMenuWithoutSaving (HTML Cancel button)
  */
 export function closeDebugMenuWithoutSaving() {
     document.getElementById("debugModalOverlay").style.display = "none";
 }
 
 /**
- * Parses and saves the current JSON contents of the stylization map editor to application memory and cache.
- * Called by: main.js (window.saveStylizationMapFromView wiring for HTML Save Map button)
+ * Parses the stylization-map editor textarea, reorders it into state, refreshes the editor, persists to cache, and disables the Save Map button
+ * Called by: HTML event handler via main.js window.saveStylizationMapFromView (HTML Save Map button)
  */
 export function saveStylizationMapFromView() {
     console.log('[Trace:UI] saveStylizationMapFromView() invoked.');
@@ -284,8 +275,8 @@ export function setSaveMapButtonEnabled(enabled) {
 }
 
 /**
- * Renders the dynamic HTML container listing discovered stylization mappings pending review.
- * Called by: translator.js (generateStylizationMapWithAI), ui.js (commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, setAllDiscoveredSelection, openDebugMenu)
+ * Renders the pending discovered stylization mappings as editable checkbox rows with Select All/Deselect All controls
+ * Called by: js/translator.js (generateStylizationMapWithAI), js/ui.js (openDebugMenu, commitApprovedMappingsToMap, deleteSelectedDiscoveredMappings, setAllDiscoveredSelection)
  */
 export function renderDiscoveredMappingsUI() {
     let container = document.getElementById("discoveredMappingsContainer");
@@ -318,16 +309,16 @@ export function renderDiscoveredMappingsUI() {
 }
 
 /**
- * Updates the selection status of an individual pending discovered mapping item.
- * Called by: main.js (window.toggleDiscoveredSelection wiring for HTML checkbox onchange)
+ * Toggles the selected state of a pending discovered mapping at the given index
+ * Called by: HTML event handler via main.js window.toggleDiscoveredSelection (HTML checkbox onchange)
  */
 export function toggleDiscoveredSelection(index, isChecked) {
     if (state.pendingDiscoveredMappings[index]) state.pendingDiscoveredMappings[index].selected = isChecked;
 }
 
 /**
- * Sets the selection state for all pending discovered mapping items at once.
- * Called by: main.js (window.setAllDiscoveredSelection wiring for HTML Select/Deselect All buttons)
+ * Sets the selected state of every pending discovered mapping and re-renders the list
+ * Called by: HTML event handler via main.js window.setAllDiscoveredSelection (HTML Select/Deselect All buttons)
  */
 export function setAllDiscoveredSelection(selectionState) {
     state.pendingDiscoveredMappings.forEach(item => item.selected = selectionState);
@@ -351,11 +342,8 @@ export function updateDiscoveredVal(index, newVal) {
 }
 
 /**
- * Returns an ordered copy of a stylization map object: __priorityOverride__ first, then name
- * entries (values wrapped in 「」), then all other entries, each group sorted by key length
- * descending so longer multi-character keys are applied before their substrings during replacement.
- * Empty-value mappings are dropped since they replace text with nothing.
- * Called by: ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap)
+ * Reorders a stylization map so longer keys come first (so longer patterns match before their substrings) while preserving the reserved __priorityOverride__ entry
+ * Called by: js/ui.js (closeDebugMenu, saveStylizationMapFromView, commitApprovedMappingsToMap)
  */
 function orderStylizationMap(map) {
     const PRIORITY_KEY = "__priorityOverride__";
@@ -379,9 +367,8 @@ function orderStylizationMap(map) {
 }
 
 /**
- * Commits selected pending discovered mappings into the active heavy stylization map dictionary.
- * Skips items with empty keys/values and items whose key is the reserved __priorityOverride__ token.
- * Called by: main.js (window.commitApprovedMappingsToMap wiring for HTML Add Selected button)
+ * Adds all selected discovered mappings into the stylization map (skipping the reserved __priorityOverride__ key and empty entries), reorders it, refreshes the editor, and disables the Save Map button
+ * Called by: HTML event handler via main.js window.commitApprovedMappingsToMap (HTML Add Selected button)
  */
 export function commitApprovedMappingsToMap() {
     console.log('[Trace:UI] commitApprovedMappingsToMap() invoked.');
@@ -429,8 +416,8 @@ export function deleteSelectedDiscoveredMappings() {
 }
 
 /**
- * Copies the current text contents of the stylization map editor to the system clipboard.
- * Called by: main.js (window.copyStylizationMapToClipboard wiring for HTML Copy button)
+ * Copies the stylization-map editor text to the clipboard, reporting an error on failure
+ * Called by: HTML event handler via main.js window.copyStylizationMapToClipboard (HTML Copy button)
  */
 export async function copyStylizationMapToClipboard() {
     console.log('[Trace:UI] copyStylizationMapToClipboard() invoked.');

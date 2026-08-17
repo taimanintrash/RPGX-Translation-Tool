@@ -5,10 +5,8 @@
 // ui.js is purely stylization-map management + the error banner.
 
 /**
- * Initializes mouse drag-and-drop mechanics for the floating debug modal window.
- * Attaches mousedown/mousemove/mouseup listeners to the modal header so the modal
- * can be repositioned by dragging its title bar.
- * Called by: main.js (DOMContentLoaded init)
+ * Initializes mouse drag-and-drop for the floating debug modal by wiring mousedown/mousemove/mouseup listeners on the modal header so the modal can be repositioned by dragging its title bar
+ * Called by: js/main.js (DOMContentLoaded)
  */
 export function initDraggableModal() {
     const modal = document.getElementById("draggableDebugModal");
@@ -35,6 +33,10 @@ export function initDraggableModal() {
         e.preventDefault();
     });
 
+    /**
+     * Moves the modal to follow the cursor during an active drag (nested helper in initDraggableModal)
+     * Called by: ui-layout.js (initDraggableModal via document mousemove listener)
+     */
     function onMouseMove(e) {
         if (!isDragging) return;
         const dx = e.clientX - startX;
@@ -43,6 +45,10 @@ export function initDraggableModal() {
         modal.style.top = (initialTop + dy) + 'px';
     }
 
+    /**
+     * Stops the modal drag and detaches the mousemove/mouseup listeners on mouseup (nested helper in initDraggableModal)
+     * Called by: ui-layout.js (initDraggableModal via document mouseup listener)
+     */
     function onMouseUp() {
         isDragging = false;
         document.removeEventListener('mousemove', onMouseMove);
@@ -51,10 +57,8 @@ export function initDraggableModal() {
 }
 
 /**
- * Generic helper: creates a column (horizontal) drag resizer between two elements.
- * Computes a width percentage from the cursor position clamped to [minPct, maxPct]
- * and applies it to both elements, then fires the optional onResize callback.
- * Called by: ui-layout.js (initPaneResizer)
+ * Generic helper: creates a column (horizontal) drag resizer between two elements, computing a width percentage from the cursor position clamped to [minPct, maxPct] and applying it to both elements, then firing the optional onResize callback
+ * Called by: js/ui-layout.js (initPaneResizer)
  */
 function _initColResizer(handleEl, leftEl, rightEl, wrapperEl, minPct, maxPct, onResize) {
     if (!handleEl || !leftEl || !rightEl || !wrapperEl) return;
@@ -87,9 +91,8 @@ function _initColResizer(handleEl, leftEl, rightEl, wrapperEl, minPct, maxPct, o
 }
 
 /**
- * Generic helper: creates a row (vertical) drag resizer between two sibling elements.
- * Computes new top/bottom heights from the cursor delta, clamped to a 30px minimum.
- * Called by: ui-layout.js (initPaneResizer)
+ * Generic helper: creates a row (vertical) drag resizer between two sibling elements, computing new top/bottom heights from the cursor delta clamped to a 30px minimum
+ * Called by: js/ui-layout.js (initPaneResizer)
  */
 function _initRowResizer(handleEl, topEl, bottomEl, containerEl) {
     if (!handleEl || !topEl || !bottomEl || !containerEl) return;
@@ -127,10 +130,8 @@ function _initRowResizer(handleEl, topEl, bottomEl, containerEl) {
 }
 
 /**
- * Syncs the external footer row alignment with the sidebar and pane widths.
- * Applies a left padding equal to sidebar + handle width, and mirrors pane column widths
- * so the footer actions line up under the source panes after a resize.
- * Called by: ui-layout.js (initPaneResizer via the onResize callback + window resize listener)
+ * Syncs the external footer row alignment with the sidebar and pane widths, applying a left padding equal to sidebar + handle width and mirroring pane column widths so the footer actions line up under the source panes after a resize
+ * Called by: js/ui-layout.js (initPaneResizer via the onResize callback and the window resize listener)
  */
 function _syncFooter() {
     const sidebar = document.querySelector(".sidebar");
@@ -162,10 +163,8 @@ function _syncFooter() {
 }
 
 /**
- * Initializes all draggable resize handles: the sidebar column resizer, the source-pane
- * column resizer, and the two manual-step context row resizers (Archival<->Recent,
- * Recent<->Split). Also aligns the footer on initial load and on window resize.
- * Called by: main.js (DOMContentLoaded init)
+ * Initializes all draggable resize handles (sidebar column, source-pane column, and the two manual-step context rows) and aligns the footer on initial load and on window resize
+ * Called by: js/main.js (DOMContentLoaded)
  */
 export function initPaneResizer() {
     _initColResizer(
@@ -209,11 +208,14 @@ export function initPaneResizer() {
 }
 
 /**
- * Makes elements with class .auto-number-input dynamically resize to fit their value
- * by setting a calc(<ch> + 16px) width on input and change events.
- * Called by: main.js (DOMContentLoaded init)
+ * Makes elements with class .auto-number-input dynamically resize to fit their value by setting a calc(<ch> + 16px) width on input and change events
+ * Called by: js/main.js (DOMContentLoaded)
  */
 export function initAutoNumberInputs() {
+    /**
+     * Sets a calc width based on the input value length (nested helper in initAutoNumberInputs)
+     * Called by: ui-layout.js (initAutoNumberInputs)
+     */
     function resize(el) {
         const len = String(el.value).length || 1;
         el.style.width = 'calc(' + len + 'ch + 16px)';

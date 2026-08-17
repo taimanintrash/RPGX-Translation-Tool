@@ -64,6 +64,25 @@ for file_path in glob.glob(os.path.join(js_dir, "**/*.js"), recursive=True):
             func_name = match.group(2) or match.group(3)
             if not func_name:
                 continue
+            # A `const NAME = ... =>` match is a real (module-scope) function only
+            # when the `const`/`export const` begins at column 0 of its source line.
+            # Indented const-arrow assignments are in-function local variables
+            # (e.g. `const isNameEntry = (val) => ...`), not manifest-eligible
+            # functions, so they are skipped to avoid false-positive "missing"
+            # entries. The `function NAME(...)` branch is unaffected because
+            # nested function declarations are still real functions.
+            if match.group(3):
+                line_start = content.rfind("\n", 0, match.start()) + 1
+                if content[line_start:match.start()].startswith((" ", "\t")):
+                    continue
+            # The regex's non-greedy JSDoc capture can span multiple comment
+            # blocks when a module-level doc (with its own /** */) sits ahead of
+            # code and then this function's real JSDoc. Trim the capture to the
+            # last single /** ... */ block so the description reflects this
+            # function's own JSDoc, not a far-away module doc.
+            if jsdoc and jsdoc.count("/**") > 1:
+                last_open = jsdoc.rfind("/**")
+                jsdoc = jsdoc[last_open:]
                 
             start_idx = match.end()
             end_idx = matches[i+1].start() if i + 1 < len(matches) else len(content)

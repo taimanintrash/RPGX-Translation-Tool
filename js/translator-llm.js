@@ -12,9 +12,8 @@ import { operationPresets } from './translator-presets.js';
 import { logAIInteraction } from './logger.js';
 
 /**
- * Queries available local AI Server model endpoints and populates the model selection dropdown list.
- * Tries multiple OpenAI-compatible endpoints (LM Studio, Ollama, llama.cpp) and falls back across them.
- * Called by: main.js (DOMContentLoaded init + window.fetchAiModels wiring for HTML button)
+ * Queries available local AI-server model endpoints (OpenAI-compatible variants across LM Studio, Ollama, llama.cpp) and populates the model-selection dropdown, falling back across endpoints
+ * Called by: js/main.js (DOMContentLoaded, window.fetchAiModels wiring)
  */
 export async function fetchAiModels() {
     console.log('[Trace:Models] fetchAiModels() invoked.');
@@ -88,8 +87,8 @@ export async function fetchAiModels() {
 }
 
 /**
- * Wraps a given string of text into an array of lines bounded by a maximum character length limit.
- * Called by: translator.js (translateViaAiServer flushBuffer)
+ * Wraps a string of text into an array of lines, each bounded by a maximum character length, splitting on any whitespace so embedded newlines are handled correctly
+ * Called by: js/translator.js (translateViaAiServer flushBuffer)
  */
 export function wrapTextToLines(text, maxLineLength = 40) {
     // Split on any whitespace (including newlines) so multi-line input is handled
@@ -111,8 +110,8 @@ export function wrapTextToLines(text, maxLineLength = 40) {
 }
 
 /**
- * Cleans up raw LLM outputs by stripping conversational filler words, explanation prefixes, code block formatting, and surrounding quotes.
- * Called by: translator-llm.js (translateChunkWithContext)
+ * Cleans raw LLM translation output by stripping conversational filler, explanation prefixes, code-block formatting, and surrounding quotes, returning the first non-empty line
+ * Called by: js/translator-llm.js (translateChunkWithContext)
  */
 export function cleanModelOutput(rawText) {
     if (!rawText) return "";
@@ -126,8 +125,8 @@ export function cleanModelOutput(rawText) {
 }
 
 /**
- * Cleans up raw LLM summary outputs by stripping preamble words, role labels, and surrounding quotes.
- * Called by: translator-llm.js (updateRecentSummary, updateArchivalSummary, summarizeOldContext)
+ * Cleans raw LLM summary output by stripping preamble words, role labels (Task/Rules), and surrounding quotes, joining the remaining lines into one string
+ * Called by: js/translator-llm.js (updateRecentSummary, updateArchivalSummary)
  */
 export function cleanSummaryOutput(rawText) {
     if (!rawText) return "";
@@ -141,9 +140,8 @@ export function cleanSummaryOutput(rawText) {
 }
 
 /**
- * Updates the Tier 2 rolling recent scene summary with newly confirmed dialogue lines.
- * Focuses on active characters, emotional tone, and immediate narrative developments.
- * Called by: translator-llm.js (buildTieredContextWindow)
+ * Updates the Tier 2 rolling recent scene summary with newly confirmed dialogue lines, focusing on active characters, their tone/relationship, and the current action or discussion topic
+ * Called by: js/translator-llm.js (buildTieredContextWindow, summarizeOldContext)
  */
 export async function updateRecentSummary(host, model, currentRecentSummary, newLines) {
     console.log(`[Trace:Summary:Recent] Updating recent summary with ${newLines.length} line(s).`);
@@ -209,9 +207,8 @@ export async function updateRecentSummary(host, model, currentRecentSummary, new
 }
 
 /**
- * Updates the Tier 3 archival summary (summary-of-summaries) by compressing an overflowing scene recap.
- * If an archival summary already exists, it updates itself to preserve macro story state and key relationships.
- * Called by: translator-llm.js (buildTieredContextWindow)
+ * Updates the Tier 3 archival summary (summary-of-summaries) by compressing an overflowing scene recap into a single sentence, preserving macro story state and key relationships when an archival summary already exists
+ * Called by: js/translator-llm.js (buildTieredContextWindow)
  */
 export async function updateArchivalSummary(host, model, currentArchivalSummary, recentSummaryToArchive) {
     console.log(`[Trace:Summary:Archival] Compressing scene recap into archival summary.`);
@@ -276,8 +273,8 @@ export async function updateArchivalSummary(host, model, currentArchivalSummary,
 }
 
 /**
- * Summarizes older dialogue context lines into a single sentence (kept for backwards compatibility).
- * Called by: translator.js (legacy callers), translator-llm.js
+ * Summarizes older dialogue context lines into a single sentence by delegating to updateRecentSummary with an empty prior summary (backwards-compat wrapper)
+ * Called by: js/translator.js (legacy callers)
  */
 export async function summarizeOldContext(host, model, linesToSummarize) {
     return await updateRecentSummary(host, model, "", linesToSummarize);
@@ -306,9 +303,8 @@ const ROMAJI_FRAGMENT_WORDS = [
 ];
 
 /**
- * Detects leftover Japanese romaji fragments in an otherwise-English translation.
- * Returns the first matched fragment, or null if none found.
- * Called by: translator-llm.js (translateChunkWithContext)
+ * Detects leftover Japanese romaji fragments in an otherwise-English translation using a curated word-boundary match list; returns the first matched fragment, or null if none found
+ * Called by: js/translator-llm.js (translateChunkWithContext)
  */
 export function detectRomajiFragment(translatedText) {
     if (!translatedText) return null;
@@ -324,10 +320,8 @@ export function detectRomajiFragment(translatedText) {
 }
 
 /**
- * Assesses the quality of a Japanese-to-English translation using a stringent QA prompt.
- * Returns true (pass) unless a clean standalone FAIL verdict is emitted (flaky small-model
- * prose or echoed instructions are treated as a pass so deterministic checks remain the gate).
- * Called by: translator-llm.js (translateChunkWithContext)
+ * Assesses the quality of a Japanese-to-English translation via a stringent QA prompt; returns true (pass) unless a clean standalone FAIL verdict is emitted, failing open on HTTP error so deterministic checks remain the gate
+ * Called by: js/translator-llm.js (translateChunkWithContext)
  */
 export async function assessTranslationQualityWithAI(host, model, translatedText) {
     const config = operationPresets.validator || { temperature: 0.1, systemPrompt: "You are a stringent quality assurance AI evaluating Japanese-to-English translations. Analyze the provided text for untranslated Japanese fragments, romaji placeholders, and poor localization mixing. Return 'PASS' if the translation is fully and naturally localized into English. Return 'FAIL' if any fragments or poor mixing are detected." };
@@ -378,11 +372,8 @@ export async function assessTranslationQualityWithAI(host, model, translatedText
 }
 
 /**
- * Detects whether a prior context line leaked into the translation output.
- * Uses exact-substring and a sliding 30-char window match (step 5) so leaks copying
- * the middle/end of a context line are caught, while short common phrases avoid false positives.
- * Returns { leaked: boolean, leakedLine: string } where leakedLine is the matched context line.
- * Called by: translator-llm.js (translateChunkWithContext)
+ * Detects whether a prior context line leaked into the translation output using an exact-substring check and a sliding 30-char window match (step 5); returns {leaked, leakedLine}
+ * Called by: js/translator-llm.js (translateChunkWithContext)
  */
 function detectContextLeak(cleanedResult, currentContext) {
     for (let ctxLine of currentContext) {
@@ -412,10 +403,8 @@ function detectContextLeak(cleanedResult, currentContext) {
 }
 
 /**
- * Translates a text chunk or chunk with prior history context using configured system parameters and handles retry logic.
- * Runs a multi-check validation gate (Japanese chars, romaji fragment, context leak, AI validator) with a
- * hard-fail window that degrades the AI verdict to advisory after 3 attempts so a flaky small model cannot stall.
- * Called by: translator.js (translateViaAiServer, resolveNamePlate), benchmark.js (runParameterSweepBenchmark)
+ * Translates a text chunk with prior history context using the configured preset, running a multi-check validation gate (Japanese chars, romaji fragment, context leak, AI validator) with retry logic that degrades the AI verdict to advisory after 3 attempts so a flaky small model cannot stall
+ * Called by: js/translator.js (translateViaAiServer, flushBuffer, resolveNamePlate), js/benchmark.js (runParameterSweepBenchmark)
  */
 export async function translateChunkWithContext(host, model, chunkText, previousContext, presetType = 'jpEn', speakerName = '', tempAdjust = 0) {
     console.log(`[Trace:Translate] translateChunkWithContext(preset="${presetType}", contextLines=${previousContext.length}) invoked.`);
@@ -578,16 +567,8 @@ export async function translateChunkWithContext(host, model, chunkText, previous
 }
 
 /**
- * Builds the tiered context window (Raw Tail -> Recent Summary -> Archival Summary) shared by the
- * production translation pipeline and the benchmark sweep, so both grade the model under
- * identical context conditions. Mutates and returns the summaryState object in place.
- *
- * Tier 1 (Raw Tail): the most recent `rawLimitThreshold` confirmed lines from history.
- * Tier 2 (Recent Summary): a rolling recap of lines that fell out of the raw tail.
- * Tier 3 (Archival Summary): a compressed macro story state when the recent summary overflows.
- * The final window is capped to `maxContextLines` entries (summary lines + raw tail combined).
- *
- * Called by: translator.js (translateViaAiServer), benchmark.js (runParameterSweepBenchmark), ui.js (refreshStepContextPreview)
+ * Builds the tiered context window (Raw Tail -> Recent Summary -> Archival Summary) shared by the production translation pipeline and the benchmark sweep, mutating and returning the summaryState object in place, with the final window capped to maxContextLines entries
+ * Called by: js/translator.js (translateViaAiServer flushBuffer), js/benchmark.js (runParameterSweepBenchmark), js/ui-manual-step.js (refreshStepContextPreview)
  */
 export async function buildTieredContextWindow(host, model, history, maxContextLines, rawLimitThreshold, summaryState) {
     let formattedContextForPrompt = [];

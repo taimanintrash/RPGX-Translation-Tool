@@ -17,10 +17,8 @@ export { operationPresets, defaultPresetManifest, loadSpecificPreset, loadDefaul
 export { fetchAiModels, wrapTextToLines, cleanModelOutput, cleanSummaryOutput, updateRecentSummary, updateArchivalSummary, summarizeOldContext, detectRomajiFragment, assessTranslationQualityWithAI, translateChunkWithContext, buildTieredContextWindow } from './translator-llm.js';
 
 /**
- * Validates a key/value pair from a stylization mapping output.
- * Rejects empty keys, keys with newlines, pure-numeric keys, and
- * object/array values. Returns true if the pair is valid.
- * Called by: translator.js (parseMappingOutput)
+ * Validates a candidate stylization mapping key/value pair, rejecting empty/oversized/numeric/sentence-like keys, single kana, common grammar particles, and empty or object values so only legitimate tick/punctuation patterns pass
+ * Called by: js/translator.js (parseMappingOutput)
  */
 function isValidMappingPair(key, value) {
     if (!key || typeof key !== "string") return false;
@@ -160,14 +158,8 @@ export function applyPriorityOverride(text, map) {
 }
 
 /**
- * Runs the stylization strip phase on a single source line: priority override
- * pre-pass, then the heavyStylizationMap replacement loop (skipping the
- * reserved __priorityOverride__ key), stripping name brackets only when the
- * active bracket-strip XOR context is on. Returns the cleaned text to send to
- * the AI and the list of matched patterns. When the line collapses to nothing
- * (it was entirely stylization), flushOnly is true so the caller can push the
- * extracted stylizations directly and skip translation.
- * Called by: translator.js (translateViaAiServer main loop + manual-step retranslate)
+ * Strips heavy-stylization patterns from a line for AI input (with optional bracket stripping of name replacements), collecting the applied patterns for context
+ * Called by: js/translator.js (translateViaAiServer main loop, flushBuffer manual-step retranslate)
  */
 function stripLine(line) {
     let extractedStylizations = [];
@@ -417,8 +409,8 @@ export async function generateStylizationMapWithAI() {
 }
 
 /**
- * Aborts ongoing translation or generation processes using an active AbortController.
- * Called by: main.js (window.stopTranslation wiring for HTML Stop button)
+ * Aborts the currently running translation by firing the active AbortController and flags it as user-initiated so the catch block surfaces a warning banner
+ * Called by: HTML event handler via main.js window.stopTranslation (HTML Stop button)
  */
 export function stopTranslation() {
     if (state.currentAbortController) {
@@ -432,14 +424,8 @@ export function stopTranslation() {
 }
 
 /**
- * Resolves a <NAME_PLATE> line into a translated name plate line and the active speaker name.
- * Shared by the production pipeline (translateViaAiServer) and the benchmark sweep so both
- * use the identical name-plate resolution path (namePlate preset, knownNamesMap caching).
- *
- * Returns { namePlateLine, speakerName } where speakerName is "Narrator" when the plate is
- * empty (denoting narration) and the resolved name otherwise.
- *
- * Called by: translator.js (translateViaAiServer), benchmark.js (runParameterSweepBenchmark)
+ * Resolves a <NAME_PLATE> line to a character name, using the known-names cache or translating via the model, optionally prompting the user, and merging the resolved name into the stylization map
+ * Called by: js/translator.js (translateViaAiServer), js/benchmark.js (runParameterSweepBenchmark)
  */
 export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept = false) {
     let nameValue = rawNamePlateLine.replace("<NAME_PLATE>", "").trim();
@@ -482,10 +468,8 @@ export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept
 }
 
 /**
- * Builds a getter/setter accessor object that lets buildTieredContextWindow mutate the
- * flushBuffer-scoped summary variables in place. The accessor proxies reads/writes through
- * closures so the tiered-summary state stays alive across the manual-step retranslate loop.
- * Called by: translator.js (translateViaAiServer flushBuffer)
+ * Builds an accessor object exposing gettable/settable archivalSummary, recentSummary, recentSummarySourceLines, and summarizedUpToIndex properties backed by the supplied getter/setter closures
+ * Called by: js/translator.js (translateViaAiServer flushBuffer)
  */
 function makeSummaryStateAccessor(getArchival, setArchival, getRecent, setRecent, getRecentSourceLines, getSummarizedUpTo, setSummarizedUpTo) {
     return {
@@ -500,12 +484,8 @@ function makeSummaryStateAccessor(getArchival, setArchival, getRecent, setRecent
 }
 
 /**
- * Reconstructs the manual-step display block for a target translatedLines entry by
- * replaying the same filter(l !== "") + join("\n") display order the main output uses.
- * A single translatedLines entry may span multiple display lines (multi-line narration),
- * so we cannot map to a single display-line index. Returns the edited text or the fallback
- * combined translation when the block cannot be located.
- * Called by: translator.js (translateViaAiServer flushBuffer manual-step continue path)
+ * Reconstructs the displayed line block for a target unfiltered index from the right-hand output area, returning the matching slice or a fallback string
+ * Called by: js/translator.js (translateViaAiServer flushBuffer manual-step continue path)
  */
 function reconstructManualStepDisplayBlock(translatedLines, outputRight, targetUnfilteredIndex, fallbackText) {
     const displayedLines = outputRight.value.split("\n");
@@ -529,9 +509,8 @@ function reconstructManualStepDisplayBlock(translatedLines, outputRight, targetU
 }
 
 /**
- * Flattens a translatedLines array whose entries may contain embedded newlines into a
- * single flat array of display lines, so the final outputAreaRight value is one line per row.
- * Called by: translator.js (translateViaAiServer final flatten step)
+ * Flattens an array of translated lines by splitting any entries containing embedded newlines into individual lines
+ * Called by: js/translator.js (translateViaAiServer final flatten step)
  */
 function flattenTranslatedLines(translatedLines) {
     let finalCleanedArray = [];
@@ -543,11 +522,8 @@ function flattenTranslatedLines(translatedLines) {
 }
 
 /**
- * Manages the core sequential translation loop across lines, handling buffers, name plates,
- * stylized pattern matching, context windows, and manual step checkpoints. Runs the strip
- * phase per dialogue line, flushes the dialogue buffer through translateChunkWithContext,
- * maintains the tiered summary context, and commits the final result to the right-hand file.
- * Called by: main.js (window.translateViaAiServer wiring for HTML Translate button)
+ * Drives the AI-server translation run: reads host/model and manual-override context settings, then translates the selected script lines through the configured preset and validation gate
+ * Called by: HTML event handler via main.js window.translateViaAiServer (HTML Translate button)
  */
 export async function translateViaAiServer() {
     console.log('[Trace:Translation] translateViaAiServer() invoked.');
