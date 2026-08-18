@@ -12,15 +12,29 @@ Want to get translating fast? Follow these steps. For technical details, customi
 
 ## Step 2: Open the Tool
 
-You can't double-click `index.html` directly — it needs a simple server to load its config files.
+You can't double-click `index.html` directly — it needs an HTTP server to load its config files. Pick one of the two options:
 
-1. Open a terminal in the folder where you downloaded this tool.
-2. Run:
-   ```bash
-   python3 -m http.server 8000
-   ```
-   *(No Python? Any static server works — `npx http-server`, VS Code Live Server, etc.)*
-3. Open your browser and go to: `http://localhost:8000/index.html`
+### With AI logs (recommended)
+
+Use the bundled `serve.py` dev server. It serves the app and adds a safe write endpoint so `js/logger.js` can save captured AI prompt/response logs to `docs/logs/`.
+
+```bash
+python3 serve.py            # http://localhost:8000
+# python3 serve.py 9000     # optional: custom port
+```
+
+Open `http://localhost:8000/index.html` in your browser. (Python 3 standard library only — no extra dependencies.)
+
+### Without logs (plain static server)
+
+Any static HTTP server works; only disk logging is skipped (the in-memory buffer is unaffected).
+
+```bash
+python3 -m http.server 8000
+# or: npx http-server, VS Code Live Server, etc.
+```
+
+Open `http://localhost:8000/index.html`.
 
 ## Step 3: Connect and Translate
 

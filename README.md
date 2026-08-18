@@ -2,7 +2,7 @@
 
 A lightweight, browser-based Japanese-to-English visual novel translation tool. It parses, compares, edits, and translates complex game script files locally using OpenAI-compatible local AI servers (LM Studio, Ollama, vLLM, llama.cpp). Engineered and tuned for small local LLMs, currently tested with **Qwen2.5-3B-Instruct**.
 
-No build tools, no Node.js packages, no server-side runtime. Pure vanilla JS ES modules + a single HTML file + CSS. Serve over HTTP so the browser can fetch the shipped preset files, and it runs.
+No build tools, no Node.js packages. Pure vanilla JS ES modules + a single HTML file + CSS. The app is served over HTTP so the browser can fetch the shipped preset files and (optionally) write captured AI logs to disk. Use the bundled `serve.py` dev server to get on-disk logging, or any static HTTP server if you don't need logs.
 
 ---
 
@@ -46,10 +46,11 @@ js/
 default_presets/        — 11 shipped JSON prompt presets (see Preset System)
 docs/
   FUNCTION_MANIFEST.md — Static call-graph reference for all JS functions
+  FEATURE_MANIFEST.md   — Feature list: main function + pipeline per feature (derived from the call graph)
 ```
 
 `index.html` loads only `js/main.js` via `<script type="module">`. All other files are reached through ES module imports:
-assignment in `main.js`. See `docs/FUNCTION_MANIFEST.md` for the complete static call graph.
+assignment in `main.js`. See `docs/FUNCTION_MANIFEST.md` for the complete static call graph, and `docs/FEATURE_MANIFEST.md` for the feature-by-feature function/pipeline map.
 
 The central `state` object exported from `main.js` holds all application state and is imported by every other module. 
 
@@ -113,22 +114,37 @@ The central `state` object exported from `main.js` holds all application state a
 
 ### Step 2: Serve the Web Application
 
-The tool must be served over HTTP (not opened as `file://`) so the browser can fetch the default presets in `default_presets/`.
+The tool must be served over HTTP (not opened as `file://`) so the browser can fetch the default presets in `default_presets/`. There are two ways to serve it:
 
-**From a cloned repository:**
+#### Option A — Run with AI-interaction logging (recommended for development)
+
+Use the bundled `serve.py` dev server. It serves the static files exactly like `python3 -m http.server` **and** adds a single safe write endpoint (`POST /__write_log`) that `js/logger.js` uses to persist captured AI prompt/response logs to `docs/logs/<loop>/<preset>.md`. Without this endpoint the app still works, but logs can't be written to disk.
+
+```bash
+git clone https://github.com/taimanintrash/RPGX-Translation-Tool.git
+cd RPGX-Translation-Tool
+python3 serve.py            # serves on http://localhost:8000
+# python3 serve.py 9000     # optional: custom port
+```
+
+Open `http://localhost:8000/index.html` in your browser. Captured logs (grouped by loop: translation / retranslate / mapping / benchmark, then split by preset) are written to `docs/logs/` at the end of each run.
+
+#### Option B — Run without logs (plain static server)
+
+If you don't need on-disk AI logs (e.g. a clean translation-only run), any static HTTP server works. The in-memory log buffer is unaffected; only disk persistence is skipped.
+
 ```bash
 git clone https://github.com/taimanintrash/RPGX-Translation-Tool.git
 cd RPGX-Translation-Tool
 python3 -m http.server 8000
+# or: npx http-server, VS Code Live Server, etc.
 ```
 
-Open `http://localhost:8000/index.html` in your browser.
+Open `http://localhost:8000/index.html`.
 
-**Without git (downloaded ZIP):**
-1. Download and extract the ZIP from GitHub.
-2. Open a terminal in the extracted folder.
-3. Run `python3 -m http.server 8000` (or any static server: `npx http-server`, VS Code Live Server).
-4. Open `http://localhost:8000/index.html`.
+**Without git (downloaded ZIP):** Download and extract the ZIP, open a terminal in the folder, then run either `python3 serve.py` (with logs) or `python3 -m http.server 8000` (without logs), and open `http://localhost:8000/index.html`.
+
+> **Note:** `serve.py` requires only the Python 3 standard library — no extra dependencies.
 
 ### Step 3: Connect to AI Server
 
