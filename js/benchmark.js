@@ -95,7 +95,7 @@ export async function runParameterSweepBenchmark() {
                         );
                         // Speaker is passed as a parameter to translateChunkWithContext (injected into
                         // the system prompt), not as an inline tag in the text.
-                        let res = await translateChunkWithContext(host, model, trimmed, currentContextSlice, 'jpEn', activeSpeakerName);
+                        let res = await translateChunkWithContext(host, model, trimmed, currentContextSlice, 'jpEn', activeSpeakerName, 0, trimmed);
                         history.push(res);
                         translatedLines.push(res);
                     }

@@ -107,10 +107,10 @@ export function getActiveLoopKind() {
 }
 
 /**
- * Captures a single AI-interaction entry with the 5-field schema (preset, prompt, response, retryAttempt, outcome), routing it to the active loop's buffer under its preset key with a rolling cap; no-op when capture is disabled
+ * Captures a single AI-interaction entry with the 6-field schema (preset, sourceText, prompt, response, retryAttempt, outcome), routing it to the active loop's buffer under its preset key with a rolling cap; no-op when capture is disabled
  * Called by: js/translator-llm.js (translateChunkWithContext accepted/retried/fallback paths, updateRecentSummary, updateArchivalSummary, assessTranslationQualityWithAI), js/translator.js (generateStylizationMapWithAI phases), js/benchmark.js (gradeCandidateAgent)
  */
-export function logAIInteraction({ preset, prompt, response, retryAttempt = 1, outcome = '' }) {
+export function logAIInteraction({ preset, prompt, response, sourceText = '', retryAttempt = 1, outcome = '' }) {
     if (!captureEnabled) return;
     const kind = activeLoopKind;
     if (!LOOP_KINDS.includes(kind)) return;
@@ -123,6 +123,7 @@ export function logAIInteraction({ preset, prompt, response, retryAttempt = 1, o
         timestamp: new Date().toISOString(),
         loopKind: kind,
         preset: presetKey,
+        sourceText: sourceText ?? '',
         prompt: prompt ?? '',
         response: response ?? '',
         retryAttempt,
@@ -196,6 +197,9 @@ export function exportPresetAsMarkdown(kind, presetKey) {
         md += `- **retry attempt:** ${e.retryAttempt}\n`;
         if (e.outcome) md += `- **outcome:** ${e.outcome}\n`;
         md += `\n`;
+        if (e.sourceText) {
+            md += `### Source Text (before strip/mapping)\n\n\`\`\`text\n${e.sourceText}\n\`\`\`\n\n`;
+        }
         if (e.prompt) {
             md += `### Prompt Sent to LLM\n\n\`\`\`text\n${e.prompt}\n\`\`\`\n\n`;
         }

@@ -90,7 +90,7 @@ In-memory ring buffer that captures every prompt sent to the LLM and every respo
 
 **Loop → folder mapping:** translation → `docs/logs/translation/`, retranslate → `docs/logs/manual-step/`, mapping → `docs/logs/mapping/`, benchmark → `docs/logs/benchmark/`.
 
-**Entry schema (simplified, 5 fields):** `preset`, `prompt`, `response`, `retryAttempt`, `outcome` (accepted / retried / fallback / generated / graded).
+**Entry schema (simplified, 6 fields):** `preset`, `sourceText`, `prompt`, `response`, `retryAttempt`, `outcome` (accepted / retried / fallback / generated / graded). `sourceText` holds the original source line before stylization strip/mapping (empty for summary/validator-only entries).
 
 ### setCaptureEnabled — Enables or disables AI-interaction capture; when disabled, logging calls are no-ops so the production pipeline pays no allocation cost
 
@@ -116,7 +116,7 @@ In-memory ring buffer that captures every prompt sent to the LLM and every respo
 #### What functions are used in it :
 - (none)
 
-### logAIInteraction — Captures a single AI-interaction entry with the 5-field schema (preset, prompt, response, retryAttempt, outcome), routing it to the active loop's buffer under its preset key with a rolling cap; no-op when capture is disabled
+### logAIInteraction — Captures a single AI-interaction entry with the 6-field schema (preset, sourceText, prompt, response, retryAttempt, outcome), routing it to the active loop's buffer under its preset key with a rolling cap; no-op when capture is disabled
 
 #### What function call it:
 - js/translator-llm.js (translateChunkWithContext accepted/retried/fallback paths, updateRecentSummary, updateArchivalSummary, assessTranslationQualityWithAI), js/translator.js (generateStylizationMapWithAI phases), js/benchmark.js (gradeCandidateAgent)
@@ -132,7 +132,7 @@ In-memory ring buffer that captures every prompt sent to the LLM and every respo
 #### What functions are used in it :
 - (none)
 
-### exportPresetAsMarkdown — Renders a loop's preset buffer as an AI-parseable markdown document with per-entry headers, metadata tags, fenced prompt/response blocks, and session-boundary headers
+### exportPresetAsMarkdown — Renders a loop's preset buffer as an AI-parseable markdown document with per-entry headers, metadata tags, fenced source-text/prompt/response blocks, and session-boundary headers
 
 #### What function call it:
 - js/logger.js (flushLoopToDisk)
@@ -580,7 +580,7 @@ Contains the AI server model-list fetcher, text-wrapping and output-cleaning hel
 #### What functions are used in it :
 - (none)
 
-### translateChunkWithContext — Translates a text chunk with prior history context using the configured preset, running a multi-check validation gate (Japanese chars, romaji fragment, context leak, AI validator) with retry logic that degrades the AI verdict to advisory after 3 attempts so a flaky small model cannot stall
+### translateChunkWithContext — Translates a text chunk with prior history context using the configured preset, running a multi-check validation gate (Japanese chars, romaji fragment, context leak, AI validator) with retry logic that degrades the AI verdict to advisory after 3 attempts so a flaky small model cannot stall; accepts an optional sourceText (the original line before strip/mapping) threaded to every logAIInteraction call
 
 #### What function call it:
 - js/translator.js (translateViaAiServer, flushBuffer, resolveNamePlate), js/benchmark.js (runParameterSweepBenchmark)
