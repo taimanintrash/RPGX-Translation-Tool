@@ -272,7 +272,7 @@ In-memory ring buffer capturing every LLM prompt/response, grouped by originatin
 
 **Pipeline:**
 1. `logger.beginLoop` (set active loop cursor)
-2. `logger.logAIInteraction` (capture entry; 5-field schema)
+2. `logger.logAIInteraction` (capture entry; 6-field schema incl. `sourceText` = original line before strip/mapping)
 3. `logger.markSession` (session boundary)
 4. `logger.flushLoopToDisk` (write to disk via `serve.py`) → `logger.getPresetsForLoop` · `logger.exportPresetAsMarkdown`
 5. `logger.setCaptureEnabled` / `logger.isCaptureEnabled` (toggle; defaults ON)

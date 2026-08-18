@@ -323,7 +323,7 @@ export function detectRomajiFragment(translatedText) {
  * Assesses the quality of a Japanese-to-English translation via a stringent QA prompt; returns true (pass) unless a clean standalone FAIL verdict is emitted, failing open on HTTP error so deterministic checks remain the gate
  * Called by: js/translator-llm.js (translateChunkWithContext)
  */
-export async function assessTranslationQualityWithAI(host, model, translatedText) {
+export async function assessTranslationQualityWithAI(host, model, translatedText, sourceText = '') {
     const config = operationPresets.validator || { temperature: 0.1, systemPrompt: "You are a stringent quality assurance AI evaluating Japanese-to-English translations. Analyze the provided text for untranslated Japanese fragments, romaji placeholders, and poor localization mixing. Return 'PASS' if the translation is fully and naturally localized into English. Return 'FAIL' if any fragments or poor mixing are detected." };
     const promptText = `Evaluate the following translation:\n\n${translatedText}\n\nResult:`;
     
@@ -351,6 +351,7 @@ export async function assessTranslationQualityWithAI(host, model, translatedText
         const content = (data.choices?.[0]?.message?.content || "").trim();
         logAIInteraction({
             preset: 'validator',
+            sourceText,
             prompt: promptText,
             response: content,
             retryAttempt: 1,
@@ -406,7 +407,7 @@ function detectContextLeak(cleanedResult, currentContext) {
  * Translates a text chunk with prior history context using the configured preset, running a multi-check validation gate (Japanese chars, romaji fragment, context leak, AI validator) with retry logic that degrades the AI verdict to advisory after 3 attempts so a flaky small model cannot stall
  * Called by: js/translator.js (translateViaAiServer, flushBuffer, resolveNamePlate), js/benchmark.js (runParameterSweepBenchmark)
  */
-export async function translateChunkWithContext(host, model, chunkText, previousContext, presetType = 'jpEn', speakerName = '', tempAdjust = 0) {
+export async function translateChunkWithContext(host, model, chunkText, previousContext, presetType = 'jpEn', speakerName = '', tempAdjust = 0, sourceText = '') {
     console.log(`[Trace:Translate] translateChunkWithContext(preset="${presetType}", contextLines=${previousContext.length}) invoked.`);
     // Pass control tags through unchanged, EXCEPT <NAME_PLATE> lines which need
     // name resolution (they contain the name in brackets).
@@ -486,6 +487,7 @@ export async function translateChunkWithContext(host, model, chunkText, previous
         if (isFallbackRun) {
             logAIInteraction({
                 preset: presetType,
+                sourceText,
                 prompt: promptText,
                 response: cleanedResult,
                 retryAttempt: attempts,
@@ -520,7 +522,7 @@ export async function translateChunkWithContext(host, model, chunkText, previous
         let qualityPass = true;
         let validatorVerdict = "skipped";
         if (!isNamePlatePreset) {
-            qualityPass = await assessTranslationQualityWithAI(host, model, cleanedResult);
+            qualityPass = await assessTranslationQualityWithAI(host, model, cleanedResult, sourceText);
             validatorVerdict = qualityPass ? "PASS" : "FAIL";
         }
 
@@ -547,6 +549,7 @@ export async function translateChunkWithContext(host, model, chunkText, previous
             }
             logAIInteraction({
                 preset: presetType,
+                sourceText,
                 prompt: promptText,
                 response: cleanedResult,
                 retryAttempt: attempts,
@@ -557,6 +560,7 @@ export async function translateChunkWithContext(host, model, chunkText, previous
         console.log(`[Trace:Translate:Retry] Output failed checks (hasJapanese=${hasJapanese}, romajiFragment=${romajiFragment ? `'${romajiFragment}'` : 'none'}, hasOldContext=${hasOldContext}, aiHardFail=${failedAiHardCheck}). Dropping oldest context and retrying.`);
         logAIInteraction({
             preset: presetType,
+            sourceText,
             prompt: promptText,
             response: cleanedResult,
             retryAttempt: attempts,
