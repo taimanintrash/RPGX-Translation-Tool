@@ -229,6 +229,9 @@ export async function generateStylizationMapWithAI() {
     let dialogueLines = sourceLines
         .map(l => l.trim())
         .filter(l => l && !l.startsWith("<"));
+    // Snapshot the original dialogue lines BEFORE priority override so each chunk's
+    // log entry can record the pre-mapping source text the model never sees directly.
+    let originalDialogueLines = [...dialogueLines];
     // Apply the priority override FIRST so the generation phases never see the
     // original characters (e.g. 、 rewritten to - before tick/sound analysis).
     if (state.heavyStylizationMap && state.heavyStylizationMap.__priorityOverride__) {
@@ -311,6 +314,9 @@ export async function generateStylizationMapWithAI() {
                 if (progressBar) progressBar.value = progressPercent;
 
                 let chunkText = dialogueLines.slice(i * 50, (i + 1) * 50).join("\n");
+                // Original (pre-override) source for the same chunk, for logging only.
+                let originalChunkText = originalDialogueLines.slice(i * 50, (i + 1) * 50).join("\n");
+                originalChunkText = originalChunkText.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
                 // Strip embedded newlines so the phase prompt text is a single coherent string.
                 chunkText = chunkText.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
                 if (!chunkText.trim()) continue;
@@ -343,6 +349,7 @@ export async function generateStylizationMapWithAI() {
                 let phasePairs = parseMappingOutput(content);
                 logAIInteraction({
                     preset: phase.presetKey,
+                    sourceText: originalChunkText,
                     prompt: promptText,
                     response: content,
                     retryAttempt: 1,
@@ -438,7 +445,7 @@ export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept
             finalUserApprovedName = state.knownNamesMap[cleanName];
         } else {
             let namePrompt = `Transliterate this character name. Return strictly the clean name text only:\n${cleanName}`;
-            let aiTranslatedName = await translateChunkWithContext(host, model, namePrompt, [], 'namePlate');
+            let aiTranslatedName = await translateChunkWithContext(host, model, namePrompt, [], 'namePlate', '', 0, cleanName);
             console.log(`[Trace:NamePlate] cleanName="${cleanName}" -> aiTranslatedName="${aiTranslatedName}"`);
             // In benchmark mode (autoAccept) skip the interactive UI prompt and accept the AI result.
             finalUserApprovedName = autoAccept ? aiTranslatedName : await promptUserForNameTranslation(cleanName, aiTranslatedName);
@@ -608,7 +615,8 @@ export async function translateViaAiServer() {
         ));
 
         let activePresetKey = 'jpEn';
-        let translatedCombined = await translateChunkWithContext(host, model, combinedText, currentContextSlice, activePresetKey, activeSpeakerName);
+        let originalChunkSource = dialogueBuffer.map(item => item.originalLine).join(" ").replace(/\n/g, " ").trim();
+        let translatedCombined = await translateChunkWithContext(host, model, combinedText, currentContextSlice, activePresetKey, activeSpeakerName, 0, originalChunkSource);
 
         if (state.manualStepByStepMode) {
             translatedLines[dialogueBuffer[0].index] = translatedCombined;
@@ -665,7 +673,7 @@ export async function translateViaAiServer() {
                             .join(" ").replace(/\n/g, " ").trim();
                     }
                     beginLoop('retranslate');
-                    translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry', activeSpeakerName);
+                    translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry', activeSpeakerName, 0, originalChunkSource);
                     beginLoop('translation');
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
