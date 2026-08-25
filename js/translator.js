@@ -667,6 +667,10 @@ export async function translateViaAiServer() {
                             ? applied.recentSummarySourceLines.slice()
                             : [];
                         summarizedUpToIndex = applied.summarizedUpToIndex || 0;
+                        pendingRecentSummaries = Array.isArray(applied.pendingRecentSummaries)
+                            ? applied.pendingRecentSummaries.slice()
+                            : [];
+                        state._stepAppliedSummaryState = null; // Clear after consuming!
                     }
                     const edits = stepResult.manualSummaryEdits;
                     if (edits) {

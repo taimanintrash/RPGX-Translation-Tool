@@ -280,6 +280,10 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
         state._stepMaxRawDefault = rawLimitDefault || 0;
         state._manualStepOpen = true;
 
+        if (!isRetranslateReentry) {
+            state._stepAppliedSummaryState = null;
+        }
+
         // Sync the manual override inputs to the current main .translate-config values
         // at the start of each manual step, so the preview reflects the Summary/Raw Lines
         // the user just set instead of stale values from a prior step.
