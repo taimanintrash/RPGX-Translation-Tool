@@ -765,6 +765,9 @@ export async function translateViaAiServer() {
             else translatedLines[dialogueBuffer[i].index] = "";
         }
         dialogueBuffer = [];
+        // Reset activeSpeakerName so that subsequent dialogue blocks without an explicit
+        // NAME_PLATE default to Narrator instead of carrying over the previous speaker.
+        activeSpeakerName = "";
     }
 
     try {
