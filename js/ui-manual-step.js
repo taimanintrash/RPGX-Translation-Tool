@@ -172,6 +172,42 @@ export function syncManualStepModeLive(enabled) {
     state.manualStepByStepMode = !!enabled;
     syncManualStepUIVisibility();
     saveUIStateToCache();
+
+    // If manual step mode was disabled while waiting in the modal,
+    // automatically resolve it with "continue" to resume the regular loop.
+    if (!state.manualStepByStepMode && state.manualStepResolver) {
+        const contextCount = parseInt(document.getElementById("stepContextLinesInput")?.value) || 0;
+        const rawLimit = parseInt(document.getElementById("stepRawLimitInput")?.value) || 0;
+        const manualSummaryEdits = readManualSummaryEdits();
+        state.manualStepResolver("continue", contextCount, rawLimit, manualSummaryEdits);
+        state.manualStepResolver = null;
+    }
+}
+
+/**
+ * Disables manual step-by-step override mode, hides the manual toolbar,
+ * syncs the checkbox settings, and immediately resolves the active step
+ * with a continue action to resume the translation loop automatically.
+ * Called by: HTML event handler via main.js window.disableManualStepAndResume (HTML Resume Auto button)
+ */
+export function disableManualStepAndResume() {
+    state.manualStepByStepMode = false;
+    
+    // Sync the checkbox in the settings modal
+    const cb = document.getElementById("manualStepModeCheckbox");
+    if (cb) cb.checked = false;
+
+    syncManualStepUIVisibility();
+    saveUIStateToCache();
+
+    // Resolve the active prompt to continue translating automatically
+    if (state.manualStepResolver) {
+        const contextCount = parseInt(document.getElementById("stepContextLinesInput")?.value) || 0;
+        const rawLimit = parseInt(document.getElementById("stepRawLimitInput")?.value) || 0;
+        const manualSummaryEdits = readManualSummaryEdits();
+        state.manualStepResolver("continue", contextCount, rawLimit, manualSummaryEdits);
+        state.manualStepResolver = null;
+    }
 }
 
 /**
@@ -342,9 +378,11 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
         const applyBtn = document.getElementById("stepApplyContextBtn");
         const retransBtn = document.getElementById("stepRetranslateBtn");
         const nextBtn = document.getElementById("stepContinueBtn");
+        const autoBtn = document.getElementById("stepAutoBtn");
         if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = "Apply"; }
         if (retransBtn) retransBtn.disabled = false;
         if (nextBtn) nextBtn.disabled = false;
+        if (autoBtn) autoBtn.disabled = false;
 
         state.manualStepResolver = (action, newContextCount, rawLimit, manualSummaryEdits) => {
             // Disable all buttons immediately upon submission to prevent multiple clicks
@@ -352,6 +390,7 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
             if (applyBtn) applyBtn.disabled = true;
             if (retransBtn) retransBtn.disabled = true;
             if (nextBtn) nextBtn.disabled = true;
+            if (autoBtn) autoBtn.disabled = true;
 
             if (action !== "retranslate") state._manualStepOpen = false;
             if (titleEl) titleEl.textContent = "Manual Step Override Active";
@@ -367,6 +406,7 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
                 if (applyBtn) applyBtn.disabled = true;
                 if (retransBtn) retransBtn.disabled = true;
                 if (nextBtn) nextBtn.disabled = true;
+                if (autoBtn) autoBtn.disabled = true;
                 if (!state.manualStepByStepMode && toolbar) {
                     toolbar.style.display = "none";
                 }
@@ -402,10 +442,12 @@ export async function applyStepContextSettings() {
     const applyBtn = document.getElementById("stepApplyContextBtn");
     const retransBtn = document.getElementById("stepRetranslateBtn");
     const nextBtn = document.getElementById("stepContinueBtn");
+    const autoBtn = document.getElementById("stepAutoBtn");
 
     if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = "Updating..."; }
     if (retransBtn) retransBtn.disabled = true;
     if (nextBtn) nextBtn.disabled = true;
+    if (autoBtn) autoBtn.disabled = true;
 
     // Store the manual override values in shared state so the main translation
     // pipeline reads them at translation time, without writing back to the
@@ -426,6 +468,7 @@ export async function applyStepContextSettings() {
         if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = "Apply"; }
         if (retransBtn) retransBtn.disabled = false;
         if (nextBtn) nextBtn.disabled = false;
+        if (autoBtn) autoBtn.disabled = false;
     }
 }
 
