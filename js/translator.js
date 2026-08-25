@@ -723,6 +723,10 @@ export async function translateViaAiServer() {
                             : [];
                         state._stepAppliedSummaryState = null; // Clear after consuming!
                     }
+                    // Update activeSpeakerName with the dropdown override (could be "" for Narrator or a character name)
+                    // so it is correctly applied to the history entry and carries forward to subsequent lines.
+                    activeSpeakerName = getStepSpeakerOverride();
+
                     // Apply any manual edits to the archival/recent summary boxes to the
                     // internal summary variables so the next chunk carries them forward.
                     const edits = stepResult.manualSummaryEdits;
