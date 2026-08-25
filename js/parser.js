@@ -24,11 +24,16 @@ export function loadFiles(event) {
 
         reader.onload = function(e) {
             const content = e.target.result;
-            const parsedData = parseContentToJSON(content, file.name);
+            const { data: parsedData, jsPrefix, jsSuffix } = parseContentToJSON(content, file.name);
             if (parsedData) {
                 const idx = state.loadedFilesRegistry.findIndex(f => f.name === file.name);
-                if (idx >= 0) state.loadedFilesRegistry[idx].data = parsedData;
-                else state.loadedFilesRegistry.push({ name: file.name, data: parsedData });
+                if (idx >= 0) {
+                    state.loadedFilesRegistry[idx].data = parsedData;
+                    if (jsPrefix) state.loadedFilesRegistry[idx].jsPrefix = jsPrefix;
+                    if (jsSuffix) state.loadedFilesRegistry[idx].jsSuffix = jsSuffix;
+                } else {
+                    state.loadedFilesRegistry.push({ name: file.name, data: parsedData, jsPrefix: jsPrefix || null, jsSuffix: jsSuffix || null });
+                }
             } else {
                 showError(`Failed to parse file: "${file.name}". Make sure it contains valid JSON.`);
             }
@@ -66,16 +71,26 @@ export function removeFile(fileName) {
 }
 
 /**
- * Parses file content into JSON, falling back to a regex extraction of the first {...} block when standard JSON.parse fails
+ * Parses file content into JSON, falling back to a regex extraction of the first {...} block when standard JSON.parse fails.
+ * Returns { data, jsPrefix, jsSuffix } where jsPrefix/jsSuffix capture any JS variable wrapper so downloadFile can restore it.
  * Called by: js/parser.js (loadFiles)
  */
 export function parseContentToJSON(content, fileName) {
-    try { return JSON.parse(content); } catch (e1) { console.warn(`[Trace:Files] Standard JSON.parse failed for "${fileName}", trying regex extraction.`); }
+    try {
+        const data = JSON.parse(content);
+        return { data, jsPrefix: null, jsSuffix: null };
+    } catch (e1) { console.warn(`[Trace:Files] Standard JSON.parse failed for "${fileName}", trying regex extraction.`); }
     try {
         const match = content.match(/\{[\s\S]*\}/);
-        if (match) return JSON.parse(match[0]);
+        if (match) {
+            const data = JSON.parse(match[0]);
+            const jsPrefix = content.slice(0, match.index) || null;
+            const jsSuffix = content.slice(match.index + match[0].length) || null;
+            if (jsPrefix) console.log(`[Trace:Files] Detected JS wrapper for "${fileName}": prefix=${JSON.stringify(jsPrefix.slice(0,40))}, suffix=${JSON.stringify((jsSuffix||'').slice(0,60))}`);
+            return { data, jsPrefix, jsSuffix };
+        }
     } catch (e2) { console.warn(`[Trace:Files] Regex JSON extraction also failed for "${fileName}".`); }
-    return null;
+    return { data: null, jsPrefix: null, jsSuffix: null };
 }
 
 /**
@@ -630,16 +645,24 @@ export function injectTranslationToRight() {
 }
 
 /**
- * Generates a JSON Blob from the selected registry item and triggers a browser download of it as updated_<filename>
+ * Generates a Blob from the selected registry item and triggers a browser download of it as updated_<filename>.
+ * If the source file had a JS variable wrapper (e.g. `OtogiData={...};main.info...`), it is restored around the JSON
+ * so the downloaded file is directly loadable by the Viewer without syntax errors.
  * Called by: HTML event handler via main.js window.downloadFile (HTML download button)
  */
 export function downloadFile(idx) {
     console.log(`[Trace:Files] downloadFile(idx="${idx}") invoked.`);
     if (idx === "" || !state.loadedFilesRegistry[idx]) showError("Select a file to export.");
     let fileObj = state.loadedFilesRegistry[idx];
-    const blob = new Blob([JSON.stringify(fileObj.data, null, 4)], { type: "application/json" });
+    const jsonStr = JSON.stringify(fileObj.data, null, 4);
+    const prefix = fileObj.jsPrefix || '';
+    const suffix = fileObj.jsSuffix || '';
+    const content = prefix + jsonStr + suffix;
+    const mimeType = (prefix || suffix) ? 'application/javascript' : 'application/json';
+    const blob = new Blob([content], { type: mimeType });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "updated_" + fileObj.name;
     a.click();
+    console.log(`[Trace:Files] downloadFile: saved with${prefix ? ' JS wrapper' : ' bare JSON'}.`);
 }
