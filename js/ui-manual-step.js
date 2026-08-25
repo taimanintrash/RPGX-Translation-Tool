@@ -209,14 +209,54 @@ function handleRawLinesChange(inputEl) {
 }
 
 /**
+ * Populates the speaker-override dropdown with the known-speakers set plus a Narrator
+ * default, then pre-selects the active speaker (or Narrator if empty).
+ * Called by: js/ui-manual-step.js (promptUserForManualStep)
+ */
+function updateStepSpeakerDropdown(knownSpeakers, currentSpeaker) {
+    const sel = document.getElementById("stepSpeakerSelect");
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = `<option value="">-- Narrator --</option>`;
+    const speakers = knownSpeakers instanceof Set ? [...knownSpeakers] : (Array.isArray(knownSpeakers) ? knownSpeakers : []);
+    for (const name of speakers) {
+        if (!name) continue;
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+    }
+    // Select the active speaker; fall back to whatever was selected before if the name is
+    // not in the list yet (prevents resetting on retranslate re-entry).
+    if (currentSpeaker && speakers.includes(currentSpeaker)) {
+        sel.value = currentSpeaker;
+    } else if (prev && speakers.includes(prev)) {
+        sel.value = prev;
+    } else {
+        sel.value = "";
+    }
+}
+
+/**
+ * Returns the current value of the speaker-override dropdown (empty string = Narrator).
+ * Called by: js/translator.js (flushBuffer retranslate branch)
+ */
+export function getStepSpeakerOverride() {
+    const sel = document.getElementById("stepSpeakerSelect");
+    return sel ? sel.value : "";
+}
+
+/**
  * Opens the manual-step toolbar for step-by-step translation evaluation and editing, storing the full history and summary context on state so the preview can recompute live, syncing the override inputs, and resolving with the chosen action (continue/retranslate) plus any manual summary edits
  * Called by: js/translator.js (translateViaAiServer flushBuffer manual-step loop)
  */
-export function promptUserForManualStep(currentChunkText, currentContextWindow, fullHistory, summaryContext, maxContextLinesDefault, rawLimitDefault) {
+export function promptUserForManualStep(currentChunkText, currentContextWindow, fullHistory, summaryContext, maxContextLinesDefault, rawLimitDefault, knownSpeakers, activeSpeakerName) {
     console.log('[Trace:UI] promptUserForManualStep() invoked; source + context populated.');
     return new Promise((resolve, reject) => {
         const toolbar = document.getElementById("manualStepToolbar");
         const titleEl = document.getElementById("manualStepTitle");
+        const isRetranslateReentry = !!state._manualStepOpen;
+
         if (toolbar) toolbar.style.display = "flex";
         if (titleEl) titleEl.textContent = "Manual Step Override - Action Required";
 
@@ -235,6 +275,7 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
         }
         state._stepMaxCtxDefault = maxContextLinesDefault || 0;
         state._stepMaxRawDefault = rawLimitDefault || 0;
+        state._manualStepOpen = true;
 
         // Sync the manual override inputs to the current main .translate-config values
         // at the start of each manual step, so the preview reflects the Summary/Raw Lines
@@ -252,18 +293,33 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
             rawInput.dispatchEvent(new Event("input", { bubbles: true }));
         }
 
-        // Initial population + live refresh of the context preview.
-        refreshStepContextPreview(currentContextWindow).catch(e => console.warn('[Trace:UI] Preview refresh failed:', e));
+        if (isRetranslateReentry) {
+            // On retranslate re-entry: populate the summary boxes directly from the
+            // passed summaryContext without triggering any AI summary API calls.
+            const archivalBox = document.getElementById("stepArchivalSummaryText");
+            const recentBox = document.getElementById("stepRecentSummaryText");
+            const sc = (summaryContext && !Array.isArray(summaryContext)) ? summaryContext : {};
+            if (archivalBox) archivalBox.value = sc.archivalSummary || "";
+            if (recentBox) recentBox.value = sc.recentSummary || "";
+            console.log('[Trace:UI] Retranslate re-entry: summary boxes populated from context (no AI recalc).');
+        } else {
+            // First open: full context preview refresh (may call AI summary endpoints).
+            refreshStepContextPreview(currentContextWindow).catch(e => console.warn('[Trace:UI] Preview refresh failed:', e));
+        }
 
         // Context changes are applied via the Apply button (applyStepContextSettings),
         // not auto-recalc on change.
         if (ctxInput) ctxInput.dataset.oldValue = ctxInput.value;
         if (rawInput) rawInput.dataset.oldValue = rawInput.value;
 
+        // Update the speaker dropdown with any newly discovered speakers.
+        updateStepSpeakerDropdown(knownSpeakers || state._knownSpeakers, activeSpeakerName);
+
         const outputRight = document.getElementById("outputAreaRight");
         if (outputRight) outputRight.classList.add("editable");
 
         state.manualStepResolver = (action, newContextCount, rawLimit, manualSummaryEdits) => {
+            if (action !== "retranslate") state._manualStepOpen = false;
             if (titleEl) titleEl.textContent = "Manual Step Override Active";
             if (!state.manualStepByStepMode && toolbar) {
                 toolbar.style.display = "none";
@@ -273,6 +329,7 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
 
         if (state.currentAbortController) {
             state.currentAbortController.signal.addEventListener('abort', () => {
+                state._manualStepOpen = false;
                 if (!state.manualStepByStepMode && toolbar) {
                     toolbar.style.display = "none";
                 }

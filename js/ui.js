@@ -12,7 +12,7 @@ import { defaultPresetManifest } from './translator.js';
 import { syncManualStepUIVisibility } from './ui-manual-step.js';
 
 // Re-export the manual-step + name-plate modal symbols so imports from ./ui.js resolve unchanged.
-export { promptUserForNameTranslation, resolveNameModal, closeNameModal, syncManualStepModeLive, syncBracketStripToggles, setCurrentSourceLine, hideCurrentSourceLine, promptUserForManualStep, resolveManualStepContinue, applyStepContextSettings, triggerStepRetranslation } from './ui-manual-step.js';
+export { promptUserForNameTranslation, resolveNameModal, closeNameModal, syncManualStepModeLive, syncBracketStripToggles, setCurrentSourceLine, hideCurrentSourceLine, promptUserForManualStep, resolveManualStepContinue, applyStepContextSettings, triggerStepRetranslation, getStepSpeakerOverride } from './ui-manual-step.js';
 export { syncManualStepUIVisibility } from './ui-manual-step.js';
 // Re-export the pure DOM layout symbols so imports from ./ui.js resolve unchanged.
 export { initDraggableModal, initPaneResizer, initAutoNumberInputs } from './ui-layout.js';

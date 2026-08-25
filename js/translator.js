@@ -5,7 +5,7 @@
 // from ./translator.js (main.js, benchmark.js, ui.js) keep resolving unchanged.
 
 import { state } from './main.js';
-import { showError, showWarning, clearError, setSaveMapButtonEnabled, promptUserForNameTranslation, promptUserForManualStep, renderDiscoveredMappingsUI, setCurrentSourceLine, hideCurrentSourceLine } from './ui.js';
+import { showError, showWarning, clearError, setSaveMapButtonEnabled, promptUserForNameTranslation, promptUserForManualStep, getStepSpeakerOverride, renderDiscoveredMappingsUI, setCurrentSourceLine, hideCurrentSourceLine } from './ui.js';
 import { commitTextToRightFile } from './parser.js';
 import { operationPresets } from './translator-presets.js';
 import { translateChunkWithContext, buildTieredContextWindow, wrapTextToLines } from './translator-llm.js';
@@ -593,6 +593,11 @@ export async function translateViaAiServer() {
     // (Qwen2.5-3B) need the speaker adjacent to the text to keep pronoun/gender consistent.
     let activeSpeakerName = "";
 
+    // Accumulate all resolved speaker names across the run so the manual-step
+    // speaker dropdown can offer the full character roster seen so far.
+    const knownSpeakers = new Set();
+    state._knownSpeakers = knownSpeakers;
+
     /**
      * Flushes the accumulated dialogue buffer through translateChunkWithContext, handles
      * manual-step checkpoints when manual mode is active, and pushes the translated result
@@ -631,7 +636,9 @@ export async function translateViaAiServer() {
                     history,
                     { archivalSummary, recentSummary, recentSummarySourceLines },
                     maxContextLines,
-                    rawLimitThreshold
+                    rawLimitThreshold,
+                    knownSpeakers,
+                    activeSpeakerName
                 );
                 if (stepResult.action === "retranslate") {
                     const stepCtxLines = stepResult.newContextCount || maxContextLines;
@@ -672,8 +679,11 @@ export async function translateViaAiServer() {
                             .filter(t => t)
                             .join(" ").replace(/\n/g, " ").trim();
                     }
+                    // Use the speaker dropdown override if the user changed it, otherwise
+                    // fall back to the auto-detected activeSpeakerName.
+                    const retranslateSpeaker = getStepSpeakerOverride() !== undefined ? getStepSpeakerOverride() : activeSpeakerName;
                     beginLoop('retranslate');
-                    translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry', activeSpeakerName, 0, originalChunkSource);
+                    translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry', retranslateSpeaker, 0, originalChunkSource);
                     beginLoop('translation');
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
@@ -733,6 +743,7 @@ export async function translateViaAiServer() {
                 let namePlateResult = await resolveNamePlate(host, model, trimmedLine);
                 translatedLines.push(namePlateResult.namePlateLine);
                 activeSpeakerName = namePlateResult.speakerName;
+                if (activeSpeakerName) knownSpeakers.add(activeSpeakerName);
             }
             else if (trimmedLine.startsWith("<") || trimmedLine === "") {
                 await flushBuffer();
@@ -771,6 +782,7 @@ export async function translateViaAiServer() {
 
         await flushBuffer();
         hideCurrentSourceLine();
+        state._manualStepOpen = false;
         console.log('[Trace:Translation] Main loop finished. Flattening results and committing to file.');
 
         let finalCleanedArray = flattenTranslatedLines(translatedLines);

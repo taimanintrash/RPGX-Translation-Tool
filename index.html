@@ -169,7 +169,11 @@
                                 <input type="checkbox" id="manualStepStripBracketsCheckbox" style="margin: 0 4px 0 0; cursor: pointer; width: 14px; height: 14px; vertical-align: middle;"
                                     onchange="if (window.syncBracketStripToggles) window.syncBracketStripToggles();"> Strip Name Brackets
                             </label>
-                            <div style="display: flex; gap: 8px; margin-left: auto;">
+                            <div style="display: flex; gap: 8px; margin-left: auto; align-items: center;">
+                                <label class="manual-step-label" style="white-space: nowrap;" title="Override the speaker sent to the LLM for this chunk. Populated from NAME_PLATE tags seen so far.">Speaker:</label>
+                                <select id="stepSpeakerSelect" class="manual-step-input" style="min-width: 120px;" title="Override speaker context for retranslation">
+                                    <option value="">-- Narrator --</option>
+                                </select>
                                 <button id="stepRetranslateBtn" class="translate-btn manual-step-btn"
                                     onclick="triggerStepRetranslation()">Retranslate</button>
                                 <button id="stepContinueBtn" class="success-btn manual-step-btn"
