@@ -265,106 +265,146 @@ export function renderComparisonViews() {
 
 /**
  * Updates an array of dialogue objects in place with translated/edited speaker names and serif texts from a flat lines array, using segment-based alignment.
+ * Each segment (between NAME_PLATE markers) is walked line-by-line so that per-object tags (MOTION, CH_ANIM, VOICE, BGM, SE, EFFECT, IMAGE) are applied
+ * to the correct individual script object rather than just the named anchor, and Serif text is never contaminated with tag lines.
  * Called by: parser.js (commitTextToRightFile, saveEditsToMemory)
  */
 function updateScriptArrayFromLines(scriptArray, lines) {
+    const TAG_PREFIXES = ['<BGM>', '<VOICE>', '<MOTION>', '<IMAGE>', '<SE>', '<EFFECT>', '<CH_ANIM>', '<NAME_PLATE>'];
+    const isTag = (line) => TAG_PREFIXES.some(p => line.startsWith(p));
+
+    /**
+     * Walk a slice of `lines` and pair each line-group with each script object in `objSlice`.
+     * A "line-group" for object N consists of: any leading tags (applied to that object) followed
+     * by zero or more non-tag lines (joined as that object's Serif).
+     * Extra serif lines overflow into the previous object's Serif via newline joining.
+     */
+    function applyLinesToObjects(objSlice, lineSlice) {
+        if (objSlice.length === 0) return;
+
+        // Group lines into per-object buckets by counting non-tag (serif) lines
+        // and distributing them across objects.
+        let tagBuckets = [];    // tags that precede each object's serif
+        let serifBuckets = [];  // serif lines per object
+        for (let i = 0; i < objSlice.length; i++) {
+            tagBuckets.push([]);
+            serifBuckets.push([]);
+        }
+
+        // Separate lines into tags and serifs while preserving order
+        let pendingTags = [];
+        let allSerifs = [];
+        // We need to track which tags belong to which serif position.
+        // Strategy: collect (tags[], serifLine) pairs.
+        let pairs = []; // { tags: string[], serif: string|null }
+        let pendTags = [];
+        for (let l of lineSlice) {
+            if (isTag(l)) {
+                pendTags.push(l);
+            } else {
+                pairs.push({ tags: pendTags, serif: l });
+                pendTags = [];
+            }
+        }
+        // Trailing tags with no following serif (e.g. end of segment)
+        if (pendTags.length > 0) pairs.push({ tags: pendTags, serif: null });
+
+        let numObj = objSlice.length;
+        let serifPairs = pairs.filter(p => p.serif !== null);
+        let trailingTagPair = pairs.find(p => p.serif === null);
+
+        if (numObj === 1) {
+            // Single object: all tags to it, all serifs joined
+            let obj = objSlice[0];
+            for (let p of pairs) applyTagsToObj(obj, p.tags);
+            obj.Serif = serifPairs.map(p => p.serif).join('\n');
+        } else if (serifPairs.length === 0) {
+            // Only tags, no serif content — apply all to first object
+            let obj = objSlice[0];
+            for (let p of pairs) applyTagsToObj(obj, p.tags);
+        } else if (serifPairs.length <= numObj) {
+            // One serif per object (or fewer) — pair them up 1:1
+            for (let r = 0; r < numObj; r++) {
+                let obj = objSlice[r];
+                if (r < serifPairs.length) {
+                    applyTagsToObj(obj, serifPairs[r].tags);
+                    obj.Serif = serifPairs[r].serif;
+                } else {
+                    obj.Serif = '';
+                }
+            }
+            // Apply trailing tags to last paired object
+            if (trailingTagPair) applyTagsToObj(objSlice[serifPairs.length - 1], trailingTagPair.tags);
+        } else {
+            // More serifs than objects — overflow extras into first object
+            let overflow = serifPairs.length - numObj;
+            objSlice[0].Serif = serifPairs.slice(0, overflow + 1).map(p => p.serif).join('\n');
+            applyTagsToObj(objSlice[0], serifPairs[0].tags);
+            for (let r = 1; r < numObj; r++) {
+                let p = serifPairs[overflow + r];
+                applyTagsToObj(objSlice[r], p.tags);
+                objSlice[r].Serif = p.serif;
+            }
+            if (trailingTagPair) applyTagsToObj(objSlice[numObj - 1], trailingTagPair.tags);
+        }
+    }
+
+    function applyTagsToObj(obj, tags) {
+        for (let tag of tags) {
+            if (tag.startsWith('<BGM>'))        obj.BGM             = tag.replace('<BGM>', '').trim();
+            else if (tag.startsWith('<VOICE>'))  obj.Voice           = tag.replace('<VOICE>', '').trim();
+            else if (tag.startsWith('<MOTION>')) obj.Motion          = parseInt(tag.replace('<MOTION>', '').trim(), 10);
+            else if (tag.startsWith('<IMAGE>'))  obj.StillPath       = tag.replace('<IMAGE>', '').trim();
+            else if (tag.startsWith('<SE>'))     obj.SE              = tag.replace('<SE>', '').trim();
+            else if (tag.startsWith('<EFFECT>')) obj.Effect          = tag.replace('<EFFECT>', '').trim();
+            else if (tag.startsWith('<CH_ANIM>'))obj.CharaAnimation  = parseInt(tag.replace('<CH_ANIM>', '').trim(), 10);
+        }
+    }
+
     let namedIndices = [];
     for (let i = 0; i < scriptArray.length; i++) {
         if (scriptArray[i] && scriptArray[i].Name) namedIndices.push(i);
     }
     let namePlateIndices = [];
     for (let j = 0; j < lines.length; j++) {
-        if (lines[j] && lines[j].startsWith("<NAME_PLATE>")) namePlateIndices.push(j);
+        if (lines[j] && lines[j].startsWith('<NAME_PLATE>')) namePlateIndices.push(j);
     }
 
     if (namedIndices.length === namePlateIndices.length) {
-        // Segment-based mapping
-        let objEnd = namedIndices.length > 0 ? namedIndices[0] : scriptArray.length;
-        let lineEnd = namePlateIndices.length > 0 ? namePlateIndices[0] : lines.length;
-        
-        let initialSerifText = [];
-        let initialMetadata = {};
-        for (let j = 0; j < lineEnd; j++) {
-            let line = lines[j];
-            if (line.startsWith("<BGM>")) initialMetadata.BGM = line.replace("<BGM>", "").trim();
-            else if (line.startsWith("<VOICE>")) initialMetadata.Voice = line.replace("<VOICE>", "").trim();
-            else if (line.startsWith("<MOTION>")) initialMetadata.Motion = parseInt(line.replace("<MOTION>", "").trim(), 10);
-            else if (line.startsWith("<IMAGE>")) initialMetadata.StillPath = line.replace("<IMAGE>", "").trim();
-            else if (line.startsWith("<SE>")) initialMetadata.SE = line.replace("<SE>", "").trim();
-            else if (line.startsWith("<EFFECT>")) initialMetadata.Effect = line.replace("<EFFECT>", "").trim();
-            else if (line.startsWith("<CH_ANIM>")) initialMetadata.CharaAnimation = parseInt(line.replace("<CH_ANIM>", "").trim(), 10);
-            else initialSerifText.push(line);
+        // --- Segment-based mapping ---
+        // Pre-named segment (everything before the first NAME_PLATE)
+        let firstObjEnd  = namedIndices.length  > 0 ? namedIndices[0]      : scriptArray.length;
+        let firstLineEnd = namePlateIndices.length > 0 ? namePlateIndices[0] : lines.length;
+        if (firstObjEnd > 0) {
+            applyLinesToObjects(scriptArray.slice(0, firstObjEnd), lines.slice(0, firstLineEnd));
         }
 
-        if (objEnd > 0) {
-            if (initialMetadata.BGM !== undefined) scriptArray[0].BGM = initialMetadata.BGM;
-            if (initialMetadata.Voice !== undefined) scriptArray[0].Voice = initialMetadata.Voice;
-            if (initialMetadata.Motion !== undefined) scriptArray[0].Motion = initialMetadata.Motion;
-            if (initialMetadata.StillPath !== undefined) scriptArray[0].StillPath = initialMetadata.StillPath;
-            if (initialMetadata.SE !== undefined) scriptArray[0].SE = initialMetadata.SE;
-            if (initialMetadata.Effect !== undefined) scriptArray[0].Effect = initialMetadata.Effect;
-            if (initialMetadata.CharaAnimation !== undefined) scriptArray[0].CharaAnimation = initialMetadata.CharaAnimation;
-        }
-
-        assignSegment(scriptArray.slice(0, objEnd), initialSerifText);
-
+        // Named segments
         for (let s = 0; s < namedIndices.length; s++) {
-            let objStart = namedIndices[s];
-            let objEnd = s + 1 < namedIndices.length ? namedIndices[s + 1] : scriptArray.length;
+            let objStart  = namedIndices[s];
+            let objEnd    = s + 1 < namedIndices.length  ? namedIndices[s + 1]      : scriptArray.length;
             let lineStart = namePlateIndices[s];
-            let lineEnd = s + 1 < namePlateIndices.length ? namePlateIndices[s + 1] : lines.length;
+            let lineEnd   = s + 1 < namePlateIndices.length ? namePlateIndices[s + 1] : lines.length;
 
-            let namePlateText = "";
-            let serifText = [];
-            let metadata = {};
-
-            for (let j = lineStart; j < lineEnd; j++) {
-                let line = lines[j];
-                if (line.startsWith("<NAME_PLATE>")) {
-                    namePlateText = line.replace("<NAME_PLATE>", "").replace(/[「」]/g, "").trim();
-                } else if (line.startsWith("<BGM>")) {
-                    metadata.BGM = line.replace("<BGM>", "").trim();
-                } else if (line.startsWith("<VOICE>")) {
-                    metadata.Voice = line.replace("<VOICE>", "").trim();
-                } else if (line.startsWith("<MOTION>")) {
-                    metadata.Motion = parseInt(line.replace("<MOTION>", "").trim(), 10);
-                } else if (line.startsWith("<IMAGE>")) {
-                    metadata.StillPath = line.replace("<IMAGE>", "").trim();
-                } else if (line.startsWith("<SE>")) {
-                    metadata.SE = line.replace("<SE>", "").trim();
-                } else if (line.startsWith("<EFFECT>")) {
-                    metadata.Effect = line.replace("<EFFECT>", "").trim();
-                } else if (line.startsWith("<CH_ANIM>")) {
-                    metadata.CharaAnimation = parseInt(line.replace("<CH_ANIM>", "").trim(), 10);
-                } else {
-                    serifText.push(line);
-                }
-            }
-
+            // Extract and apply the NAME_PLATE text to the anchor object
+            let namePlateText = lines[lineStart].replace('<NAME_PLATE>', '').replace(/[「」]/g, '').trim();
             scriptArray[objStart].Name = namePlateText;
-            if (metadata.BGM !== undefined) scriptArray[objStart].BGM = metadata.BGM;
-            if (metadata.Voice !== undefined) scriptArray[objStart].Voice = metadata.Voice;
-            if (metadata.Motion !== undefined) scriptArray[objStart].Motion = metadata.Motion;
-            if (metadata.StillPath !== undefined) scriptArray[objStart].StillPath = metadata.StillPath;
-            if (metadata.SE !== undefined) scriptArray[objStart].SE = metadata.SE;
-            if (metadata.Effect !== undefined) scriptArray[objStart].Effect = metadata.Effect;
-            if (metadata.CharaAnimation !== undefined) scriptArray[objStart].CharaAnimation = metadata.CharaAnimation;
 
-            assignSegment(scriptArray.slice(objStart, objEnd), serifText);
+            // Apply all lines after the NAME_PLATE tag to the objects in this segment
+            applyLinesToObjects(scriptArray.slice(objStart, objEnd), lines.slice(lineStart + 1, lineEnd));
         }
     } else {
-        // Fallback mapping: Assign non-name-plate lines to Serifs sequentially
-        let serifLines = lines.filter(l => !l.startsWith("<NAME_PLATE>"));
+        // Fallback: assign non-tag, non-name-plate lines to Serifs sequentially
+        let serifLines = lines.filter(l => !isTag(l));
         for (let i = 0; i < scriptArray.length; i++) {
-            if (i < serifLines.length) {
-                scriptArray[i].Serif = serifLines[i];
-            }
+            scriptArray[i].Serif = i < serifLines.length ? serifLines[i] : '';
         }
     }
 }
 
 /**
  * Distributes a segment of dialogue lines to a matching segment of script objects.
+ * @deprecated Use applyLinesToObjects inside updateScriptArrayFromLines instead. Kept for any external callers.
  * Called by: parser.js (updateScriptArrayFromLines)
  */
 function assignSegment(objs, dialogueLines) {
