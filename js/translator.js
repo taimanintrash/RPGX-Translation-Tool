@@ -696,8 +696,8 @@ export async function translateViaAiServer() {
                     const retranslateSpeaker = getStepSpeakerOverride() !== undefined ? getStepSpeakerOverride() : activeSpeakerName;
                     effectiveSpeakerName = retranslateSpeaker;
                     beginLoop('retranslate');
-                    // Cycle temperature between 0.20 and 0.80 (steps of 0.15, modulo 5) to avoid gibberish at >0.8
-                    const tempAdjust = ((manualRetranslateCount - 1) % 5) * 0.15;
+                    // Cycle temperature between 0.20 and 0.50 (steps of 0.15, modulo 3) to prevent context leaks and hallucinations
+                    const tempAdjust = ((manualRetranslateCount - 1) % 3) * 0.15;
                     translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry', retranslateSpeaker, tempAdjust, originalChunkSource);
                     beginLoop('translation');
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
