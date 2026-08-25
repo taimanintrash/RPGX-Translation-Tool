@@ -707,6 +707,22 @@ export async function translateViaAiServer() {
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
                 } else {
+                    // Apply the summary state computed by Apply (applyStepContextSettings) if present
+                    // so clicking Next commits the full underlying tracking state (like pendingRecentSummaries)
+                    // rather than just the text edits.
+                    const applied = state._stepAppliedSummaryState;
+                    if (applied) {
+                        archivalSummary = applied.archivalSummary || "";
+                        recentSummary = applied.recentSummary || "";
+                        recentSummarySourceLines = Array.isArray(applied.recentSummarySourceLines)
+                            ? applied.recentSummarySourceLines.slice()
+                            : [];
+                        summarizedUpToIndex = applied.summarizedUpToIndex || 0;
+                        pendingRecentSummaries = Array.isArray(applied.pendingRecentSummaries)
+                            ? applied.pendingRecentSummaries.slice()
+                            : [];
+                        state._stepAppliedSummaryState = null; // Clear after consuming!
+                    }
                     // Apply any manual edits to the archival/recent summary boxes to the
                     // internal summary variables so the next chunk carries them forward.
                     const edits = stepResult.manualSummaryEdits;
