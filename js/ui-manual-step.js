@@ -91,7 +91,8 @@ async function refreshStepContextPreview(currentContextWindow) {
         archivalSummary: "",
         recentSummary: "",
         recentSummarySourceLines: [],
-        summarizedUpToIndex: 0
+        summarizedUpToIndex: 0,
+        pendingRecentSummaries: []
     };
 
     if (host && model && history.length > 0) {
@@ -210,13 +211,15 @@ function handleRawLinesChange(inputEl) {
 
 /**
  * Populates the speaker-override dropdown with the known-speakers set plus a Narrator
- * default, then pre-selects the active speaker (or Narrator if empty).
+ * default. When currentSpeaker is null, the current selection is preserved (used on
+ * retranslate re-entry so the user's override is not reset). Otherwise pre-selects
+ * the given speaker.
  * Called by: js/ui-manual-step.js (promptUserForManualStep)
  */
 function updateStepSpeakerDropdown(knownSpeakers, currentSpeaker) {
     const sel = document.getElementById("stepSpeakerSelect");
     if (!sel) return;
-    const prev = sel.value;
+    const prev = sel.value; // Capture before rebuild
     sel.innerHTML = `<option value="">-- Narrator --</option>`;
     const speakers = knownSpeakers instanceof Set ? [...knownSpeakers] : (Array.isArray(knownSpeakers) ? knownSpeakers : []);
     for (const name of speakers) {
@@ -226,12 +229,12 @@ function updateStepSpeakerDropdown(knownSpeakers, currentSpeaker) {
         opt.textContent = name;
         sel.appendChild(opt);
     }
-    // Select the active speaker; fall back to whatever was selected before if the name is
-    // not in the list yet (prevents resetting on retranslate re-entry).
-    if (currentSpeaker && speakers.includes(currentSpeaker)) {
+    if (currentSpeaker === null) {
+        // Preserve the user's current selection (retranslate re-entry).
+        // prev may be "" (Narrator) or a character name — both are valid.
+        sel.value = (prev === "" || speakers.includes(prev)) ? prev : "";
+    } else if (currentSpeaker && speakers.includes(currentSpeaker)) {
         sel.value = currentSpeaker;
-    } else if (prev && speakers.includes(prev)) {
-        sel.value = prev;
     } else {
         sel.value = "";
     }
@@ -313,7 +316,8 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
         if (rawInput) rawInput.dataset.oldValue = rawInput.value;
 
         // Update the speaker dropdown with any newly discovered speakers.
-        updateStepSpeakerDropdown(knownSpeakers || state._knownSpeakers, activeSpeakerName);
+        // On retranslate re-entry pass null so the user's current selection is preserved.
+        updateStepSpeakerDropdown(knownSpeakers || state._knownSpeakers, isRetranslateReentry ? null : activeSpeakerName);
 
         const outputRight = document.getElementById("outputAreaRight");
         if (outputRight) outputRight.classList.add("editable");

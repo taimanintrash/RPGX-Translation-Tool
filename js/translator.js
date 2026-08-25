@@ -478,7 +478,7 @@ export async function resolveNamePlate(host, model, rawNamePlateLine, autoAccept
  * Builds an accessor object exposing gettable/settable archivalSummary, recentSummary, recentSummarySourceLines, and summarizedUpToIndex properties backed by the supplied getter/setter closures
  * Called by: js/translator.js (translateViaAiServer flushBuffer)
  */
-function makeSummaryStateAccessor(getArchival, setArchival, getRecent, setRecent, getRecentSourceLines, getSummarizedUpTo, setSummarizedUpTo) {
+function makeSummaryStateAccessor(getArchival, setArchival, getRecent, setRecent, getRecentSourceLines, getSummarizedUpTo, setSummarizedUpTo, getPending, setPending) {
     return {
         get archivalSummary() { return getArchival(); },
         set archivalSummary(v) { setArchival(v); },
@@ -486,7 +486,9 @@ function makeSummaryStateAccessor(getArchival, setArchival, getRecent, setRecent
         set recentSummary(v) { setRecent(v); },
         get recentSummarySourceLines() { return getRecentSourceLines(); },
         get summarizedUpToIndex() { return getSummarizedUpTo(); },
-        set summarizedUpToIndex(v) { setSummarizedUpTo(v); }
+        set summarizedUpToIndex(v) { setSummarizedUpTo(v); },
+        get pendingRecentSummaries() { return getPending ? getPending() : []; },
+        set pendingRecentSummaries(v) { if (setPending) setPending(v); }
     };
 }
 
@@ -587,11 +589,17 @@ export async function translateViaAiServer() {
     let recentSummary = "";
     let recentSummarySourceLines = [];
     let summarizedUpToIndex = 0;
+    // Pending previous recent summaries accumulated before the archival threshold is reached.
+    // Once MIN_ARCHIVAL_SUMMARIES entries are collected, the first archival is built from them.
+    let pendingRecentSummaries = [];
 
     // Tracks the most recently resolved name-plate speaker so it can be passed to the
     // model as [Speaker: Name] context on the following dialogue lines. Small models
     // (Qwen2.5-3B) need the speaker adjacent to the text to keep pronoun/gender consistent.
     let activeSpeakerName = "";
+    // The effective speaker used for the most recent translation (may be overridden via dropdown).
+    // null = no override applied; "" = explicit Narrator override; "Name" = explicit character override.
+    let effectiveSpeakerName = null;
 
     // Accumulate all resolved speaker names across the run so the manual-step
     // speaker dropdown can offer the full character roster seen so far.
@@ -616,7 +624,8 @@ export async function translateViaAiServer() {
             () => archivalSummary, (v) => { archivalSummary = v; },
             () => recentSummary, (v) => { recentSummary = v; },
             () => recentSummarySourceLines,
-            () => summarizedUpToIndex, (v) => { summarizedUpToIndex = v; }
+            () => summarizedUpToIndex, (v) => { summarizedUpToIndex = v; },
+            () => pendingRecentSummaries, (v) => { pendingRecentSummaries = v; }
         ));
 
         let activePresetKey = 'jpEn';
@@ -628,6 +637,7 @@ export async function translateViaAiServer() {
             outputRight.value = translatedLines.filter(l => l !== "").join("\n");
 
             let stepResult, keepTranslatingStep = true;
+            let manualRetranslateCount = 0;
 
             while (keepTranslatingStep) {
                 stepResult = await promptUserForManualStep(
@@ -641,6 +651,7 @@ export async function translateViaAiServer() {
                     activeSpeakerName
                 );
                 if (stepResult.action === "retranslate") {
+                    manualRetranslateCount++;
                     const stepCtxLines = stepResult.newContextCount || maxContextLines;
                     const stepRawLimit = stepResult.rawLimit ?? rawLimitThreshold;
                     // Reuse the summary state computed by Apply (applyStepContextSettings) when
@@ -668,7 +679,8 @@ export async function translateViaAiServer() {
                         () => archivalSummary, (v) => { archivalSummary = v; },
                         () => recentSummary, (v) => { recentSummary = v; },
                         () => recentSummarySourceLines,
-                        () => summarizedUpToIndex, (v) => { summarizedUpToIndex = v; }
+                        () => summarizedUpToIndex, (v) => { summarizedUpToIndex = v; },
+                        () => pendingRecentSummaries, (v) => { pendingRecentSummaries = v; }
                     ));
                     console.log(`[Trace:Translation] Re-translate step: contextLines=${stepCtxLines}, rawLimit=${stepRawLimit}, windowSize=${updatedContextWindow.length}`);
                     // Re-run the mapper replacement on the original source lines so a
@@ -682,8 +694,11 @@ export async function translateViaAiServer() {
                     // Use the speaker dropdown override if the user changed it, otherwise
                     // fall back to the auto-detected activeSpeakerName.
                     const retranslateSpeaker = getStepSpeakerOverride() !== undefined ? getStepSpeakerOverride() : activeSpeakerName;
+                    effectiveSpeakerName = retranslateSpeaker;
                     beginLoop('retranslate');
-                    translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry', retranslateSpeaker, 0, originalChunkSource);
+                    // Cycle temperature between 0.20 and 0.80 (steps of 0.15, modulo 5) to avoid gibberish at >0.8
+                    const tempAdjust = ((manualRetranslateCount - 1) % 5) * 0.15;
+                    translatedCombined = await translateChunkWithContext(host, model, combinedText, updatedContextWindow, 'retry', retranslateSpeaker, tempAdjust, originalChunkSource);
                     beginLoop('translation');
                     translatedLines[dialogueBuffer[0].index] = translatedCombined;
                     outputRight.value = translatedLines.filter(l => l !== "").join("\n");
@@ -710,10 +725,14 @@ export async function translateViaAiServer() {
 
         // Prefix the speaker name to the history entry so the raw tail display and the
         // tiered summary retain speaker context. The committed output stays clean.
-        let historyEntry = activeSpeakerName
-            ? `[Speaker: ${activeSpeakerName}] ${translatedCombined}`
-            : translatedCombined;
+        // effectiveSpeakerName: null = no override, "" = explicit Narrator, "Name" = explicit character.
+        // Always emit a [Speaker:] tag — fall back to activeSpeakerName, then "Narrator".
+        const speakerForHistory = effectiveSpeakerName !== null ? effectiveSpeakerName : activeSpeakerName;
+        const speakerLabel = speakerForHistory || "Narrator";
+        let historyEntry = `[Speaker: ${speakerLabel}] ${translatedCombined}`;
         history.push(historyEntry);
+        // Reset to null after consuming so the next auto-flush uses activeSpeakerName.
+        effectiveSpeakerName = null;
 
         let wrappedLines = wrapTextToLines(translatedCombined, 42);
 

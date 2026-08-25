@@ -215,18 +215,21 @@ export async function updateArchivalSummary(host, model, currentArchivalSummary,
     let promptText = "";
 
     if (!currentArchivalSummary || !currentArchivalSummary.trim()) {
-        promptText = `Task: Compress the following scene recap into ONE concise sentence.\n` +
-            `Preserve: primary character names, core relationships, and the overall story situation.\n` +
-            `Rules: Output exactly ONE sentence. No preamble, quotes, or conversational filler.\n\n` +
-            `Scene Recap:\n${recentSummaryToArchive}\n\n` +
-            `Story Summary:`;
+        promptText =
+            `You are summarizing a visual novel scene for a translation context tracker.\n` +
+            `Write ONE sentence that captures: who is present, what just happened, and the current situation.\n` +
+            `Do NOT add any preamble, label, or quote. Output the sentence only.\n\n` +
+            `Scene:\n${recentSummaryToArchive}\n\n` +
+            `One-sentence story summary:`;
     } else {
-        promptText = `Task: Update the long-term story recap with the latest scene developments.\n` +
-            `Preserve: primary character names, core relationships, and macro plot state. Discard finished minor dialogue.\n` +
-            `Rules: Output exactly ONE comprehensive sentence. No preamble, quotes, or conversational filler.\n\n` +
-            `Previous Story Summary:\n${currentArchivalSummary}\n\n` +
-            `Recent Developments:\n${recentSummaryToArchive}\n\n` +
-            `Updated Story Summary:`;
+        promptText =
+            `You are updating a running story summary for a visual novel translation context tracker.\n` +
+            `Merge the previous summary with the new scene developments into ONE updated sentence.\n` +
+            `Keep: character names, key relationships, current situation. Drop: finished minor details.\n` +
+            `Do NOT add any preamble, label, or quote. Output the sentence only.\n\n` +
+            `Previous summary:\n${currentArchivalSummary}\n\n` +
+            `New scene:\n${recentSummaryToArchive}\n\n` +
+            `Updated one-sentence summary:`;
     }
 
     const archivalConfig = operationPresets.archivalSummary || {
@@ -597,7 +600,6 @@ export async function buildTieredContextWindow(host, model, history, maxContextL
 
     // Tier 2: Recent Summary window — lines between the raw tail and the summary window start.
     // The summary window covers `maxContextLines` lines before the raw tail.
-    // Lines that exit this window are flushed to archival (Tier 3).
     const summaryWindowEnd = rawTailStart; // exclusive (raw tail starts here)
     const summaryWindowStart = Math.max(0, summaryWindowEnd - maxContextLines);
 
@@ -605,35 +607,62 @@ export async function buildTieredContextWindow(host, model, history, maxContextL
     if (summaryWindowEnd > summaryState.summarizedUpToIndex) {
         const newlyExitedLines = history.slice(summaryState.summarizedUpToIndex, summaryWindowEnd);
         if (newlyExitedLines.length > 0) {
+            // Save the current recent summary to pending BEFORE updating it, so it becomes
+            // available as archival material for the next cycle.
+            const oldRecentSummary = summaryState.recentSummary;
             summaryState.recentSummary = await updateRecentSummary(host, model, summaryState.recentSummary, newlyExitedLines);
             summaryState.recentSummarySourceLines.push(...newlyExitedLines);
             summaryState.summarizedUpToIndex = summaryWindowEnd;
+
+            // Tier 3: Archival update cadence.
+            // - Before archival exists: accumulate old recent summaries in pendingRecentSummaries.
+            //   Once MIN_ARCHIVAL_SUMMARIES entries are collected, build the first archival from all of them.
+            // - After archival exists: update it on every new recent summary generation.
+            const MIN_ARCHIVAL_SUMMARIES = 3;
+            if (oldRecentSummary) {
+                if (summaryState.archivalSummary) {
+                    // Archival already built — update it with the freshly generated recent summary.
+                    summaryState.archivalSummary = await updateArchivalSummary(
+                        host, model, summaryState.archivalSummary, summaryState.recentSummary
+                    );
+                    console.log(`[Trace:Summary:Archival] Updated archival from new recent summary.`);
+                } else {
+                    // Pre-archival: stash the old summary and check if we now have enough to build.
+                    const pending = Array.isArray(summaryState.pendingRecentSummaries)
+                        ? summaryState.pendingRecentSummaries : [];
+                    pending.push(oldRecentSummary);
+                    summaryState.pendingRecentSummaries = pending;
+                    if (pending.length >= MIN_ARCHIVAL_SUMMARIES) {
+                        // Enough material — build the first archival from all accumulated recent summaries.
+                        const combinedPending = pending.join(" ") + " " + summaryState.recentSummary;
+                        summaryState.archivalSummary = await updateArchivalSummary(host, model, "", combinedPending);
+                        summaryState.pendingRecentSummaries = []; // clear; archival takes over
+                        console.log(`[Trace:Summary:Archival] Built first archival summary from ${pending.length} pending recent summaries.`);
+                    } else {
+                        console.log(`[Trace:Summary:Archival] Pending ${pending.length}/${MIN_ARCHIVAL_SUMMARIES} recent summaries before first archival build.`);
+                    }
+                }
+            }
         }
     }
 
-    // Tier 3: Archival Summary — triggered when lines exit the recent summary window
-    // (i.e., the summary has accumulated more than maxContextLines source lines, and the
-    // oldest ones have scrolled past the window). Flush the recent summary into archival.
-    if (maxContextLines > 0 && summaryState.recentSummarySourceLines.length > maxContextLines) {
-        // Lines that scrolled past the summary window get flushed to archival
-        const overflowCount = summaryState.recentSummarySourceLines.length - maxContextLines;
-        const flushedLines = summaryState.recentSummarySourceLines.splice(0, overflowCount);
-        // Re-summarize the recent summary from the remaining window lines
-        const remainingLines = summaryState.recentSummarySourceLines;
-        summaryState.archivalSummary = await updateArchivalSummary(host, model, summaryState.archivalSummary, summaryState.recentSummary);
-        // Reset recent summary to cover only the remaining window lines
-        if (remainingLines.length > 0) {
-            summaryState.recentSummary = await updateRecentSummary(host, model, "", remainingLines);
-        } else {
-            summaryState.recentSummary = "";
-        }
-        console.log(`[Trace:Summary:Archival] Flushed ${overflowCount} line(s) from recent summary to archival. Remaining in window: ${remainingLines.length}.`);
+    // Build hierarchical prompt context.
+    // Always show [Recent Scene] with the current recent summary.
+    // [Story Context] comes from the archival summary (if built) or from the joined pending
+    // recent summaries (before the archival threshold is reached), so the translator always
+    // has stable background context from prior scenes.
+    const pending = Array.isArray(summaryState.pendingRecentSummaries) ? summaryState.pendingRecentSummaries : [];
+    if (summaryState.archivalSummary) {
+        formattedContextForPrompt.push(`[Story Context: ${summaryState.archivalSummary}]`);
+    } else if (pending.length > 0) {
+        // Archival not yet built — give the translator a joined view of all prior recent summaries
+        // so earlier scene context is not completely invisible.
+        formattedContextForPrompt.push(`[Story Context: ${pending.join(" ")}]`);
     }
-
-    // Build hierarchical prompt context
-    if (summaryState.archivalSummary) formattedContextForPrompt.push(`[Story Context: ${summaryState.archivalSummary}]`);
     if (summaryState.recentSummary) formattedContextForPrompt.push(`[Recent Scene: ${summaryState.recentSummary}]`);
     formattedContextForPrompt.push(...rawTail);
+
+
 
     // Cap the total context passed to the model
     let sliceStart = Math.max(0, formattedContextForPrompt.length - (maxContextLines + rawLimitThreshold));
