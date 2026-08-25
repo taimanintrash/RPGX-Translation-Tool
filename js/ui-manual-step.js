@@ -381,6 +381,15 @@ export function resolveManualStepContinue() {
  */
 export async function applyStepContextSettings() {
     console.log('[Trace:UI] applyStepContextSettings() invoked.');
+    
+    const applyBtn = document.getElementById("stepApplyContextBtn");
+    const retransBtn = document.getElementById("stepRetranslateBtn");
+    const nextBtn = document.getElementById("stepContinueBtn");
+
+    if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = "Updating..."; }
+    if (retransBtn) retransBtn.disabled = true;
+    if (nextBtn) nextBtn.disabled = true;
+
     // Store the manual override values in shared state so the main translation
     // pipeline reads them at translation time, without writing back to the
     // .translate-config UI inputs.
@@ -396,6 +405,10 @@ export async function applyStepContextSettings() {
         state._stepAppliedSummaryState = await refreshStepContextPreview();
     } catch (e) {
         console.warn('[Trace:UI] Apply context settings failed:', e);
+    } finally {
+        if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = "Apply"; }
+        if (retransBtn) retransBtn.disabled = false;
+        if (nextBtn) nextBtn.disabled = false;
     }
 }
 
