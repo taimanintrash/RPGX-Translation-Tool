@@ -123,6 +123,29 @@ async function refreshStepContextPreview(currentContextWindow) {
 }
 
 /**
+ * Instantly populates the manual-step context preview fields from pre-computed context values without triggering any AI calls
+ * Called by: js/ui-manual-step.js (promptUserForManualStep)
+ */
+function populateStepContextFields(summaryContext, history, rawLimit) {
+    const archivalBox = document.getElementById("stepArchivalSummaryText");
+    const recentBox = document.getElementById("stepRecentSummaryText");
+    const recentSourceBox = document.getElementById("stepRecentSummarySourceText");
+    const rawBox = document.getElementById("stepRawContextText");
+
+    const sc = (summaryContext && !Array.isArray(summaryContext)) ? summaryContext : {};
+    if (archivalBox) archivalBox.value = sc.archivalSummary || "";
+    if (recentBox) recentBox.value = sc.recentSummary || "";
+    if (recentSourceBox) {
+        recentSourceBox.value = (sc.recentSummarySourceLines || [])
+            .map((line, i) => `[${i}] ${line}`).join("\n") || "";
+    }
+    if (rawBox) {
+        const activeRaw = history.slice(Math.max(0, history.length - rawLimit));
+        rawBox.value = activeRaw.map((line, i) => `[${i}] ${line}`).join("\n") || "";
+    }
+}
+
+/**
  * Synchronizes the visibility of the manual-step override toolbar and the source-pane label/actions based on whether manual step-by-step mode is enabled; the current source-line box stays permanently visible regardless of mode
  * Called by: js/ui.js (closeDebugMenu, syncManualStepModeLive), js/main.js (DOMContentLoaded)
  */
@@ -300,19 +323,8 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
             rawInput.dispatchEvent(new Event("input", { bubbles: true }));
         }
 
-        if (isRetranslateReentry) {
-            // On retranslate re-entry: populate the summary boxes directly from the
-            // passed summaryContext without triggering any AI summary API calls.
-            const archivalBox = document.getElementById("stepArchivalSummaryText");
-            const recentBox = document.getElementById("stepRecentSummaryText");
-            const sc = (summaryContext && !Array.isArray(summaryContext)) ? summaryContext : {};
-            if (archivalBox) archivalBox.value = sc.archivalSummary || "";
-            if (recentBox) recentBox.value = sc.recentSummary || "";
-            console.log('[Trace:UI] Retranslate re-entry: summary boxes populated from context (no AI recalc).');
-        } else {
-            // First open: full context preview refresh (may call AI summary endpoints).
-            refreshStepContextPreview(currentContextWindow).catch(e => console.warn('[Trace:UI] Preview refresh failed:', e));
-        }
+        // Populate all fields instantly from current translation state (no expensive AI replay)
+        populateStepContextFields(summaryContext, fullHistory, rawLimitDefault);
 
         // Context changes are applied via the Apply button (applyStepContextSettings),
         // not auto-recalc on change.

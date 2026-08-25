@@ -644,7 +644,7 @@ export async function translateViaAiServer() {
                     combinedText,
                     currentContextSlice,
                     history,
-                    { archivalSummary, recentSummary, recentSummarySourceLines },
+                    { archivalSummary, recentSummary, recentSummarySourceLines, pendingRecentSummaries },
                     maxContextLines,
                     rawLimitThreshold,
                     knownSpeakers,
