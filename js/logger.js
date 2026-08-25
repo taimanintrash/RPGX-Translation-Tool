@@ -163,7 +163,7 @@ export function markSession(status, note = '') {
 }
 
 /**
- * Renders a loop's preset buffer as an AI-parseable markdown document with per-entry headers, metadata tags, fenced prompt/response blocks, and session-boundary headers
+ * Renders a loop's preset buffer as an AI-parseable markdown document with per-entry headers, metadata tags, fenced source-text/prompt/response blocks, and session-boundary headers
  * Called by: js/logger.js (flushLoopToDisk)
  */
 export function exportPresetAsMarkdown(kind, presetKey) {

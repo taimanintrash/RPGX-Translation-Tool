@@ -264,6 +264,132 @@ export function renderComparisonViews() {
 }
 
 /**
+ * Updates an array of dialogue objects in place with translated/edited speaker names and serif texts from a flat lines array, using segment-based alignment.
+ * Called by: parser.js (commitTextToRightFile, saveEditsToMemory)
+ */
+function updateScriptArrayFromLines(scriptArray, lines) {
+    let namedIndices = [];
+    for (let i = 0; i < scriptArray.length; i++) {
+        if (scriptArray[i] && scriptArray[i].Name) namedIndices.push(i);
+    }
+    let namePlateIndices = [];
+    for (let j = 0; j < lines.length; j++) {
+        if (lines[j] && lines[j].startsWith("<NAME_PLATE>")) namePlateIndices.push(j);
+    }
+
+    if (namedIndices.length === namePlateIndices.length) {
+        // Segment-based mapping
+        let objEnd = namedIndices.length > 0 ? namedIndices[0] : scriptArray.length;
+        let lineEnd = namePlateIndices.length > 0 ? namePlateIndices[0] : lines.length;
+        
+        let initialSerifText = [];
+        let initialMetadata = {};
+        for (let j = 0; j < lineEnd; j++) {
+            let line = lines[j];
+            if (line.startsWith("<BGM>")) initialMetadata.BGM = line.replace("<BGM>", "").trim();
+            else if (line.startsWith("<VOICE>")) initialMetadata.Voice = line.replace("<VOICE>", "").trim();
+            else if (line.startsWith("<MOTION>")) initialMetadata.Motion = parseInt(line.replace("<MOTION>", "").trim(), 10);
+            else if (line.startsWith("<IMAGE>")) initialMetadata.StillPath = line.replace("<IMAGE>", "").trim();
+            else if (line.startsWith("<SE>")) initialMetadata.SE = line.replace("<SE>", "").trim();
+            else if (line.startsWith("<EFFECT>")) initialMetadata.Effect = line.replace("<EFFECT>", "").trim();
+            else if (line.startsWith("<CH_ANIM>")) initialMetadata.CharaAnimation = parseInt(line.replace("<CH_ANIM>", "").trim(), 10);
+            else initialSerifText.push(line);
+        }
+
+        if (objEnd > 0) {
+            if (initialMetadata.BGM !== undefined) scriptArray[0].BGM = initialMetadata.BGM;
+            if (initialMetadata.Voice !== undefined) scriptArray[0].Voice = initialMetadata.Voice;
+            if (initialMetadata.Motion !== undefined) scriptArray[0].Motion = initialMetadata.Motion;
+            if (initialMetadata.StillPath !== undefined) scriptArray[0].StillPath = initialMetadata.StillPath;
+            if (initialMetadata.SE !== undefined) scriptArray[0].SE = initialMetadata.SE;
+            if (initialMetadata.Effect !== undefined) scriptArray[0].Effect = initialMetadata.Effect;
+            if (initialMetadata.CharaAnimation !== undefined) scriptArray[0].CharaAnimation = initialMetadata.CharaAnimation;
+        }
+
+        assignSegment(scriptArray.slice(0, objEnd), initialSerifText);
+
+        for (let s = 0; s < namedIndices.length; s++) {
+            let objStart = namedIndices[s];
+            let objEnd = s + 1 < namedIndices.length ? namedIndices[s + 1] : scriptArray.length;
+            let lineStart = namePlateIndices[s];
+            let lineEnd = s + 1 < namePlateIndices.length ? namePlateIndices[s + 1] : lines.length;
+
+            let namePlateText = "";
+            let serifText = [];
+            let metadata = {};
+
+            for (let j = lineStart; j < lineEnd; j++) {
+                let line = lines[j];
+                if (line.startsWith("<NAME_PLATE>")) {
+                    namePlateText = line.replace("<NAME_PLATE>", "").replace(/[「」]/g, "").trim();
+                } else if (line.startsWith("<BGM>")) {
+                    metadata.BGM = line.replace("<BGM>", "").trim();
+                } else if (line.startsWith("<VOICE>")) {
+                    metadata.Voice = line.replace("<VOICE>", "").trim();
+                } else if (line.startsWith("<MOTION>")) {
+                    metadata.Motion = parseInt(line.replace("<MOTION>", "").trim(), 10);
+                } else if (line.startsWith("<IMAGE>")) {
+                    metadata.StillPath = line.replace("<IMAGE>", "").trim();
+                } else if (line.startsWith("<SE>")) {
+                    metadata.SE = line.replace("<SE>", "").trim();
+                } else if (line.startsWith("<EFFECT>")) {
+                    metadata.Effect = line.replace("<EFFECT>", "").trim();
+                } else if (line.startsWith("<CH_ANIM>")) {
+                    metadata.CharaAnimation = parseInt(line.replace("<CH_ANIM>", "").trim(), 10);
+                } else {
+                    serifText.push(line);
+                }
+            }
+
+            scriptArray[objStart].Name = namePlateText;
+            if (metadata.BGM !== undefined) scriptArray[objStart].BGM = metadata.BGM;
+            if (metadata.Voice !== undefined) scriptArray[objStart].Voice = metadata.Voice;
+            if (metadata.Motion !== undefined) scriptArray[objStart].Motion = metadata.Motion;
+            if (metadata.StillPath !== undefined) scriptArray[objStart].StillPath = metadata.StillPath;
+            if (metadata.SE !== undefined) scriptArray[objStart].SE = metadata.SE;
+            if (metadata.Effect !== undefined) scriptArray[objStart].Effect = metadata.Effect;
+            if (metadata.CharaAnimation !== undefined) scriptArray[objStart].CharaAnimation = metadata.CharaAnimation;
+
+            assignSegment(scriptArray.slice(objStart, objEnd), serifText);
+        }
+    } else {
+        // Fallback mapping: Assign non-name-plate lines to Serifs sequentially
+        let serifLines = lines.filter(l => !l.startsWith("<NAME_PLATE>"));
+        for (let i = 0; i < scriptArray.length; i++) {
+            if (i < serifLines.length) {
+                scriptArray[i].Serif = serifLines[i];
+            }
+        }
+    }
+}
+
+/**
+ * Distributes a segment of dialogue lines to a matching segment of script objects.
+ * Called by: parser.js (updateScriptArrayFromLines)
+ */
+function assignSegment(objs, dialogueLines) {
+    if (objs.length === 0) return;
+    let k = objs.length;
+    let m = dialogueLines.length;
+    if (k === 1) {
+        objs[0].Serif = dialogueLines.join("\n");
+    } else {
+        if (m === k) {
+            for (let r = 0; r < k; r++) objs[r].Serif = dialogueLines[r];
+        } else if (m < k) {
+            for (let r = 0; r < k; r++) {
+                objs[r].Serif = r < m ? dialogueLines[r] : "";
+            }
+        } else {
+            objs[0].Serif = dialogueLines.slice(0, m - k + 1).join("\n");
+            for (let r = 1; r < k; r++) {
+                objs[r].Serif = dialogueLines[m - k + r];
+            }
+        }
+    }
+}
+
+/**
  * Extracts the script text for a given key from a file data object, following the SCRIPTS.PART1.TRANSLATIONS/SCRIPT structure with array and JSON-stringification fallbacks
  * Called by: js/parser.js (renderComparisonViews), js/benchmark.js (runParameterSweepBenchmark)
  */
@@ -271,10 +397,67 @@ export function extractScriptText(dataObj, key) {
     if (!dataObj[key]) return "[ID not found]";
     const item = dataObj[key];
     try {
-        if (item.SCRIPTS?.PART1?.TRANSLATIONS) return item.SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"].join("\n");
-        if (item.SCRIPTS?.PART1?.SCRIPT) return item.SCRIPTS.PART1["SCRIPT"].join("\n");
-        if (Array.isArray(item)) return item.join("\n");
-    } catch (e) { console.warn('[Trace:Files] extractScriptText structured extraction failed, falling back to stringification.'); }
+        if (item.SCRIPTS?.PART1?.TRANSLATIONS) {
+            const scriptArray = item.SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"];
+            if (Array.isArray(scriptArray)) {
+                if (scriptArray.length > 0 && typeof scriptArray[0] === 'object' && scriptArray[0] !== null) {
+                    let extracted = [];
+                    for (let entry of scriptArray) {
+                        if (entry.Name) extracted.push(`<NAME_PLATE>${entry.Name}`);
+                        if (entry.BGM) extracted.push(`<BGM>${entry.BGM}`);
+                        if (entry.Voice) extracted.push(`<VOICE>${entry.Voice}`);
+                        if (entry.Motion !== undefined && entry.Motion !== null && entry.Motion !== "") extracted.push(`<MOTION>${entry.Motion}`);
+                        if (entry.StillPath) extracted.push(`<IMAGE>${entry.StillPath}`);
+                        if (entry.SE) extracted.push(`<SE>${entry.SE}`);
+                        if (entry.Effect) extracted.push(`<EFFECT>${entry.Effect}`);
+                        if (entry.CharaAnimation !== undefined && entry.CharaAnimation !== null && entry.CharaAnimation !== "") extracted.push(`<CH_ANIM>${entry.CharaAnimation}`);
+                        extracted.push(entry.Serif || "");
+                    }
+                    return extracted.join("\n");
+                }
+                return scriptArray.join("\n");
+            }
+        }
+        if (item.SCRIPTS?.PART1?.SCRIPT) {
+            const scriptArray = item.SCRIPTS.PART1["SCRIPT"];
+            if (Array.isArray(scriptArray)) {
+                if (scriptArray.length > 0 && typeof scriptArray[0] === 'object' && scriptArray[0] !== null) {
+                    let extracted = [];
+                    for (let entry of scriptArray) {
+                        if (entry.Name) extracted.push(`<NAME_PLATE>${entry.Name}`);
+                        if (entry.BGM) extracted.push(`<BGM>${entry.BGM}`);
+                        if (entry.Voice) extracted.push(`<VOICE>${entry.Voice}`);
+                        if (entry.Motion !== undefined && entry.Motion !== null && entry.Motion !== "") extracted.push(`<MOTION>${entry.Motion}`);
+                        if (entry.StillPath) extracted.push(`<IMAGE>${entry.StillPath}`);
+                        if (entry.SE) extracted.push(`<SE>${entry.SE}`);
+                        if (entry.Effect) extracted.push(`<EFFECT>${entry.Effect}`);
+                        if (entry.CharaAnimation !== undefined && entry.CharaAnimation !== null && entry.CharaAnimation !== "") extracted.push(`<CH_ANIM>${entry.CharaAnimation}`);
+                        extracted.push(entry.Serif || "");
+                    }
+                    return extracted.join("\n");
+                }
+                return scriptArray.join("\n");
+            }
+        }
+        if (Array.isArray(item)) {
+            if (item.length > 0 && typeof item[0] === 'object' && item[0] !== null) {
+                let extracted = [];
+                for (let entry of item) {
+                    if (entry.Name) extracted.push(`<NAME_PLATE>${entry.Name}`);
+                    if (entry.BGM) extracted.push(`<BGM>${entry.BGM}`);
+                    if (entry.Voice) extracted.push(`<VOICE>${entry.Voice}`);
+                    if (entry.Motion !== undefined && entry.Motion !== null && entry.Motion !== "") extracted.push(`<MOTION>${entry.Motion}`);
+                    if (entry.StillPath) extracted.push(`<IMAGE>${entry.StillPath}`);
+                    if (entry.SE) extracted.push(`<SE>${entry.SE}`);
+                    if (entry.Effect) extracted.push(`<EFFECT>${entry.Effect}`);
+                    if (entry.CharaAnimation !== undefined && entry.CharaAnimation !== null && entry.CharaAnimation !== "") extracted.push(`<CH_ANIM>${entry.CharaAnimation}`);
+                    extracted.push(entry.Serif || "");
+                }
+                return extracted.join("\n");
+            }
+            return item.join("\n");
+        }
+    } catch (e) { console.warn('[Trace:Files] extractScriptText structured extraction failed, falling back to stringification.', e); }
 
     if (Array.isArray(item)) return item.join("\n");
     return JSON.stringify(item, null, 2);
@@ -295,11 +478,26 @@ export function saveEditsToMemory() {
 
     const lines = document.getElementById("outputAreaLeft").value.split("\n");
     if (fileObj.data[key].SCRIPTS?.PART1?.TRANSLATIONS) {
-        fileObj.data[key].SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"] = lines;
+        const scriptArray = fileObj.data[key].SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"];
+        if (Array.isArray(scriptArray) && scriptArray.length > 0 && typeof scriptArray[0] === 'object' && scriptArray[0] !== null) {
+            updateScriptArrayFromLines(scriptArray, lines);
+        } else {
+            fileObj.data[key].SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"] = lines;
+        }
     } else if (fileObj.data[key].SCRIPTS?.PART1?.SCRIPT) {
-        fileObj.data[key].SCRIPTS.PART1["SCRIPT"] = lines;
+        const scriptArray = fileObj.data[key].SCRIPTS.PART1["SCRIPT"];
+        if (Array.isArray(scriptArray) && scriptArray.length > 0 && typeof scriptArray[0] === 'object' && scriptArray[0] !== null) {
+            updateScriptArrayFromLines(scriptArray, lines);
+        } else {
+            fileObj.data[key].SCRIPTS.PART1["SCRIPT"] = lines;
+        }
     } else if (Array.isArray(fileObj.data[key])) {
-        fileObj.data[key] = lines;
+        const scriptArray = fileObj.data[key];
+        if (scriptArray.length > 0 && typeof scriptArray[0] === 'object' && scriptArray[0] !== null) {
+            updateScriptArrayFromLines(scriptArray, lines);
+        } else {
+            fileObj.data[key] = lines;
+        }
     } else {
         fileObj.data[key] = lines;
     }
@@ -313,12 +511,57 @@ export function saveEditsToMemory() {
  */
 export function commitTextToRightFile(fileObj, key, linesArray) {
     console.log(`[Trace:Files] commitTextToRightFile(key="${key}", lines=${linesArray.length}) invoked.`);
-    const item = fileObj.data[key];
+    
+    // Get the source item if available to copy structure if target is fresh or missing structure
+    const selectLeft = document.getElementById("fileSelectLeft");
+    let sourceItem = null;
+    if (selectLeft && selectLeft.value !== "" && state.loadedFilesRegistry[selectLeft.value]) {
+        sourceItem = state.loadedFilesRegistry[selectLeft.value].data[key];
+    }
+
+    let item = fileObj.data[key];
+    if (!item && sourceItem) {
+        item = JSON.parse(JSON.stringify(sourceItem));
+        fileObj.data[key] = item;
+    }
+
     if (item && item.SCRIPTS?.PART1?.TRANSLATIONS) {
-        item.SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"] = linesArray;
+        const scriptArray = item.SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"];
+        if (Array.isArray(scriptArray) && scriptArray.length > 0 && typeof scriptArray[0] === 'object' && scriptArray[0] !== null) {
+            updateScriptArrayFromLines(scriptArray, linesArray);
+        } else {
+            item.SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"] = linesArray;
+        }
+        if (item.SCRIPTS?.PART1?.SCRIPT) {
+            const origScriptArray = item.SCRIPTS.PART1["SCRIPT"];
+            if (Array.isArray(origScriptArray) && origScriptArray.length > 0 && typeof origScriptArray[0] === 'object' && origScriptArray[0] !== null) {
+                updateScriptArrayFromLines(origScriptArray, linesArray);
+            } else {
+                item.SCRIPTS.PART1["SCRIPT"] = linesArray;
+            }
+        }
     } else if (item && item.SCRIPTS?.PART1?.SCRIPT) {
-        item.SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"] = linesArray;
-        item.SCRIPTS.PART1["SCRIPT"] = linesArray;
+        const scriptArray = item.SCRIPTS.PART1["SCRIPT"];
+        if (Array.isArray(scriptArray) && scriptArray.length > 0 && typeof scriptArray[0] === 'object' && scriptArray[0] !== null) {
+            if (!item.SCRIPTS.PART1.TRANSLATIONS) {
+                item.SCRIPTS.PART1.TRANSLATIONS = [{ "LANGUAGE": "English", "TRANSLATOR": "CAT-Translate", "SCRIPT": [] }];
+            }
+            const transScriptArray = item.SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"];
+            if (Array.isArray(transScriptArray) && transScriptArray.length > 0 && typeof transScriptArray[0] === 'object' && transScriptArray[0] !== null) {
+                updateScriptArrayFromLines(transScriptArray, linesArray);
+            } else {
+                const clonedScript = JSON.parse(JSON.stringify(scriptArray));
+                updateScriptArrayFromLines(clonedScript, linesArray);
+                item.SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"] = clonedScript;
+            }
+            updateScriptArrayFromLines(scriptArray, linesArray);
+        } else {
+            if (!item.SCRIPTS.PART1.TRANSLATIONS) {
+                item.SCRIPTS.PART1.TRANSLATIONS = [{ "LANGUAGE": "English", "TRANSLATOR": "CAT-Translate", "SCRIPT": [] }];
+            }
+            item.SCRIPTS.PART1.TRANSLATIONS[0]["SCRIPT"] = linesArray;
+            item.SCRIPTS.PART1["SCRIPT"] = linesArray;
+        }
     } else {
         fileObj.data[key] = {
             "SCRIPTS": { "PART1": { "TRANSLATIONS": [{ "LANGUAGE": "English", "TRANSLATOR": "CAT-Translate", "SCRIPT": linesArray }] } }

@@ -290,6 +290,22 @@ Manages loading JSON script files into the registry, parsing content, populating
 #### What functions are used in it :
 - js/parser.js (extractScriptText)
 
+### updateScriptArrayFromLines — Updates an array of dialogue objects in place with translated/edited speaker names and serif texts from a flat lines array, using segment-based alignment.
+
+#### What function call it:
+- js/parser.js (commitTextToRightFile, saveEditsToMemory)
+
+#### What functions are used in it :
+- js/parser.js (assignSegment)
+
+### assignSegment — Distributes a segment of dialogue lines to a matching segment of script objects.
+
+#### What function call it:
+- js/parser.js (updateScriptArrayFromLines)
+
+#### What functions are used in it :
+- (none)
+
 ### extractScriptText — Extracts the script text for a given key from a file data object, following the SCRIPTS.PART1.TRANSLATIONS/SCRIPT structure with array and JSON-stringification fallbacks
 
 #### What function call it:
@@ -304,7 +320,7 @@ Manages loading JSON script files into the registry, parsing content, populating
 - HTML event handler via main.js window.saveEditsToMemory (HTML save button)
 
 #### What functions are used in it :
-- js/parser.js (saveFilesToCache), js/ui.js (showError)
+- js/parser.js (saveFilesToCache, updateScriptArrayFromLines), js/ui.js (showError)
 
 ### commitTextToRightFile — Writes a line array into the selected script-ID entry of the target file registry object (creating the SCRIPTS/PART1/TRANSLATIONS structure if missing), then re-renders views, updates the ID list, and re-caches
 
@@ -312,7 +328,7 @@ Manages loading JSON script files into the registry, parsing content, populating
 - js/translator.js (translateViaAiServer)
 
 #### What functions are used in it :
-- js/parser.js (renderComparisonViews, saveFilesToCache, updateMasterIDList), js/parser.js (injectTranslationToRight)
+- js/parser.js (renderComparisonViews, saveFilesToCache, updateMasterIDList, updateScriptArrayFromLines), js/parser.js (injectTranslationToRight)
 
 ### injectTranslationToRight — Takes the current right-hand text area content and commits it into the selected script-ID entry of the right-hand target file, creating the entry structure if missing
 
