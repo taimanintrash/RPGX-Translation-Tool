@@ -338,7 +338,21 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
         const outputRight = document.getElementById("outputAreaRight");
         if (outputRight) outputRight.classList.add("editable");
 
+        // Enable all buttons when prompting the user for input
+        const applyBtn = document.getElementById("stepApplyContextBtn");
+        const retransBtn = document.getElementById("stepRetranslateBtn");
+        const nextBtn = document.getElementById("stepContinueBtn");
+        if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = "Apply"; }
+        if (retransBtn) retransBtn.disabled = false;
+        if (nextBtn) nextBtn.disabled = false;
+
         state.manualStepResolver = (action, newContextCount, rawLimit, manualSummaryEdits) => {
+            // Disable all buttons immediately upon submission to prevent multiple clicks
+            // while the background processes (like retranslation) are running.
+            if (applyBtn) applyBtn.disabled = true;
+            if (retransBtn) retransBtn.disabled = true;
+            if (nextBtn) nextBtn.disabled = true;
+
             if (action !== "retranslate") state._manualStepOpen = false;
             if (titleEl) titleEl.textContent = "Manual Step Override Active";
             if (!state.manualStepByStepMode && toolbar) {
@@ -350,6 +364,9 @@ export function promptUserForManualStep(currentChunkText, currentContextWindow, 
         if (state.currentAbortController) {
             state.currentAbortController.signal.addEventListener('abort', () => {
                 state._manualStepOpen = false;
+                if (applyBtn) applyBtn.disabled = true;
+                if (retransBtn) retransBtn.disabled = true;
+                if (nextBtn) nextBtn.disabled = true;
                 if (!state.manualStepByStepMode && toolbar) {
                     toolbar.style.display = "none";
                 }
